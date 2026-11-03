@@ -1,0 +1,38 @@
+[project]
+name = "skolia-analysis"
+version = "0.1.0"
+description = "Text in, analysis blob out"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "stanza>=1.15",
+    "morfeusz2>=1.99",
+]
+
+[project.scripts]
+skolia-analyze = "skolia_analysis.cli:main"
+
+[dependency-groups]
+dev = [
+    "pyright[nodejs]>=1.1.414",
+    "pytest>=8",
+    "ruff>=0.17.3",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pyright]
+include = ["src", "tests"]
+stubPath = "typings"
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

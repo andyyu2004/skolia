@@ -1,0 +1,6 @@
+type Interpretation = tuple[str, str, str, list[str], list[str]]
+type Edge = tuple[int, int, Interpretation]
+
+class Morfeusz:
+    def __init__(self) -> None: ...
+    def analyse(self, text: str) -> list[Edge]: ...

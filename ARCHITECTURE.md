@@ -1,0 +1,148 @@
+# skolia architecture
+
+An assisted-reading app built around morphology. Tap a word or select a span. You get the lemma, the full grammatical features, the paradigm with the current form highlighted, and why the word has that form. Polish first, kept behind a language-plugin interface.
+
+## Principles
+
+- **Analyze once, at import.** Taps are local lookups: instant and offline. Only translations and explanations need the network.
+- **UD features are the internal schema** (`Case=Gen|Number=Sing|Gender=Masc|Animacy=Anim`). Only plugins know which language they handle.
+- **Track knowledge per lemma.** Known words and cards key on `(lang, lemma, upos)`, not on surface forms.
+- **Keep the readings the analyzer didn't pick.** Show alternatives and let user corrections override them.
+- **The LLM explains; it doesn't analyze.** It gets the sentence plus the parsed features. Its responses are cached and shared across users.
+- **The source text is permanent, analysis can be thrown away, and user data points at the text** (character offsets).
+
+## Components
+
+```
+Phone (PWA) ──► Worker API ──► D1 (users, cards, quotas, doc metadata)
+  │                 │      └─► R2 (lexicon files, source texts, analysis blobs)
+  │                 │
+  │                 └─► Queue ──► Python analysis container ──► R2 + D1
+  │
+  └─ IndexedDB: cached lexicon + document bundles
+```
+
+| Part | Tech | Responsibility |
+|---|---|---|
+| Client | PWA | Reader, word/span sheet, paradigm tables, review sessions (FSRS in JS), local state with background sync |
+| API | Cloudflare Workers (TypeScript) | Auth, sync, import job submission, explain proxy + cache, quotas |
+| User data | D1 | Users, document metadata, known lemmas, cards, overrides, explanation cache |
+| Blobs | R2 | Lexicon files per language, source texts, analysis blobs |
+| Analysis | Python container (Cloudflare Containers or a small VPS) pulling from Cloudflare Queues | Segment, analyze, match lexicon, write blob |
+| Lexicon build | Offline Python scripts | Kaikki/Wiktionary + Morfeusz → per-language lexicon files |
+
+## Frontend / backend split
+
+The backend does anything heavy, anything that happens once, and anything secret. The frontend does anything that has to feel instant.
+
+```
+Import:       phone → API → queue → analysis container    (slow, once per text)
+Open:         phone ← document + lexicon bundle            (one request, then cached)
+Tap/select:   phone only                                   (structure, paradigm, gloss)
+Translate/why: phone → API → cache or LLM                  (network, metered)
+Mark/review:  phone first, synced later
+```
+
+## Language plugin
+
+```python
+class LanguagePlugin:
+    code: str
+    def segment(text) -> list[Sentence]
+    def analyze(sentence) -> list[Token]        # lemma, upos, feats, head, deprel, candidates
+    def paradigm_layout(upos) -> Layout         # e.g. noun: rows=Case, cols=Number
+    def government(lemma, upos) -> list[Frame]  # optional: "do + Gen", "pomagać + Dat"
+    def aspect_partner(lemma) -> str | None     # optional, language-specific
+```
+
+Polish: spaCy `pl_core_news_lg` or Stanza picks the reading that fits the context and gives the dependency parse. Morfeusz 2 supplies the list of candidate readings and generates missing paradigms.
+
+## Lexicon (static, per language)
+
+Built offline and published to R2. Clients download it and cache it.
+
+```
+lemma(id, lang, lemma, upos, extra_json)        -- gender, aspect, animacy
+sense(id, lemma_id, gloss, examples_json)
+form(lemma_id, form, feats)                     -- full paradigm, UD-keyed
+form_index(lang, form_lower -> lemma_id, feats)
+frame(lemma_id, pattern)                        -- government/valency
+relation(lemma_id, type, target_lemma_id)       -- aspect pair, derived words
+expression(id, lang, lemma_seq, gloss)          -- multi-word, matched by lemma sequence
+```
+
+## Documents and versioning
+
+```
+text/{hash}.txt                                 -- permanent
+analysis/{hash}/s{schema}-a{analyzer}.json.gz   -- derived, disposable
+```
+
+- Documents are deduped by content hash: if many users import the same text, it's analyzed once. A user only sees texts they imported themselves or texts in the shared library.
+- `schema_version` covers the JSON shape. `analyzer_version` covers the plugin and model versions.
+- Migration: when a document opens with stale versions, serve the old blob and queue a re-analysis. Backfill the shared library ahead of time. Add read-time upgrade functions only if re-analysis gets expensive.
+
+Token shape in the blob:
+
+```
+start, end, text, lemma, lemma_id, upos, xpos?, feats, head, deprel, candidates?
+```
+
+- `lemma_id` is a stable string key, `{lang}:{lemma}:{upos}` (e.g. `pl:pies:NOUN`), with a `#n` suffix only for true homographs. It survives lexicon rebuilds.
+- `xpos` is the language-specific tag (NKJP for Polish). It's optional, and only plugins read it.
+- `head` is the 0-based index of the head token in the sentence, `null` for the root. `feats` is an object.
+- `candidates` is present only when there's more than one reading.
+
+Expressions per sentence: `{ "from": 2, "to": 4, "id": "pl:dać sobie radę" }`, matched by lemma sequence. Contiguous only at first.
+
+## User data (D1)
+
+```
+user_document(user_id, doc_hash, title, added_at)
+known_lemma(user_id, lemma_id, status)                   -- new / learning / known / ignored
+lookup(user_id, doc_hash, char_start, char_end, at)
+card(id, user_id, lemma_id?, expression_id?, doc_hash, char_start, char_end, fsrs_state, due)
+override(user_id, doc_hash, char_start, char_end, lemma_id, feats)
+explanation_cache(key, text, model, created_at)          -- key = hash(sentence, char_start, char_end)
+```
+
+After a re-analysis, overrides are re-applied by character offset. If a token boundary has moved, the override is flagged rather than guessed.
+
+## Span selection
+
+Selections snap to word boundaries. Computed on the phone from the bundle:
+- dependency structure within the span (head, attachments, agreement)
+- government (which word is triggering which case)
+- matched multi-word expressions
+
+From the backend: a translation of the span in context, and "explain this phrase".
+
+## Cost and tiers
+
+- Static lexicon on a CDN: near zero.
+- User data: small, D1.
+- Analysis: deduped, rate-limited on the free tier, with a pre-analyzed public-domain library (Wolne Lektury for Polish). Later, on-device analysis.
+- LLM: the only real per-use cost. Use a small model, a shared cache and daily quotas.
+
+Free: reader, dictionary, paradigms, structure view, SRS, shared library, a few imports and explanations a day.
+Paid (a few EUR/month): unlimited imports and explanations.
+
+## Build order
+
+1. Polish lexicon import from Kaikki. Check coverage on real articles.
+2. Polish plugin + ingest. Check lemma, features, the "why" and ambiguity on a real paragraph.
+3. Minimal reader with the word sheet.
+4. Span selection + structure view.
+5. Explain service.
+6. Known words + SRS.
+7. Auth, quotas, offline caching.
+
+Steps 1 and 2 are the main risk. Validate them before building UI.
+
+## Open questions
+
+- spaCy vs Stanza for Polish (accuracy of lemmas, features and dependencies)
+- Cloudflare Containers vs VPS for analysis (check current limits and pricing)
+- PWA framework (Svelte or React)
+- Auth provider
+- Name: skolia.com is registered (2026-07, by a domain reseller); skolia.io was free on 2026-11-04
