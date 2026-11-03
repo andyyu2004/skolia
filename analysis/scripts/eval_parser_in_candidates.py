@@ -42,9 +42,9 @@ def main() -> None:
     args = parser.parse_args()
 
     texts = list(sentences(args.input))[: args.limit]
-    nlp = pl.pipeline()
+    model = pl.parser()
     lookup = pl.MorfeuszCandidates()
-    blob = pl.analyze("\n".join(texts), nlp, lookup)
+    blob = pl.analyze("\n".join(texts), model, lookup, snap=None)
 
     total = found = without = 0
     patterns: Counter[str] = Counter()

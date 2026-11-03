@@ -12,10 +12,9 @@ from collections import Counter
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 
-from conllu import GoldWord, read
-
+from skolia_analysis.conllu import GoldWord, read
 from skolia_analysis.pl import MorfeuszCandidates
-from skolia_analysis.schema import Candidate
+from skolia_analysis.schema import Reading
 
 SKIPPED_UPOS = {"PUNCT", "SYM"}
 
@@ -38,8 +37,8 @@ def feats_diff(gold: Mapping[str, object], ours: Mapping[str, object]) -> str:
     return " ".join(missing + extra)
 
 
-def closest(word: GoldWord, candidates: list[Candidate]) -> Candidate:
-    def distance(c: Candidate) -> tuple[bool, bool, int]:
+def closest(word: GoldWord, candidates: list[Reading]) -> Reading:
+    def distance(c: Reading) -> tuple[bool, bool, int]:
         feats = dict(c["feats"].items())
         return (
             c["lemma"] != word.lemma,
