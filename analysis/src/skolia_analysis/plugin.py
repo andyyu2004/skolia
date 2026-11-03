@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Protocol
 
 from .blob import CandidateLookup
-from .schema import Blob, ExpressionDef
+from .schema import Blob, ExpressionDef, Token
 
 if TYPE_CHECKING:
     from stanza.models.common.doc import Document
@@ -26,7 +26,11 @@ class LanguagePlugin(Protocol):
         ...
 
     def candidate_lookup(self) -> CandidateLookup:
-        """Load the lookup that lists every possible reading of a word form."""
+        """Load the lookup that lists every possible reading of each word."""
+        ...
+
+    def expression_gap(self, token: Token) -> bool:
+        """True for tokens multi-word expression matching should step over."""
         ...
 
     def analyze(

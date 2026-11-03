@@ -5,21 +5,26 @@ A "." inside a slot lists alternatives, so one tag can stand for several reading
 
     subst:sg:nom.acc:m3   ->  noun, singular, nominative OR accusative, inanimate masculine
 
-The conversion is approximate and value-by-value: each NKJP value maps to one UD feature
-on its own. Values not listed below (e.g. wok/nwok, akc/nakc, col/ncol) are dropped.
+The output follows the conventions of the UD Polish PDB treebank (what Stanza is trained
+on), so a dictionary reading can be compared directly with the parser's reading.
+scripts/eval_candidates.py measures how often it matches.
+
+The tag alone can't say whether "ten" is a determiner or "co" a pronoun; those
+lemma-specific rules live in pl_function_words.py.
 """
 
 import itertools
 from collections.abc import Iterator
 
-from .schema import Feats
+from . import pl_function_words
+from .pl_function_words import Reading
+from .schema import Feats, Upos
 
 TAG_SEP = ":"
 ALT_SEP = "."
-UNKNOWN_UPOS = "X"
 
 # NKJP grammatical class -> UD UPOS
-POS = {
+POS: dict[str, Upos] = {
     "subst": "NOUN",  # noun: pies
     "depr": "NOUN",  # depreciative noun, m1 noun in a demeaning form: te chłopy
     "ger": "NOUN",  # gerund, verbal noun: robienie
@@ -30,10 +35,9 @@ POS = {
     "adjc": "ADJ",  # short predicative adjective: zdrów, gotów
     "pact": "ADJ",  # active participle: robiący
     "ppas": "ADJ",  # passive participle: robiony
-    "winien": "ADJ",  # winien, powinien
+    "winien": "VERB",  # winien, powinien
     "adv": "ADV",  # adverb: szybko
-    "num": "NUM",  # cardinal numeral: dwa
-    "numcol": "NUM",  # collective numeral: dwoje
+    "num": "NUM",  # numeral: dwa, dwoje
     "ppron12": "PRON",  # 1st/2nd person pronoun: ja, ty, mi
     "ppron3": "PRON",  # 3rd person pronoun: on, jej
     "siebie": "PRON",  # reflexive pronoun: siebie, sobie
@@ -50,46 +54,90 @@ POS = {
     "prep": "ADP",  # preposition: do
     "conj": "CCONJ",  # coordinating conjunction: i, ale
     "comp": "SCONJ",  # subordinating conjunction: że, bo
-    "qub": "PART",  # particle: nie, się
+    "part": "PART",  # particle: nie, się, by (newer tagsets)
+    "qub": "PART",  # particle (older name for part)
     "interj": "INTJ",  # interjection: och
     "interp": "PUNCT",  # punctuation
     "brev": "X",  # abbreviation: np.
+    "dig": "X",  # number written in digits: 12
+    "romandig": "X",  # Roman numeral: XII
+    "sym": "SYM",  # symbol
+    "frag": "X",  # fragment of a word
     "xxx": "X",  # foreign word
     "ign": "X",  # unknown to Morfeusz
 }
 
-# NKJP feature value -> (UD feature, UD value)
-FEATS = {
-    "sg": ("Number", "Sing"),  # singular
-    "pl": ("Number", "Plur"),  # plural
-    "nom": ("Case", "Nom"),  # nominative
-    "gen": ("Case", "Gen"),  # genitive
-    "dat": ("Case", "Dat"),  # dative
-    "acc": ("Case", "Acc"),  # accusative
-    "inst": ("Case", "Ins"),  # instrumental
-    "loc": ("Case", "Loc"),  # locative
-    "voc": ("Case", "Voc"),  # vocative
-    "f": ("Gender", "Fem"),  # feminine
-    "n": ("Gender", "Neut"),  # neuter
-    "n1": ("Gender", "Neut"),  # neuter subtypes from older Morfeusz versions
-    "n2": ("Gender", "Neut"),
-    "pri": ("Person", "1"),  # primary: 1st person
-    "sec": ("Person", "2"),  # secondary: 2nd person
-    "ter": ("Person", "3"),  # tertiary: 3rd person
-    "imperf": ("Aspect", "Imp"),  # imperfective: robić
-    "perf": ("Aspect", "Perf"),  # perfective: zrobić
-    "pos": ("Degree", "Pos"),  # positive: stary
-    "com": ("Degree", "Cmp"),  # comparative: starszy
-    "sup": ("Degree", "Sup"),  # superlative: najstarszy
-    "aff": ("Polarity", "Pos"),  # affirmative gerund/participle: robienie
-    "neg": ("Polarity", "Neg"),  # negated gerund/participle: nierobienie
+# Features every word of a class has, whatever the rest of the tag says
+CLASS_FEATS: dict[str, Feats] = {
+    "fin": {"Mood": "Ind", "VerbForm": "Fin", "Voice": "Act"},
+    "praet": {"Mood": "Ind", "Tense": "Past", "VerbForm": "Fin", "Voice": "Act"},
+    "impt": {"Mood": "Imp", "VerbForm": "Fin", "Voice": "Act"},
+    "imps": {"Mood": "Ind", "Person": "0", "Tense": "Past", "VerbForm": "Fin", "Voice": "Act"},
+    "inf": {"VerbForm": "Inf", "Voice": "Act"},
+    "pcon": {"Tense": "Pres", "VerbForm": "Conv", "Voice": "Act"},
+    "pant": {"Tense": "Past", "VerbForm": "Conv", "Voice": "Act"},
+    "pred": {"Mood": "Ind", "Tense": "Pres", "VerbForm": "Fin", "VerbType": "Quasi"},
+    "winien": {
+        "Mood": "Ind",
+        "Tense": "Pres",
+        "VerbForm": "Fin",
+        "VerbType": "Mod",
+        "Voice": "Act",
+    },
+    "bedzie": {"Mood": "Ind", "Tense": "Fut", "VerbForm": "Fin"},
+    "pact": {"VerbForm": "Part", "Voice": "Act"},
+    "ppas": {"VerbForm": "Part", "Voice": "Pass"},
+    "ger": {"VerbForm": "Vnoun"},
+    "ppron12": {"PronType": "Prs"},
+    "ppron3": {"PronType": "Prs"},
+    "siebie": {"PronType": "Prs", "Reflex": "Yes"},
+    "prep": {"AdpType": "Prep"},
+    "num": {"NumForm": "Word"},
+    "adja": {"Hyph": "Yes"},
+    "adjp": {"PrepCase": "Pre"},
+    "adjc": {"Variant": "Short"},
+    "brev": {"Abbr": "Yes"},
+    "dig": {"NumForm": "Digit"},
+    "romandig": {"NumForm": "Roman"},
 }
 
-# NKJP splits masculine into three genders; UD has one Masc plus Animacy
-MASC_ANIMACY = {
-    "m1": "Hum",  # human: student, studenta (Acc = Gen)
-    "m2": "Nhum",  # animate non-human: pies, psa (Acc = Gen)
-    "m3": "Inan",  # inanimate: stół, stół (Acc = Nom)
+# NKJP tag value -> the UD features it sets. Values not listed (congr, rec, ncol, agl,
+# nagl, pun, npun) have no UD counterpart in the PDB conventions.
+VALUE_FEATS: dict[str, Feats] = {
+    "sg": {"Number": "Sing"},  # singular
+    "pl": {"Number": "Plur"},  # plural
+    "pt": {"Number": "Ptan"},  # plurale tantum, overrides pl: drzwi
+    "nom": {"Case": "Nom"},  # nominative
+    "gen": {"Case": "Gen"},  # genitive
+    "dat": {"Case": "Dat"},  # dative
+    "acc": {"Case": "Acc"},  # accusative
+    "inst": {"Case": "Ins"},  # instrumental
+    "loc": {"Case": "Loc"},  # locative
+    "voc": {"Case": "Voc"},  # vocative
+    "m1": {"Gender": "Masc", "Animacy": "Hum"},  # human masculine: student
+    "m2": {"Gender": "Masc", "Animacy": "Nhum"},  # animate masculine: pies
+    "m3": {"Gender": "Masc", "Animacy": "Inan"},  # inanimate masculine: stół
+    "f": {"Gender": "Fem"},  # feminine
+    "n": {"Gender": "Neut"},  # neuter
+    "n1": {"Gender": "Neut"},  # neuter subtypes from older Morfeusz versions
+    "n2": {"Gender": "Neut"},
+    "pri": {"Person": "1"},  # primary: 1st person
+    "sec": {"Person": "2"},  # secondary: 2nd person
+    "ter": {"Person": "3"},  # tertiary: 3rd person
+    "imperf": {"Aspect": "Imp"},  # imperfective: robić
+    "perf": {"Aspect": "Perf"},  # perfective: zrobić
+    "pos": {"Degree": "Pos"},  # positive: stary
+    "com": {"Degree": "Cmp"},  # comparative: starszy
+    "sup": {"Degree": "Sup"},  # superlative: najstarszy
+    "aff": {"Polarity": "Pos"},  # affirmative gerund/participle: robienie
+    "neg": {"Polarity": "Neg"},  # negated gerund/participle: nierobienie
+    "akc": {"Variant": "Long"},  # accented pronoun form: jego, mnie
+    "nakc": {"Variant": "Short"},  # unaccented pronoun form: go, mi
+    "wok": {"Variant": "Long"},  # vocalic form: we, ze, (zrobił)em
+    "nwok": {"Variant": "Short"},  # non-vocalic form: w, z, (zrobiła)m
+    "praep": {"PrepCase": "Pre"},  # pronoun form after a preposition: (do) niego
+    "npraep": {"PrepCase": "Npr"},  # pronoun form elsewhere: jego
+    "col": {"NumType": "Sets"},  # collective: dwoje
 }
 
 
@@ -98,14 +146,27 @@ def expand(tag: str) -> Iterator[tuple[str, ...]]:
     return itertools.product(*slots)
 
 
-def to_ud(tag: str) -> Iterator[tuple[str, Feats]]:
+def tag_class(tag: str) -> str:
+    return tag.split(TAG_SEP, 1)[0]
+
+
+def to_ud(tag: str, lemma: str, proper_name: bool = False) -> Iterator[Reading]:
+    """All UD readings of one NKJP tag for a given lemma.
+
+    proper_name: Morfeusz labelled the reading as a name (place, person, ...), so a noun
+    becomes PROPN.
+    """
     for grammatical_class, *values in expand(tag):
         feats: Feats = {}
+        feats.update(CLASS_FEATS.get(grammatical_class, {}))
         for value in values:
-            if value in MASC_ANIMACY:
-                feats["Gender"] = "Masc"
-                feats["Animacy"] = MASC_ANIMACY[value]
-            elif value in FEATS:
-                key, ud_value = FEATS[value]
-                feats[key] = ud_value
-        yield POS.get(grammatical_class, UNKNOWN_UPOS), feats
+            feats.update(VALUE_FEATS.get(value, {}))
+        if grammatical_class == "prep":
+            # UD Polish keeps the case a preposition governs out of FEATS (it's in xpos)
+            feats.pop("Case", None)
+        if grammatical_class == "fin":
+            feats["Tense"] = "Fut" if feats.get("Aspect") == "Perf" else "Pres"
+        upos = POS.get(grammatical_class, "X")
+        if upos == "NOUN" and proper_name:
+            upos = "PROPN"
+        yield from pl_function_words.adjust(grammatical_class, lemma, upos, feats)
