@@ -55,7 +55,7 @@ class LanguagePlugin:
     def aspect_partner(lemma) -> str | None     # optional, language-specific
 ```
 
-Polish: spaCy `pl_core_news_lg` or Stanza picks the reading that fits the context and gives the dependency parse. Morfeusz 2 supplies the list of candidate readings and generates missing paradigms.
+Polish: COMBO (XLM-RoBERTa, trained on UD Polish PDB) picks the reading that fits the context and gives the dependency parse; Stanza models are available as alternatives. Morfeusz 2 supplies the list of candidate readings and generates missing paradigms. When the parser's reading isn't one Morfeusz allows, the closest Morfeusz reading replaces it and the parser's is kept alongside. Measured choices and scores: `analysis/EVALUATION.md`.
 
 ## Lexicon (static, per language)
 
@@ -141,7 +141,6 @@ Steps 1 and 2 are the main risk. Validate them before building UI.
 
 ## Open questions
 
-- spaCy vs Stanza for Polish (accuracy of lemmas, features and dependencies)
 - Cloudflare Containers vs VPS for analysis (check current limits and pricing)
 - PWA framework (Svelte or React)
 - Auth provider
