@@ -12,7 +12,7 @@ from typing import Literal
 
 from .schema import Feats, Upos
 
-type Reading = tuple[Upos, Feats]
+type PosFeats = tuple[Upos, Feats]
 
 DEM: Feats = {"PronType": "Dem"}  # demonstrative: ten, tam
 REL: Feats = {"PronType": "Rel"}  # relative: który (the one which)
@@ -136,7 +136,7 @@ POSTPOSITIONS: dict[str, Feats] = {
 }
 
 # NKJP particle (part / qub). Anything not listed is a plain PART.
-PARTICLES: dict[str, list[Reading]] = {
+PARTICLES: dict[str, list[PosFeats]] = {
     "się": [("PRON", {"PronType": "Prs", "Reflex": "Yes"})],
     "nie": [("PART", {"Polarity": "Neg"})],
     "by": [("AUX", {})],  # conditional: zrobiłby(m)
@@ -166,7 +166,7 @@ def _with(feats: Feats, extra: Feats, drop: Literal["Degree", "NumForm"] | None 
     return merged
 
 
-def adjust(grammatical_class: str, lemma: str, upos: Upos, feats: Feats) -> Iterator[Reading]:
+def adjust(grammatical_class: str, lemma: str, upos: Upos, feats: Feats) -> Iterator[PosFeats]:
     if grammatical_class == "subst" and lemma in PRONOUN_NOUNS:
         for extra in PRONOUN_NOUNS[lemma]:
             yield "PRON", _with(feats, extra)
