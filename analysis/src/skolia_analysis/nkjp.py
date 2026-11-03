@@ -15,9 +15,9 @@ lemma-specific rules live in pl_function_words.py.
 
 import itertools
 from collections.abc import Iterator
+from typing import NamedTuple
 
 from . import pl_function_words
-from .pl_function_words import Reading
 from .schema import Feats, Upos
 
 TAG_SEP = ":"
@@ -150,13 +150,21 @@ def tag_class(tag: str) -> str:
     return tag.split(TAG_SEP, 1)[0]
 
 
-def to_ud(tag: str, lemma: str, proper_name: bool = False) -> Iterator[Reading]:
+class UdReading(NamedTuple):
+    upos: Upos
+    feats: Feats
+    xpos: str
+    """The NKJP tag with alternatives resolved: "subst:sg:nom.acc:m3" -> "subst:sg:acc:m3"."""
+
+
+def to_ud(tag: str, lemma: str, proper_name: bool = False) -> Iterator[UdReading]:
     """All UD readings of one NKJP tag for a given lemma.
 
     proper_name: Morfeusz labelled the reading as a name (place, person, ...), so a noun
     becomes PROPN.
     """
-    for grammatical_class, *values in expand(tag):
+    for slots in expand(tag):
+        grammatical_class, *values = slots
         feats: Feats = {}
         feats.update(CLASS_FEATS.get(grammatical_class, {}))
         for value in values:
@@ -169,4 +177,8 @@ def to_ud(tag: str, lemma: str, proper_name: bool = False) -> Iterator[Reading]:
         upos = POS.get(grammatical_class, "X")
         if upos == "NOUN" and proper_name:
             upos = "PROPN"
-        yield from pl_function_words.adjust(grammatical_class, lemma, upos, feats)
+        xpos = TAG_SEP.join(slots)
+        for final_upos, final_feats in pl_function_words.adjust(
+            grammatical_class, lemma, upos, feats
+        ):
+            yield UdReading(final_upos, final_feats, xpos)

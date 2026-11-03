@@ -187,11 +187,13 @@ a Python identifier.
 """
 
 
-class Candidate(TypedDict):
-    """One possible reading of a word form, whether or not the parser picked it."""
+class Reading(TypedDict):
+    """One reading of a word form: a dictionary candidate, or what the parser said."""
 
     lemma: str
     upos: Upos
+    xpos: str
+    """Language-specific tag for exactly this reading, e.g. "subst:sg:gen:m2"."""
     feats: Feats
 
 
@@ -214,8 +216,11 @@ class Token(TypedDict):
     """UD dependency relation to the head: obl, amod, case, nsubj, ..."""
     mwt: NotRequired[str]
     """Set when this token is part of a multi-word token (a fused word); holds the whole word."""
-    candidates: NotRequired[list[Candidate]]
+    candidates: NotRequired[list[Reading]]
     """All readings the dictionary knows for this form. Only present when there is more than one."""
+    parser: NotRequired[Reading]
+    """What the parser said, when it was replaced by the closest dictionary reading because
+    the dictionary doesn't allow it (see reconcile.py). Worth showing: one of them is wrong."""
 
 
 class ExpressionDef(TypedDict):

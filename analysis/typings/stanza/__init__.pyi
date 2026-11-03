@@ -5,6 +5,7 @@ class Pipeline:
         self,
         lang: str = ...,
         *,
+        package: str = ...,
         processors: str = ...,
         logging_level: str | None = ...,
     ) -> None: ...

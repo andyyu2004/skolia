@@ -1,4 +1,4 @@
-"""Polish language plugin: Stanza picks one reading in context, Morfeusz lists them all."""
+"""Polish language plugin: a parser picks one reading in context, Morfeusz lists them all."""
 
 from __future__ import annotations
 
@@ -6,21 +6,36 @@ from collections.abc import Callable, Iterable, Iterator, Sequence
 from importlib.metadata import version
 from typing import TYPE_CHECKING
 
+from . import reconcile
 from .blob import CandidateLookup, build
 from .nkjp import tag_class, to_ud
-from .schema import Blob, Candidate, ExpressionDef, Token
+from .parsed import ParsedSentence, Parser
+from .parsers.combo_parser import ComboParser
+from .parsers.stanza_parser import StanzaParser
+from .schema import Blob, ExpressionDef, Reading, Token
 
 if TYPE_CHECKING:
     from morfeusz2 import Edge
-    from stanza import Pipeline
-    from stanza.models.common.doc import Document
 
 LANG = "pl"
-PLUGIN_VERSION = "0.2"
+PLUGIN_VERSION = "0.3"
 
-# tokenize: split into sentences and tokens; mwt: split fused words (zrobiłem -> zrobił + em);
-# pos: UPOS + XPOS + features; lemma: dictionary form; depparse: head + deprel
-STANZA_PROCESSORS = "tokenize,mwt,pos,lemma,depparse"
+# Parser models, by name. Each loads on first use. All are trained on UD Polish PDB, whose
+# conventions schema.py and the dictionary conversion assume. Scores: analysis/EVALUATION.md.
+MODELS: dict[str, Callable[[], Parser]] = {
+    # XLM-RoBERTa tagger + parser from IPI PAN (UD 2.18 naming): most accurate, ~3x slower
+    # than stanza
+    "combo": lambda: ComboParser("clarin-pl/combo-nlp-xlm-roberta-base-polish-pdb-ud2.18"),
+    # Stanza with the HerBERT transformer: close to combo on parsing, behind on tagging
+    "stanza-accurate": lambda: StanzaParser(LANG, "default_accurate"),
+    # Stanza with a character language model: fastest, least accurate
+    "stanza": lambda: StanzaParser(LANG, "default"),
+}
+# Both chosen on PDB dev with scripts/eval_ud.py (see EVALUATION.md). DEFAULT_SNAP keeps
+# the parser's UPOS and takes the closest dictionary features and lemma when the parser's
+# reading isn't one Morfeusz allows.
+DEFAULT_MODEL = "combo"
+DEFAULT_SNAP: str | None = "upos"
 
 # Classes with no dictionary reading worth listing: ign is a word Morfeusz doesn't know;
 # a number in digits can be a cardinal (18 osób) or an ordinal (2000 roku) in any case,
@@ -33,18 +48,8 @@ MORFEUSZ_LEMMA_QUALIFIER_SEP = ":"
 MORFEUSZ_COMMON_NOUN = "nazwa_pospolita"
 
 
-def analyzer_version() -> str:
-    return f"{LANG}/{PLUGIN_VERSION}+stanza-{version('stanza')}+morfeusz-{version('morfeusz2')}"
-
-
-def pipeline() -> Pipeline:
-    import stanza
-
-    return stanza.Pipeline(
-        LANG,
-        processors=STANZA_PROCESSORS,
-        logging_level="WARN",
-    )
+def parser(model: str = DEFAULT_MODEL) -> Parser:
+    return MODELS[model]()
 
 
 class MorfeuszCandidates:
@@ -61,7 +66,7 @@ class MorfeuszCandidates:
 
         self._morf = morfeusz2.Morfeusz()
 
-    def __call__(self, token: str, words: Sequence[str]) -> list[list[Candidate]]:
+    def __call__(self, token: str, words: Sequence[str]) -> list[list[Reading]]:
         edges = self._morf.analyse(token)
         segments = _align(edges, words) if len(words) > 1 else [_whole(edges)]
         if segments is None:
@@ -93,20 +98,27 @@ def _align(edges: list[Edge], words: Sequence[str]) -> list[list[Edge]] | None:
     return segments if node == last_node else None
 
 
-def _readings(edges: Iterable[Edge]) -> Iterator[Candidate]:
+def _readings(edges: Iterable[Edge]) -> Iterator[Reading]:
     for _start, _end, (_orth, base, tag, names, _qualifiers) in edges:
         if tag_class(tag) in NO_CANDIDATE_CLASSES:
             continue
         lemma = base.split(MORFEUSZ_LEMMA_QUALIFIER_SEP)[0] or base
         # Morfeusz capitalises lemmas of names; ethnonyms (Czeczen) carry no name label
         proper_name = lemma[:1].isupper() or any(name != MORFEUSZ_COMMON_NOUN for name in names)
-        for upos, feats in to_ud(tag, lemma, proper_name):
-            yield {"lemma": lemma, "upos": upos, "feats": feats}
+        for reading in to_ud(tag, lemma, proper_name):
+            yield {
+                "lemma": lemma,
+                "upos": reading.upos,
+                "xpos": reading.xpos,
+                "feats": reading.feats,
+            }
 
 
-def _dedupe(readings: Iterable[Candidate]) -> list[Candidate]:
+def _dedupe(readings: Iterable[Reading]) -> list[Reading]:
+    """One entry per distinct UD reading; NKJP distinctions UD doesn't make (congr/rec,
+    ncol) collapse, keeping the first tag."""
     seen: set[tuple[str, str, frozenset[tuple[str, object]]]] = set()
-    unique: list[Candidate] = []
+    unique: list[Reading] = []
     for reading in readings:
         key = (reading["lemma"], reading["upos"], frozenset(reading["feats"].items()))
         if key not in seen:
@@ -130,16 +142,33 @@ def expression_gap(token: Token) -> bool:
 
 def analyze(
     text: str,
-    nlp: Callable[[str], Document],
+    model: Parser,
     candidates: CandidateLookup | None = None,
     expressions: Iterable[ExpressionDef] = (),
+    snap: str | None = DEFAULT_SNAP,
 ) -> Blob:
+    """snap: a reconcile.POLICIES name, or None to keep the parser's readings as they are."""
+    return assemble(text, model(text), model.name, candidates, expressions, snap)
+
+
+def assemble(
+    text: str,
+    parsed: Iterable[ParsedSentence],
+    model_name: str,
+    candidates: CandidateLookup | None = None,
+    expressions: Iterable[ExpressionDef] = (),
+    snap: str | None = DEFAULT_SNAP,
+) -> Blob:
+    """The blob for text already parsed, so one slow parse can be reused (e.g. to compare
+    snap policies)."""
+    analyzer = f"{LANG}/{PLUGIN_VERSION}+{model_name}+morfeusz-{version('morfeusz2')}"
     return build(
-        nlp(text),
+        parsed,
         lang=LANG,
-        analyzer=analyzer_version(),
+        analyzer=analyzer + (f"+snap-{snap}" if snap else ""),
         text=text,
         candidates=candidates,
         expressions=expressions,
         expression_gap=expression_gap,
+        snap=reconcile.POLICIES[snap] if snap else None,
     )

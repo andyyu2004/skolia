@@ -4,6 +4,7 @@ Type checkers can't see inside strings Stanza hands us at runtime, so this is th
 place where untyped parser output becomes typed. Anything not in schema.py raises.
 """
 
+from collections.abc import Mapping
 from typing import TypeGuard, cast, get_args, get_type_hints
 
 from .schema import Deprel, Feats, Upos
@@ -53,6 +54,13 @@ def parse_deprel(label: str | None) -> Deprel | None:
     if not is_deprel(label):
         raise UnknownLabel(f"unknown deprel {label!r}")
     return label
+
+
+def check_feats(feats: Mapping[str, str] | None) -> Feats:
+    """Like parse_feats, for backends that give features as a mapping."""
+    if not feats:
+        return {}
+    return parse_feats(FEAT_SEP.join(f"{k}{FEAT_KV_SEP}{v}" for k, v in feats.items()))
 
 
 def parse_feats(raw: str | None) -> Feats:

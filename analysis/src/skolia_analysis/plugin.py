@@ -3,16 +3,12 @@
 This is the subset of the LanguagePlugin interface in ARCHITECTURE.md that the analyser uses so far.
 """
 
-from __future__ import annotations
-
-from collections.abc import Callable, Iterable
-from typing import TYPE_CHECKING, Protocol
+from collections.abc import Callable, Iterable, Mapping
+from typing import Protocol
 
 from .blob import CandidateLookup
+from .parsed import Parser
 from .schema import Blob, ExpressionDef, Token
-
-if TYPE_CHECKING:
-    from stanza.models.common.doc import Document
 
 
 class LanguagePlugin(Protocol):
@@ -21,9 +17,20 @@ class LanguagePlugin(Protocol):
         """ISO 639-1 code, e.g. "pl". Read-only so a module constant LANG = "pl" satisfies it."""
         ...
 
-    def pipeline(self) -> Callable[[str], Document]:
-        """Load the parser: text in, parsed Document out. Slow, so call once."""
+    @property
+    def MODELS(self) -> Mapping[str, Callable[[], Parser]]:
+        """Parser models by name; each callable loads one (slow, so call once)."""
         ...
+
+    @property
+    def DEFAULT_MODEL(self) -> str: ...
+
+    @property
+    def DEFAULT_SNAP(self) -> str | None:
+        """Default reconcile policy, or None to keep the parser's readings."""
+        ...
+
+    def parser(self, model: str = ...) -> Parser: ...
 
     def candidate_lookup(self) -> CandidateLookup:
         """Load the lookup that lists every possible reading of each word."""
@@ -36,7 +43,8 @@ class LanguagePlugin(Protocol):
     def analyze(
         self,
         text: str,
-        nlp: Callable[[str], Document],
+        model: Parser,
         candidates: CandidateLookup | None = None,
         expressions: Iterable[ExpressionDef] = (),
+        snap: str | None = ...,
     ) -> Blob: ...
