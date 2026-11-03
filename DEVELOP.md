@@ -8,19 +8,26 @@ Needs [uv](https://docs.astral.sh/uv/). uv reads `.python-version` and installs 
 
 ```fish
 cd analysis
-uv sync                      # create .venv with runtime + dev dependencies
+uv sync                      # runtime + dev dependencies
 ```
 
-The first run downloads the Stanza Polish models (344 MB for Stanza 1.15) to `~/Library/Caches/stanza/<version>/resources` on macOS.
+Models download on first use:
+- COMBO (the default): from Hugging Face into `~/.cache/huggingface/hub`
+- Stanza Polish: 344 MB for `stanza` (Stanza 1.15), more for `stanza-accurate` (adds HerBERT from Hugging Face), in `~/Library/Caches/stanza/<version>/resources` on macOS
 
 ### Run
 
 ```fish
 echo "Idę do starego psa." | uv run skolia-analyze --indent 2
+echo "Idę do starego psa." | uv run skolia-analyze --model combo --format conllu
 uv run skolia-analyze --help
 ```
 
-Text on stdin, blob JSON on stdout. `--expressions file.json` matches multi-word expressions (format in `--help`); `--no-candidates` skips Morfeusz.
+Text on stdin, the analysis on stdout (blob JSON, or CoNLL-U with `--format conllu`).
+
+- `--model` picks the parser: `combo` (default, most accurate), `stanza-accurate`, `stanza` (fastest). Scores are in `analysis/EVALUATION.md`.
+- `--snap` sets how a parser reading the dictionary doesn't allow is replaced (`reconcile.py`); `none` turns it off.
+- `--expressions file.json` matches multi-word expressions (format in `--help`); `--no-candidates` skips Morfeusz.
 
 ### Test, lint, typecheck
 
@@ -37,7 +44,9 @@ All four together:
 uv run ruff format --check . ; and uv run ruff check . ; and uv run pyright ; and uv run pytest -q
 ```
 
-Pyright is strict: no untyped parameters, no `Unknown` types. Stanza and Morfeusz ship no type information, so `typings/` holds hand-written stubs for the parts we use. Update them if we start using more of either library.
+Pyright is strict: no untyped parameters, no `Unknown` types. Stanza, Morfeusz and COMBO ship no type information, so `typings/` holds hand-written stubs for the parts we use, and each parser backend checks labels at runtime with `ud.py`. Update the stubs if we start using more of a library.
+
+`scripts/vendor/` holds third-party code (the CoNLL 2018 evaluator) and is excluded from lint and type checks.
 
 ### Evaluate against a treebank
 
@@ -50,14 +59,25 @@ for s in train dev test
 end
 ```
 
+The main one scores the whole analyser with the official CoNLL 2018 evaluator:
+
+```fish
+uv run python scripts/eval_ud.py ~/data/ud_pdb/pl_pdb-ud-dev.conllu --snap none upos
+uv run python scripts/eval_ud.py ~/data/ud_pdb/pl_pdb-ud-dev.conllu --model stanza --cache ~/data/skolia-parse-cache --snap none lemma+upos upos nearest
+```
+
+It prints F1 for tokens, sentences, UPOS, XPOS, features, lemmas, UAS and LAS, one row per `--snap` policy. `--cache` keeps each model's parse so later runs skip the slow part. `--out DIR` keeps the CoNLL-U output. Update `analysis/EVALUATION.md` when a default changes.
+
+Tune on dev, report on test: choose defaults by their dev scores so the test score stays an honest estimate.
+
+Two narrower checks:
+
 ```fish
 # is the hand-annotated reading among Morfeusz's candidates? (no parser involved, about 1 s)
 uv run python scripts/eval_candidates.py ~/data/ud_pdb/pl_pdb-ud-dev.conllu
 
-# is Stanza's reading among Morfeusz's candidates? (runs the full analyser, ~40 s)
+# is the parser's reading among Morfeusz's candidates? (runs the full analyser)
 uv run python scripts/eval_parser_in_candidates.py ~/data/ud_pdb/pl_pdb-ud-dev.conllu
 ```
-
-Both print an overall rate and the most common mismatch patterns with an example word. `eval_parser_in_candidates.py` also takes a plain text file, one paragraph per line.
 
 PDB is licensed CC BY-NC-SA 4.0 (non-commercial). Use it for evaluation only; don't ship it or anything derived from it.
