@@ -34,3 +34,14 @@ Times are CPU on an Apple M-series laptop for the whole test set.
 - UD 2.18 re-annotated some relations (e.g. `obl:cmpr` → `advcl:cmp`, many `acl` → `amod`). Against r2.17 gold, combo gets LAS 93.06 and stanza 90.67; UDPipe, trained on 2.17, gets 92.94. combo stays ahead either way.
 - All models here are trained on PDB train, so PDB test is in-domain. Expect lower scores on other genres.
 - Real text arrives without sentence boundaries marked by paragraphs; segmentation errors will cost a little more than here.
+
+## Lexicon coverage
+
+Share of word tokens (not punctuation, symbols or X) whose entry has at least one meaning, via `scripts/eval_lexicon.py`, lexicon from Kaikki's extract of 2026-10-30. Two texts analysed with the default model:
+
+| Text | Words | Exact | Other part of speech | Lowercased | No meaning |
+|---|---|---|---|---|---|
+| Prus, *Kamizelka* (1882 short story, Wolne Lektury) | 2798 | 97.0% | 1.6% | 0.1% | 1.3% |
+| Wikipedia *Kraków*, intro + history | 5009 | 86.3% | 0.8% | 1.3% | 11.6% |
+
+Of the Kraków misses, 280 of 581 are numbers in digits or Roman numerals (tagged ADJ as ordinals: *w 1918 roku*), which need no meaning. The rest: place names (Rudawa, Prądnik), rare derived adjectives (likwidacyjny), fixed phrases COMBO joins into one lemma (między_innymi, na_przykład) and a few wrong lemmas (stopień_Celsju). In *Kamizelka* they are rare words and the dialect spellings in a character's speech (kamyzelka, wjatr).

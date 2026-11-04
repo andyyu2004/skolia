@@ -37,7 +37,7 @@ The backend does anything heavy, anything that happens once, and anything secret
 
 ```
 Import:       phone → API → queue → analysis container    (slow, once per text)
-Open:         phone ← document + lexicon bundle            (one request, then cached)
+Open:         phone ← document + its lexicon bundle        (one request, then cached)
 Tap/select:   phone only                                   (structure, paradigm, gloss)
 Translate/why: phone → API → cache or LLM                  (network, metered)
 Mark/review:  phone first, synced later
@@ -59,17 +59,20 @@ Polish: COMBO (XLM-RoBERTa, trained on UD Polish PDB) picks the reading that fit
 
 ## Lexicon (static, per language)
 
-Built offline and published to R2. Clients download it and cache it.
+Built offline (`analysis/src/skolia_analysis/lexicon/`) into one SQLite file per language on the server, keyed by the analyser's `lemma_id`. The lexicon follows the analyser's conventions: each Kaikki (Wiktionary) headword is looked up in Morfeusz and converted with the analyser's own code, so `który` is filed as DET just as the analyser tags it.
 
 ```
-lemma(id, lang, lemma, upos, extra_json)        -- gender, aspect, animacy
-sense(id, lemma_id, gloss, examples_json)
-form(lemma_id, form, feats)                     -- full paradigm, UD-keyed
-form_index(lang, form_lower -> lemma_id, feats)
-frame(lemma_id, pattern)                        -- government/valency
-relation(lemma_id, type, target_lemma_id)       -- aspect pair, derived words
-expression(id, lang, lemma_seq, gloss)          -- multi-word, matched by lemma sequence
+entry(lemma_id, lemma, upos, senses_json, relations_json)
+  senses:    gloss, tags (slang, dated...), examples, and `when`: the features that select
+             the sense (pies the dog: Animacy=Nhum; the cop: Animacy=Hum)
+  relations: aspect partner (robić <-> zrobić), derived-from (pani <- pan, rubelek <- rubel)
 ```
+
+Paradigms aren't stored: Morfeusz generates them, in the analyser's feature conventions, when a document's bundle is made. A verb's paradigm includes its participles and gerunds.
+
+Each imported document gets a bundle with only the lemmas it uses (meanings, relations, paradigms), so taps stay offline. Lookup falls back from the exact `lemma_id` to the same lemma under another part of speech, then to the lemma lowercased. A full-dictionary download for search is a possible later addition (meanings only, without paradigms).
+
+Later: `frame` (government/valency) and `expression` (multi-word, matched by lemma sequence, from Wiktionary's phrase entries).
 
 ## Documents and versioning
 
@@ -88,7 +91,7 @@ Token shape in the blob:
 start, end, text, lemma, lemma_id, upos, xpos?, feats, head, deprel, candidates?
 ```
 
-- `lemma_id` is a stable string key, `{lang}:{lemma}:{upos}` (e.g. `pl:pies:NOUN`), with a `#n` suffix only for true homographs. It survives lexicon rebuilds.
+- `lemma_id` is a stable string key, `{lang}:{lemma}:{upos}` (e.g. `pl:pies:NOUN`). It survives lexicon rebuilds. Homographs share one `lemma_id`; the token's features pick the sense (see Lexicon). Polish participles and gerunds use their verb's id (`położony` → `pl:położyć:VERB`), because to a learner they are forms of the verb.
 - `xpos` is the language-specific tag (NKJP for Polish). It's optional, and only plugins read it.
 - `head` is the 0-based index of the head token in the sentence, `null` for the root. `feats` is an object.
 - `candidates` is present only when there's more than one reading.

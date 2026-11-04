@@ -81,3 +81,28 @@ uv run python scripts/eval_parser_in_candidates.py ~/data/ud_pdb/pl_pdb-ud-dev.c
 ```
 
 PDB is licensed CC BY-NC-SA 4.0 (non-commercial). Use it for evaluation only; don't ship it or anything derived from it.
+
+### Lexicon
+
+Large inputs and outputs live in `data/` at the repo root (git-ignored). Download Kaikki's Polish Wiktionary extract (about 900 MB) and build the lexicon (about 10 s):
+
+```fish
+mkdir -p ../data/kaikki ../data/lexicon
+curl -fsSL -o ../data/kaikki/kaikki.org-dictionary-Polish.jsonl https://kaikki.org/dictionary/Polish/kaikki.org-dictionary-Polish.jsonl
+uv run skolia-build-lexicon ../data/kaikki/kaikki.org-dictionary-Polish.jsonl ../data/lexicon/pl.sqlite
+```
+
+A document's bundle (the lexicon slice the phone downloads) from its analysis:
+
+```fish
+uv run skolia-analyze < text.txt > text.json
+uv run skolia-bundle --lexicon ../data/lexicon/pl.sqlite < text.json > text.bundle.json
+```
+
+How many analysed words get a meaning:
+
+```fish
+uv run python scripts/eval_lexicon.py ../data/lexicon/pl.sqlite text.json
+```
+
+Wiktionary content is CC BY-SA 4.0: bundles carry an `attribution` string, and the app must show it.
