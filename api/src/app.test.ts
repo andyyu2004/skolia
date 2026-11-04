@@ -149,6 +149,31 @@ test("analysis is 409 until ready, then served as stored", async () => {
   );
 });
 
+test("a re-analysis at the same URL isn't hidden by the cache", async () => {
+  const { app, blobs } = setup();
+  await importText(app);
+  const id = await docId(TEXT);
+  const ready = (analysis: string) =>
+    blobs.put(
+      statusKey(id),
+      JSON.stringify({ state: "ready", updated: "x", analysis, bundle: "b" }),
+      "application/json",
+    );
+  await blobs.put("analysis/v1.json", '{"v":1}', "application/json");
+  await blobs.put("analysis/v2.json", '{"v":2}', "application/json");
+  await ready("analysis/v1.json");
+  const url = `/api/documents/${id}/analysis`;
+  const first = await app.request(url);
+  assert.equal(first.headers.get("cache-control"), "private, no-cache");
+  const etag = first.headers.get("etag") ?? "";
+  assert.equal((await app.request(url, { headers: { "if-none-match": etag } })).status, 304);
+  // Re-analysed: same URL, new blob key, so the old ETag no longer matches
+  await ready("analysis/v2.json");
+  const after = await app.request(url, { headers: { "if-none-match": etag } });
+  assert.equal(after.status, 200);
+  assert.equal(await after.text(), '{"v":2}');
+});
+
 test("bad requests and ids are rejected", async () => {
   const { app } = setup();
   assert.equal((await importText(app, "   ")).status, 400);

@@ -87,7 +87,8 @@ export function createApp(deps: Deps): Hono {
   app.get("/api/documents/:id/text", async (c) => {
     const record = await findDocument(deps, c.req.param("id"));
     if (!record) return notFound(c);
-    return sendBlob(c, deps.decode, await deps.blobs.get(textKey(record.id)));
+    // The id is the text's hash, so the text at this URL never changes
+    return sendBlob(c, deps.decode, await deps.blobs.get(textKey(record.id)), IMMUTABLE);
   });
 
   for (const part of ["analysis", "bundle"] as const) {
@@ -99,7 +100,13 @@ export function createApp(deps: Deps): Hono {
       if (status?.state !== "ready" || key === undefined) {
         return c.json<ApiError>({ error: `${part} not ready` }, 409);
       }
-      return sendBlob(c, deps.decode, await deps.blobs.get(key));
+      // A re-analysis puts new content at this same URL; the blob key changes with the
+      // analyser and lexicon versions, so it is the ETag and clients revalidate
+      const etag = `"${key}"`;
+      if (c.req.header("if-none-match") === etag) {
+        return new Response(null, { status: 304, headers: { etag, "cache-control": REVALIDATE } });
+      }
+      return sendBlob(c, deps.decode, await deps.blobs.get(key), { etag });
     });
   }
 
@@ -114,17 +121,28 @@ function notFound(c: Context): Response {
   return c.json<ApiError>({ error: "no such document" }, 404);
 }
 
+/** How a blob may be cached: forever (its URL's content never changes) or with
+ * revalidation against an ETag (the content can change at the same URL). */
+type Caching = typeof IMMUTABLE | { etag: string };
+const IMMUTABLE = "immutable";
+const REVALIDATE = "private, no-cache";
+
 async function sendBlob(
   c: Context,
   decode: Decode,
   blob: Awaited<ReturnType<BlobStore["get"]>>,
+  caching: Caching,
 ): Promise<Response> {
   if (!blob) return c.json<ApiError>({ error: "missing blob" }, 500);
   const headers: Record<string, string> = {
     "content-type": blob.contentType ?? "application/octet-stream",
-    // Ids are content hashes and blob keys carry versions: a URL's content never changes
-    "cache-control": "private, max-age=31536000, immutable",
   };
+  if (caching === IMMUTABLE) {
+    headers["cache-control"] = "private, max-age=31536000, immutable";
+  } else {
+    headers["cache-control"] = REVALIDATE;
+    headers["etag"] = caching.etag;
+  }
   const encoding = blob.contentEncoding;
   if (encoding === undefined) return new Response(blob.body, { headers });
   headers["vary"] = "accept-encoding";
