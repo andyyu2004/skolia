@@ -353,6 +353,60 @@ button {
   cursor: pointer;
 }
 
+.frames h3,
+.frames summary {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 1rem 0 0.3rem;
+  cursor: default;
+}
+
+.frames summary {
+  cursor: pointer;
+}
+
+.frames ul {
+  list-style: none;
+  padding: 0;
+  margin: 0.2rem 0;
+}
+
+.frames li {
+  padding: 0.15rem 0;
+  line-height: 1.5;
+}
+
+.frame-head {
+  font-weight: 600;
+}
+
+.frames li.here {
+  border-left: 3px solid var(--trigger);
+  padding-left: 0.5rem;
+  background: color-mix(in srgb, var(--trigger) 10%, transparent);
+  border-radius: 0 6px 6px 0;
+}
+
+.here-label {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--trigger);
+}
+
+.case-label {
+  font-size: 0.75rem;
+  color: var(--accent);
+  margin-left: 0.15rem;
+}
+
+.small {
+  font-size: 0.8rem;
+}
+
 .relations {
   padding-left: 1.2rem;
   font-size: 0.95rem;

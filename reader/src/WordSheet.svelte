@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Bundle, Token } from "@skolia/shared/schema";
   import { CASE_NAME, explainCase } from "./lib/cases.ts";
+  import { argumentsOf, frames } from "./lib/frames.ts";
   import type { Piece } from "./lib/doc.ts";
   import { entryFor, rankSenses } from "./lib/lexicon.ts";
   import { paradigmTables } from "./lib/paradigm.ts";
@@ -45,6 +46,16 @@
   /** On a phone the sheet starts at half height; tapping the handle gives it the screen. */
   let expanded = $state(false);
   let allSenses = $state(false);
+  let allUses = $state(false);
+  const SHOWN_USES = 5;
+
+  /** "kogoś/czegoś [gen.]" -> the words, and the bracketed labels to style apart. */
+  function patternParts(pattern: string): { text: string; label: boolean }[] {
+    return pattern
+      .split(/(\[[^\]]+\])/u)
+      .filter((part) => part !== "")
+      .map((part) => ({ text: part, label: part.startsWith("[") }));
+  }
 
   const words = $derived(
     piece.words
@@ -54,6 +65,8 @@
         const isPersonEnding = (w.token.xpos ?? "").startsWith("aglt");
         const role = roleLabel(w.token.deprel);
         const head = w.token.head === null ? null : headText(w.sentence, w.token.head);
+        const args = argumentsOf(sentenceTokens(w.sentence), w.index);
+        const shownFrames = entry && !isPersonEnding ? frames(entry.frames, args) : [];
         return {
           ref: w,
           entry,
@@ -61,6 +74,8 @@
           role: role && head ? `${role} ${head}` : null,
           caseWhy: explainCase(sentenceTokens(w.sentence), w.index),
           senses: entry ? rankSenses(entry, w.token.feats) : [],
+          uses: shownFrames.filter((f) => !f.idiom),
+          idioms: shownFrames.filter((f) => f.idiom),
           tables: entry && !isPersonEnding ? paradigmTables(bundle, entry, w.token) : [],
         };
       }),
@@ -134,6 +149,48 @@
               </li>
             {/each}
           </ul>
+        {/if}
+
+        {#if word.uses.length > 0}
+          <div class="frames">
+            <h3>Used with</h3>
+            <ul lang="pl">
+              {#each allUses ? word.uses : word.uses.slice(0, SHOWN_USES) as frame, i (i)}
+                <li class:here={frame.here}>
+                  {#if frame.here}<span class="here-label" lang="en">in this sentence</span>{/if}
+                  <span class="frame-head">{word.entry?.lemma}{frame.reflexive ? " się" : ""}</span>
+                  {#each patternParts(frame.pattern) as part, j (j)}
+                    {#if part.label}<span class="case-label">{part.text}</span>{:else}{part.text}{/if}
+                  {/each}
+                  {#if frame.tags.length > 0}<span class="tags">{frame.tags.join(", ")}</span>{/if}
+                </li>
+              {/each}
+            </ul>
+            {#if word.uses.length > SHOWN_USES}
+              <button type="button" class="link" onclick={() => (allUses = !allUses)}>
+                {allUses ? "Fewer" : `All ${word.uses.length} uses`}
+              </button>
+            {/if}
+          </div>
+        {/if}
+
+        {#if word.idioms.length > 0}
+          <details class="frames">
+            <summary>Idioms ({word.idioms.length})</summary>
+            <ul lang="pl">
+              {#each word.idioms as frame, i (i)}
+                <li class:here={frame.here}>
+                  {#if frame.here}<span class="here-label" lang="en">in this sentence</span>{/if}
+                  <span class="frame-head">{word.entry?.lemma}{frame.reflexive ? " się" : ""}</span>
+                  {#each patternParts(frame.pattern) as part, j (j)}
+                    {#if part.label}<span class="case-label">{part.text}</span>{:else}{part.text}{/if}
+                  {/each}
+                  {#if frame.tags.length > 0}<span class="tags">{frame.tags.join(", ")}</span>{/if}
+                </li>
+              {/each}
+            </ul>
+            <p class="muted small">Fixed words are shown in their dictionary form.</p>
+          </details>
         {/if}
 
         {#each word.tables as table (table.title)}
