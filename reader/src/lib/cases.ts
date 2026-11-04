@@ -65,7 +65,7 @@ export function explainCase(tokens: Token[], index: number, depth = 0): CaseExpl
       case "numeral":
         return `After ${word}, a noun goes in the genitive (numbers from five, and words like wiele, kilka, dużo).`;
       case "verb":
-        return `${governor} takes the ${name}.`;
+        return `${governor} governs the ${name} for its object.`;
       case "negation":
         return `${governor} takes the accusative (its object), but nie turns it into the genitive.`;
       case "structural":

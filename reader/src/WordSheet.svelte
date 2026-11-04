@@ -110,13 +110,6 @@
         <p class="why">
           <span class="why-label">Why {CASE_NAME[token.feats.Case]}?</span>
           <span lang="pl">{word.caseWhy.text}</span>
-          {#if token.case_correction}
-            <span class="correction">
-              The analyser first read this as {CASE_NAME[token.case_correction.original]}, but
-              <span lang="pl">{token.case_correction.governor}</span> takes the {CASE_NAME[token.feats.Case]},
-              and <span lang="pl">{token.text}</span> has the same form in both.
-            </span>
-          {/if}
         </p>
       {/if}
 
