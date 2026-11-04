@@ -12,6 +12,8 @@ dependencies = [
 
 [project.scripts]
 skolia-analyze = "skolia_analysis.cli:main"
+skolia-build-lexicon = "skolia_analysis.lexicon.cli:build_main"
+skolia-bundle = "skolia_analysis.lexicon.cli:bundle_main"
 
 [dependency-groups]
 dev = [
