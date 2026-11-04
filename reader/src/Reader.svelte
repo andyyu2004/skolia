@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { DocumentSummary } from "@skolia/shared/api";
+  import type { Token } from "@skolia/shared/schema";
   import { getDocument, loadReading, type Reading } from "./lib/api.ts";
   import { layout, tokenKey, type Layout } from "./lib/doc.ts";
   import WordSheet from "./WordSheet.svelte";
@@ -22,6 +23,18 @@
     if (!doc || !word || word.token.head === null) return null;
     return doc.pieceOf.get(tokenKey(word.sentence, word.token.head)) ?? null;
   });
+
+  /** The piece holding the word that causes the selected word's case (do, szukać, nie). */
+  const triggerPiece = $derived.by(() => {
+    const word = piece?.words.find((w) => w.token.case_reason?.trigger !== undefined);
+    const trigger = word?.token.case_reason?.trigger;
+    if (!doc || !word || trigger === undefined) return null;
+    return doc.pieceOf.get(tokenKey(word.sentence, trigger)) ?? null;
+  });
+
+  function sentenceTokens(sentence: number): Token[] {
+    return reading?.analysis.sentences[sentence]?.tokens ?? [];
+  }
 
   $effect(() => {
     let cancelled = false;
@@ -100,6 +113,7 @@
               class="w"
               class:selected={p.id === selected}
               class:head={p.id === headPiece}
+              class:trigger={p.id === triggerPiece}
               onclick={() => toggle(p.id)}
               onkeydown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
@@ -117,6 +131,6 @@
   </main>
 
   {#if piece && reading}
-    <WordSheet bundle={reading.bundle} {piece} {headText} onclose={() => (selected = null)} />
+    <WordSheet bundle={reading.bundle} {piece} {headText} {sentenceTokens} onclose={() => (selected = null)} />
   {/if}
 </div>

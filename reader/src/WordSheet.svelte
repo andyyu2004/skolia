@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { Bundle } from "@skolia/shared/schema";
+  import type { Bundle, Token } from "@skolia/shared/schema";
+  import { CASE_NAME, explainCase } from "./lib/cases.ts";
   import type { Piece } from "./lib/doc.ts";
   import { entryFor, rankSenses } from "./lib/lexicon.ts";
   import { paradigmTables } from "./lib/paradigm.ts";
@@ -12,11 +13,13 @@
     bundle,
     piece,
     headText,
+    sentenceTokens,
     onclose,
   }: {
     bundle: Bundle;
     piece: WordPiece;
     headText: (sentence: number, index: number) => string | null;
+    sentenceTokens: (sentence: number) => Token[];
     onclose: () => void;
   } = $props();
 
@@ -56,6 +59,7 @@
           entry,
           isPersonEnding,
           role: role && head ? `${role} ${head}` : null,
+          caseWhy: explainCase(sentenceTokens(w.sentence), w.index),
           senses: entry ? rankSenses(entry, w.token.feats) : [],
           tables: entry && !isPersonEnding ? paradigmTables(bundle, entry, w.token) : [],
         };
@@ -86,6 +90,12 @@
       </p>
       {#if word.role}
         <p class="role muted" lang="pl">{word.role}</p>
+      {/if}
+      {#if word.caseWhy && token.feats.Case}
+        <p class="why">
+          <span class="why-label">Why {CASE_NAME[token.feats.Case]}?</span>
+          <span lang="pl">{word.caseWhy.text}</span>
+        </p>
       {/if}
 
       {#if !word.isPersonEnding}

@@ -59,6 +59,8 @@ class LanguagePlugin:
 
 Polish: COMBO (XLM-RoBERTa, trained on UD Polish PDB) picks the reading that fits the context and gives the dependency parse; Stanza models are available as alternatives. Morfeusz 2 supplies the list of candidate readings and generates missing paradigms. When the parser's reading isn't one Morfeusz allows, the closest Morfeusz reading replaces it and the parser's is kept alongside. Measured choices and scores: `analysis/EVALUATION.md`.
 
+Why a word has its case is worked out at import (`pl_cases.py`) from the dependency tree and the verb's valency in Walenty (IPI PAN's valency dictionary, CC BY-SA 4.0): each token with a case gets a `case_reason` (the rule, the word that causes it, and the verb or preposition). Rules: preposition, agreement, coordination, governing numeral, verb's lexical case (`szukać` + gen), negation (`nie mam czasu`), structural object, partitive, subject, predicate after `być`, possessive and noun complement, verbal noun's object, instrumental, vocative. The reader turns the reason into a sentence and underlines the triggering word.
+
 ## Lexicon (static, per language)
 
 Built offline (`analysis/src/skolia_analysis/lexicon/`) into one SQLite file per language on the server, keyed by the analyser's `lemma_id`. The lexicon follows the analyser's conventions: each Kaikki (Wiktionary) headword is looked up in Morfeusz and converted with the analyser's own code, so `który` is filed as DET just as the analyser tags it.
@@ -74,7 +76,7 @@ Paradigms aren't stored: Morfeusz generates them, in the analyser's feature conv
 
 Each imported document gets a bundle with only the lemmas it uses (meanings, relations, paradigms), so taps stay offline. Lookup falls back from the exact `lemma_id` to the same lemma under another part of speech, then to the lemma lowercased. A full-dictionary download for search is a possible later addition (meanings only, without paradigms).
 
-Later: `frame` (government/valency) and `expression` (multi-word, matched by lemma sequence, from Wiktionary's phrase entries).
+Later: showing a word's frames on its sheet ("`pomagać` + dative", from the same Walenty data the case reasons use) and `expression` (multi-word, matched by lemma sequence, from Wiktionary's phrase entries and Walenty's idioms).
 
 ## Documents and versioning
 

@@ -170,3 +170,21 @@ uv run python scripts/eval_lexicon.py ../data/lexicon/pl.sqlite text.json
 ```
 
 Wiktionary content is CC BY-SA 4.0: bundles carry an `attribution` string, and the app must show it.
+
+### Verb valency (case reasons)
+
+The "Why genitive?" line uses Walenty, IPI PAN's valency dictionary (CC BY-SA 4.0): which cases each verb's complements take. Download the 2018 plain-text release (MD5 `3fb7903751ba024d1c3ceaf1b3fd82dd`) and convert the verb file (about 5 s):
+
+```fish
+mkdir -p ../data/walenty
+curl -fsSL -o ../data/walenty/walenty_20180630-text.zip 'https://clarin-pl.eu/dspace/bitstream/handle/11321/586/walenty_20180630-text.zip?sequence=1'
+unzip -q -o ../data/walenty/walenty_20180630-text.zip -d ../data/walenty/text
+uv run skolia-build-valency ../data/walenty/text/walenty_20180630-text/verbs/walenty_20180726_verbs_verified.txt ../data/lexicon/pl-valency.json
+echo "Nie mam czasu." | uv run skolia-analyze --valency ../data/lexicon/pl-valency.json --indent 2
+```
+
+Ingest reads it from `SKOLIA_VALENCY` (set in `compose.yaml`). Coverage and a sample of reasons to read:
+
+```fish
+uv run python scripts/eval_case_reasons.py ~/data/ud_pdb/pl_pdb-ud-dev.conllu --cache ~/data/skolia-parse-cache --valency ../data/lexicon/pl-valency.json
+```

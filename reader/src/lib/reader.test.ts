@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Blob, Bundle, Entry, Feats, Token } from "@skolia/shared/schema";
+import { explainCase } from "./cases.ts";
 import { layout } from "./doc.ts";
 import { rankSenses } from "./lexicon.ts";
 import { paradigmTables } from "./paradigm.ts";
@@ -106,4 +107,19 @@ test("the declension marks the token's own form and case", () => {
   );
   // psa is also the accusative, but the token is genitive
   assert.deepEqual(current, ["gen."]);
+});
+
+test("case explanations: governor, two-case prepositions, agreement chains", () => {
+  // Szukam starego psa w domu
+  const tokens: Token[] = [
+    token(0, 6, "Szukam", { lemma: "szukać", upos: "VERB" }),
+    token(7, 14, "starego", { upos: "ADJ", head: 2, deprel: "amod", feats: GEN_SG, case_reason: { rule: "agreement", trigger: 2 } }),
+    token(15, 18, "psa", { head: 0, deprel: "obj", feats: GEN_SG, case_reason: { rule: "verb", trigger: 0, governor: "szukać" } }),
+    token(19, 20, "w", { upos: "ADP", head: 4, deprel: "case" }),
+    token(21, 25, "domu", { head: 0, deprel: "obl", feats: { Case: "Loc" }, case_reason: { rule: "preposition", trigger: 3, governor: "w" } }),
+  ];
+  assert.deepEqual(explainCase(tokens, 2), { text: "szukać takes the genitive.", trigger: 0 });
+  assert.equal(explainCase(tokens, 1)?.text, "It agrees with psa. psa: szukać takes the genitive.");
+  assert.equal(explainCase(tokens, 4)?.text, "w + locative means where (w domu).");
+  assert.equal(explainCase(tokens, 0), null);
 });
