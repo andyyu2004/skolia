@@ -14,17 +14,19 @@ An assisted-reading app built around morphology. Tap a word or select a span. Yo
 ## Components
 
 ```
-Phone (PWA) ──► Worker API ──► D1 (users, cards, quotas, doc metadata)
-  │                 │      └─► R2 (lexicon files, source texts, analysis blobs)
-  │                 │
-  │                 └─► Queue ──► Python analysis container ──► R2 + D1
+Phone or desktop (responsive PWA) ──► skolia-api (Worker) ──► D1 (users, cards, quotas, doc metadata)
+  │                                      │               └─► R2 (source texts, analyses, bundles, status)
+  │                                      │
+  │                                      └─► Queue ──► skolia-ingest (Python container) ──► R2
   │
-  └─ IndexedDB: cached lexicon + document bundles
+  └─ IndexedDB: cached document bundles
 ```
+
+Locally (`compose.yaml`): the API runs on Node, Redis replaces the Queue, RustFS (S3 API) replaces R2 and a SQLite file replaces D1. The API reaches them through small interfaces (`api/src/ports.ts`); ingest reaches storage over the S3 API, which R2 also speaks. Ingest writes `status/{doc}.json` as it goes (queued, analysing, ready, failed), and the API reads it to tell the reader.
 
 | Part | Tech | Responsibility |
 |---|---|---|
-| Client | PWA | Reader, word/span sheet, paradigm tables, review sessions (FSRS in JS), local state with background sync |
+| Client | PWA, Svelte 5 + TypeScript; one layout for phone (bottom sheet) and desktop (side panel) | Reader, word/span sheet, paradigm tables, review sessions (FSRS in JS), local state with background sync |
 | API | Cloudflare Workers (TypeScript) | Auth, sync, import job submission, explain proxy + cache, quotas |
 | User data | D1 | Users, document metadata, known lemmas, cards, overrides, explanation cache |
 | Blobs | R2 | Lexicon files per language, source texts, analysis blobs |
@@ -145,6 +147,5 @@ Steps 1 and 2 are the main risk. Validate them before building UI.
 ## Open questions
 
 - Cloudflare Containers vs VPS for analysis (check current limits and pricing)
-- PWA framework (Svelte or React)
 - Auth provider
 - Name: skolia.com is registered (2026-07, by a domain reseller); skolia.io was free on 2026-11-04

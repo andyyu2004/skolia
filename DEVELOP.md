@@ -1,6 +1,70 @@
 # Developing skolia
 
-Only `analysis/` exists so far. Commands below run from there.
+| Folder | What | Language |
+|---|---|---|
+| `analysis/` | analyser, lexicon build, `skolia-ingest` (queue worker) | Python, uv |
+| `api/` | `skolia-api`: documents, import, serving analyses and bundles | TypeScript, Hono on Node |
+| `reader/` | the reader app (phone and desktop) | Svelte 5, TypeScript, Vite |
+| `shared/` | types and blob keys used by api and reader; `schema.gen.ts` is generated from the Python schemas | TypeScript |
+| `data/` | git-ignored: Kaikki extract, lexicon, local SQLite, sample texts | |
+
+## Running it all locally
+
+```
+reader (Vite, :5173) → skolia-api (:8787) → Redis queue → skolia-ingest
+                            └──────── RustFS (S3 API, :9000) ────────┘
+```
+
+Locally, Redis stands in for Cloudflare Queues and RustFS for R2 (both speak the same protocols as production: Redis lists vs. Queues behind one interface, S3 API for both stores).
+
+Once: build the lexicon (see Lexicon below) and install the JavaScript packages:
+
+```fish
+pnpm install                 # from the repo root: api, reader and shared
+```
+
+Then:
+
+```fish
+docker compose up -d --build # redis, storage, api, ingest
+cd reader; and pnpm dev      # http://localhost:5173
+```
+
+- The first ingest start downloads the COMBO model (about 1 GB) into the `models` volume.
+- The ingest image builds natively for `linux/arm64` (Apple Silicon, ARM Linux) and `linux/amd64`. PyPI's `morfeusz2` has a Linux wheel for x86-64 only, so the Dockerfile compiles Morfeusz from SGJP's source and installs SGJP's compiled dictionary from the same release (1.99.15, 2026-06-01). On 16,325 words (PDB dev plus the sample texts) and the 10,971 lemmas they analyse to, its `analyse` and `generate` output is byte-identical to the PyPI wheel's, on both architectures. A 4,700-word text takes about 100 s natively on an M-series Mac.
+- To bump Morfeusz: change `MORFEUSZ_RELEASE` and both SHA-256 values in `analysis/Dockerfile`, and the `morfeusz2` version in `pyproject.toml`, to the same release.
+- On a phone on the same network: `pnpm dev --host` and open the address it prints.
+- RustFS has a web console at http://localhost:9001 (user `skolia`, password `skolia-local-only`).
+- Logs: `docker compose logs -f ingest api`.
+
+Running api or ingest on the host against the compose services:
+
+```fish
+# ingest (from analysis/)
+env SKOLIA_REDIS_URL=redis://localhost:6379/0 SKOLIA_S3_BUCKET=skolia SKOLIA_S3_ENDPOINT=http://localhost:9000 \
+    AWS_ACCESS_KEY_ID=skolia AWS_SECRET_ACCESS_KEY=skolia-local-only AWS_DEFAULT_REGION=auto \
+    SKOLIA_LEXICON=../data/lexicon/pl.sqlite uv run skolia-ingest
+
+# api (from api/), after docker compose stop api
+env SKOLIA_DB=../data/api/skolia.sqlite SKOLIA_REDIS_URL=redis://localhost:6379/0 SKOLIA_S3_BUCKET=skolia \
+    SKOLIA_S3_ENDPOINT=http://localhost:9000 AWS_ACCESS_KEY_ID=skolia AWS_SECRET_ACCESS_KEY=skolia-local-only \
+    AWS_REGION=auto pnpm dev
+```
+
+## API and reader (TypeScript)
+
+```fish
+pnpm -r check                # tsc (api), svelte-check (reader)
+pnpm -r test                 # node --test
+```
+
+Both are strict TypeScript (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`). The API uses TypeScript 7; the reader stays on 6 because svelte-check, which type-checks the `.svelte` components, supports TypeScript 5 and 6 only (move it to 7 when svelte-check does). The API runs its `.ts` files directly with Node's type stripping, so there's no build step; that also means TypeScript-only syntax (enums, parameter properties) isn't allowed (`erasableSyntaxOnly`).
+
+After changing a Python schema (`schema.py`, `lexicon/schema.py`, `ingest/schema.py`), regenerate the TypeScript types; `tests/test_ts_types.py` fails until you do:
+
+```fish
+cd analysis; and uv run python scripts/gen_ts_types.py > ../shared/schema.gen.ts
+```
 
 ## Analysis (Python)
 
