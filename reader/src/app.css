@@ -1,0 +1,383 @@
+:root {
+  --bg: #f7f4ee;
+  --surface: #ffffff;
+  --text: #1f1d1a;
+  --muted: #6d675e;
+  --line: #e2dcd1;
+  --accent: #2f5d8a;
+  --select: #fde7a6;
+  --head: #2f5d8a;
+  --current: #dbe8f5;
+  --error: #a3352b;
+  --shadow: 0 -6px 24px rgb(0 0 0 / 0.12);
+  --reading: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --gutter: 16px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1a18;
+    --surface: #252320;
+    --text: #ece7df;
+    --muted: #a39b8f;
+    --line: #3a3732;
+    --accent: #8db8e3;
+    --select: #5c4a14;
+    --head: #8db8e3;
+    --current: #23384d;
+    --error: #e5867c;
+    --shadow: 0 -6px 24px rgb(0 0 0 / 0.5);
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ui);
+  -webkit-text-size-adjust: 100%;
+}
+
+a {
+  color: var(--accent);
+}
+
+h1 {
+  font-family: var(--reading);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--error);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* Library */
+
+.library {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--gutter);
+}
+
+.library form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.library input,
+.library textarea {
+  font: inherit;
+  padding: 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  width: 100%;
+}
+
+.library form button {
+  justify-self: start;
+  padding: 0.5rem 1.2rem;
+  border: 0;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--bg);
+  cursor: pointer;
+}
+
+.library form button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.documents {
+  list-style: none;
+  padding: 0;
+}
+
+.documents li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  align-items: baseline;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.badge {
+  font-size: 0.8rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: 99px;
+  background: var(--line);
+}
+
+.badge.failed {
+  color: var(--error);
+}
+
+/* Reader: phone first. The sheet is a bottom sheet; above 900px it's a side panel. */
+
+.page {
+  max-width: 38rem;
+  margin: 0 auto;
+  padding: var(--gutter);
+}
+
+.reader.sheet-open .page {
+  /* keep the last lines reachable above the bottom sheet */
+  padding-bottom: 55vh;
+}
+
+.text {
+  font-family: var(--reading);
+  font-size: 1.2rem;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.w {
+  all: unset;
+  cursor: pointer;
+  border-radius: 3px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.w:hover {
+  background: color-mix(in srgb, var(--select) 45%, transparent);
+}
+
+.w.selected {
+  background: var(--select);
+}
+
+.w.head {
+  text-decoration: underline 2px var(--head);
+  text-underline-offset: 4px;
+}
+
+.w:focus-visible {
+  outline: 2px solid var(--accent);
+}
+
+.attribution {
+  margin-top: 3rem;
+  font-size: 0.75rem;
+}
+
+.sheet {
+  position: fixed;
+  inset: auto 0 0 0;
+  max-height: 50vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  border-radius: 14px 14px 0 0;
+  box-shadow: var(--shadow);
+  padding: 0 var(--gutter) calc(var(--gutter) + env(safe-area-inset-bottom));
+  transition: max-height 0.2s ease;
+}
+
+.sheet.expanded {
+  max-height: 88vh;
+}
+
+.sheet-bar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  justify-content: center;
+  padding: 0.5rem 0;
+  background: var(--surface);
+}
+
+.handle {
+  width: 3rem;
+  height: 0.9rem;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+}
+
+.handle::after {
+  content: "";
+  position: absolute;
+  inset: 0.3rem 0;
+  border-radius: 99px;
+  background: var(--line);
+}
+
+.close {
+  position: absolute;
+  right: 0;
+  top: 0.2rem;
+  border: 0;
+  background: transparent;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+@media (min-width: 900px) {
+  .reader {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 24rem;
+  }
+
+  .reader.sheet-open .page {
+    padding-bottom: var(--gutter);
+  }
+
+  .sheet {
+    position: sticky;
+    top: 0;
+    inset: auto;
+    height: 100vh;
+    max-height: none;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .sheet.expanded {
+    max-height: none;
+  }
+
+  .handle {
+    visibility: hidden;
+  }
+}
+
+/* Word sheet */
+
+.word + .word {
+  border-top: 1px solid var(--line);
+  margin-top: 1rem;
+}
+
+.word h2 {
+  font-family: var(--reading);
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin: 0.25rem 0;
+}
+
+.word .arrow {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.grammar {
+  margin: 0.2rem 0;
+}
+
+.dot {
+  color: var(--muted);
+}
+
+.role {
+  margin: 0.2rem 0 0.6rem;
+  font-size: 0.9rem;
+}
+
+.senses {
+  padding-left: 1.4rem;
+  margin: 0.6rem 0;
+}
+
+.senses li {
+  margin-bottom: 0.4rem;
+}
+
+.senses li.other {
+  color: var(--muted);
+}
+
+.tags {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-left: 0.3rem;
+}
+
+.example {
+  font-size: 0.9rem;
+  font-style: italic;
+  margin-top: 0.15rem;
+}
+
+.link {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  padding: 0;
+  cursor: pointer;
+}
+
+.relations {
+  padding-left: 1.2rem;
+  font-size: 0.95rem;
+}
+
+.paradigm h3 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 1rem 0 0.3rem;
+}
+
+.paradigm .scroll {
+  overflow-x: auto;
+}
+
+.paradigm table {
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.paradigm th,
+.paradigm td {
+  padding: 0.2rem 0.6rem 0.2rem 0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.paradigm thead th,
+.paradigm tbody th {
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.paradigm td.current,
+.form-list .current {
+  background: var(--current);
+  font-weight: 600;
+  border-radius: 3px;
+  padding-left: 0.3rem;
+}
+
+.form-list {
+  margin: 0.2rem 0;
+}
