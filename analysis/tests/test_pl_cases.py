@@ -2,20 +2,22 @@
 
 from skolia_analysis.pl_cases import explain_cases
 from skolia_analysis.schema import Case, Deprel, Feats, Token, Upos
-from skolia_analysis.valency import Valency, read
+from skolia_analysis.valency import Valency
+from skolia_analysis.walenty.parse import empty_expansions, parse_schema
 
+SCHEMATA = [
+    "szukać: pewny: _: : imperf: subj{np(str)} + obj{np(gen)}",
+    "mieć: pewny: _: : imperf: subj{np(str)} + {np(str)}",
+    "pomagać: pewny: _: : imperf: subj{np(str)} + {np(dat)}",
+    "odnaleźć: pewny: _: : perf: subj{np(str)} + obj{np(str)}",
+    "czytać: pewny: _: : imperf: subj{np(str)} + obj{np(str)}",
+]
 VALENCY = Valency(
-    read(
-        [
-            "szukać: pewny: _: : imperf: subj{np(str)} + obj{np(gen)}",
-            "mieć: pewny: _: : imperf: subj{np(str)} + {np(str)}",
-            "pomagać: pewny: _: : imperf: subj{np(str)} + {np(dat)}",
-            "odnaleźć: pewny: _: : perf: subj{np(str)} + obj{np(str)}",
-            "czytać: pewny: _: : imperf: subj{np(str)} + obj{np(str)}",
-            "artykułować: pewny: _: : imperf: subj{np(str)} + obj{np(str)}",
-        ]
-    ),
-    "walenty-test",
+    {
+        "version": "walenty-test",
+        "schemata": [parse_schema(line, "verb") for line in SCHEMATA],
+        "expansions": empty_expansions(),
+    }
 )
 
 

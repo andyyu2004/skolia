@@ -173,15 +173,17 @@ Wiktionary content is CC BY-SA 4.0: bundles carry an `attribution` string, and t
 
 ### Verb valency (case reasons)
 
-The "Why genitive?" line uses Walenty, IPI PAN's valency dictionary (CC BY-SA 4.0): which cases each verb's complements take. Download the 2018 plain-text release (MD5 `3fb7903751ba024d1c3ceaf1b3fd82dd`) and convert the verb file (about 5 s):
+The "Why genitive?" line uses Walenty, IPI PAN's valency dictionary (CC BY-SA 4.0): which cases each word's complements take. Download the 2018 plain-text release (MD5 `3fb7903751ba024d1c3ceaf1b3fd82dd`) and parse it into one typed JSON file (`walenty/model.py`; all 96,829 schemata of verbs, nouns, adjectives and adverbs plus the expansions, about 3 s, 35 MB):
 
 ```fish
 mkdir -p ../data/walenty
 curl -fsSL -o ../data/walenty/walenty_20180630-text.zip 'https://clarin-pl.eu/dspace/bitstream/handle/11321/586/walenty_20180630-text.zip?sequence=1'
 unzip -q -o ../data/walenty/walenty_20180630-text.zip -d ../data/walenty/text
-uv run skolia-build-valency ../data/walenty/text/walenty_20180630-text/verbs/walenty_20180726_verbs_verified.txt ../data/lexicon/pl-valency.json
+uv run skolia-build-valency ../data/walenty/text/walenty_20180630-text ../data/lexicon/pl-valency.json
 echo "Nie mam czasu." | uv run skolia-analyze --valency ../data/lexicon/pl-valency.json --indent 2
 ```
+
+The parser is strict: a construct or value the model doesn't know is an error, so a new Walenty release fails loudly until `walenty/vocabulary.py` or `model.py` covers it. `tests/test_walenty.py` parses and re-renders the whole release when it's downloaded (every line must come back identical), and skips that test otherwise.
 
 Ingest reads it from `SKOLIA_VALENCY` (set in `compose.yaml`). Coverage and a sample of reasons to read:
 

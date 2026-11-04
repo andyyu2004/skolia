@@ -1,51 +1,27 @@
-"""Polish verb valency from Walenty (IPI PAN, CC BY-SA 4.0): which cases a verb's
-complements take. http://zil.ipipan.waw.pl/Walenty
+"""Which cases a Polish verb's complements take, from Walenty (walenty/, CC BY-SA 4.0).
 
-A Walenty line is one frame (schema) of one lemma:
-
-    szukać: pewny: _: : imperf: subj{np(str)} + obj{np(gen)} + {prepnp(w,loc)}
-    lemma   certainty  negation  predicative  aspect  positions joined by " + "
-
-Each position is {option;option;...}, optionally labelled (subj, obj, controller, ...).
-Only phrases with a case are kept: np(case) (noun phrase), adjp(case), nump(case),
-and prepnp(preposition,case) with its adjective and numeral variants. Clauses,
-infinitives, adverbials and fixed idioms (lex(...)) are dropped.
-
-Case values: nom gen dat acc inst loc as usual, plus
-    str   structural: nominative for a subject, accusative for an object, genitive when
-          the verb is negated (mam czas / nie mam czasu)
-    part  partitive: genitive (some of) or accusative (all of): nalać wody / wodę
-    agr   agrees with something else
+skolia-build-valency parses the whole plain-text release into the typed model
+(walenty/model.py) and writes it as one JSON file: every schema of verbs, nouns,
+adjectives and adverbs, plus the expansions. Valency answers questions about it.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Iterator
+import re
+import sys
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, TypedDict, cast
+from typing import TypedDict, cast
 
 from .schema import Case
-
-FIELD_SEP = ": "
-FIELDS = 6
-COMMENT = "%"
-REFLEXIVE_SUFFIX = " się"
-
-# Certainty column: frames marked wrong (zły) are kept in Walenty only as warnings
-SKIPPED_CERTAINTY = {"zły"}
-
-type Negation = Literal["_", "neg", "aff"]
-"""_: with or without nie; neg: only negated; aff: only not negated."""
-
-type CaseSpec = Literal["nom", "gen", "dat", "acc", "inst", "loc", "str", "part", "agr"]
-CASE_SPECS: frozenset[str] = frozenset(
-    ("nom", "gen", "dat", "acc", "inst", "loc", "str", "part", "agr")
-)
+from .walenty.model import Expansions, Phrase, Schema
+from .walenty.parse import parse_expansions, parse_schema, schema_lines
+from .walenty.vocabulary import CaseSpec, Lemma, PartOfSpeech
 
 # Walenty case -> UD Case
-UD_CASE: dict[str, Case] = {
+UD_CASE: dict[CaseSpec, Case] = {
     "nom": "Nom",
     "gen": "Gen",
     "dat": "Dat",
@@ -54,156 +30,75 @@ UD_CASE: dict[str, Case] = {
     "loc": "Loc",
 }
 
-NOMINAL_PHRASES = {"np", "adjp", "nump"}
-PREPOSITIONAL_PHRASES = {"prepnp", "prepadjp", "prepnump"}
-SUBJECT = "subj"
-LEXICALISED = "lex("
-
-
-class Phrase(TypedDict):
-    case: CaseSpec
-    prep: str | None
-    """The preposition, for prepnp(w,loc); None for a bare noun phrase."""
-
-
-class Slot(TypedDict):
-    labels: list[str]
-    """subj, obj, controller, controllee: empty for other complements."""
-    phrases: list[Phrase]
-    """Alternatives for the slot; only those with a case."""
-
-
-class Frame(TypedDict):
-    negation: Negation
-    certainty: str
-    idiom: bool
-    """Has a fixed-word position (lex(...)): mieć dość czegoś. Its other slots belong to
-    the idiom (the genitive is dość's), so they say nothing about the verb in general."""
-    slots: list[Slot]
-
-
-type Lexicon = dict[str, list[Frame]]
-"""Frames by lemma, reflexive verbs with " się": "szukać", "bać się"."""
-
-
-def split_top(text: str, separator: str) -> Iterator[str]:
-    """Split on separator outside brackets: lex(...) nests + and ; inside."""
-    depth = 0
-    start = 0
-    i = 0
-    while i < len(text):
-        char = text[i]
-        if char in "({[":
-            depth += 1
-        elif char in ")}]":
-            depth -= 1
-        elif depth == 0 and text.startswith(separator, i):
-            yield text[start:i]
-            start = i + len(separator)
-            i = start
-            continue
-        i += 1
-    yield text[start:]
-
-
-def parse_phrase(text: str) -> Phrase | None:
-    """np(gen) -> gen; prepnp(w,loc) -> (w, loc); anything else -> None."""
-    name, paren, rest = text.strip().partition("(")
-    if not paren or not rest.endswith(")"):
-        return None
-    args = [a.strip() for a in rest[:-1].split(",")]
-    if name in NOMINAL_PHRASES and args and args[0] in CASE_SPECS:
-        return {"case": cast(CaseSpec, args[0]), "prep": None}
-    if name in PREPOSITIONAL_PHRASES and len(args) >= 2 and args[1] in CASE_SPECS:
-        return {"case": cast(CaseSpec, args[1]), "prep": args[0]}
-    return None
-
-
-def parse_slot(text: str) -> Slot | None:
-    labels_text, brace, body = text.strip().partition("{")
-    if not brace or not body.endswith("}"):
-        return None
-    phrases = [p for option in split_top(body[:-1], ";") if (p := parse_phrase(option))]
-    if not phrases:
-        return None
-    labels = [label for label in labels_text.split(",") if label]
-    return {"labels": labels, "phrases": phrases}
-
-
-def parse_line(line: str) -> tuple[str, Frame] | None:
-    if line.startswith(COMMENT) or not line.strip():
-        return None
-    fields = line.rstrip("\n").split(FIELD_SEP, FIELDS - 1)
-    if len(fields) != FIELDS:
-        return None
-    lemma, certainty, negation, _predicative, _aspect, positions = fields
-    if certainty in SKIPPED_CERTAINTY:
-        return None
-    if negation not in ("_", "neg", "aff"):
-        return None
-    position_texts = list(split_top(positions, " + "))
-    slots = [s for position in position_texts if (s := parse_slot(position))]
-    idiom = any(LEXICALISED in position for position in position_texts)
-    return lemma.strip(), {
-        "negation": negation,
-        "certainty": certainty,
-        "idiom": idiom,
-        "slots": slots,
-    }
-
-
-def read(lines: Iterable[str]) -> Lexicon:
-    frames: Lexicon = {}
-    for line in lines:
-        parsed = parse_line(line)
-        if parsed is None:
-            continue
-        lemma, frame = parsed
-        existing = frames.setdefault(lemma, [])
-        if frame not in existing:
-            existing.append(frame)
-    return frames
+# The release's files, by part of speech
+FILES: dict[PartOfSpeech, str] = {
+    "verb": "verbs/walenty_{date}_verbs_verified.txt",
+    "noun": "nouns/walenty_{date}_nouns_verified.txt",
+    "adj": "adjs/walenty_{date}_adjs_verified.txt",
+    "adv": "advs/walenty_{date}_advs_verified.txt",
+}
+EXPANSIONS_FILE = "phrase_types_expand_{date}.txt"
+# Idiom parts: their slots belong to the idiom (mieć dość czegoś), not the word
+IDIOMATIC = frozenset({"lex", "lexcompar", "fixed"})
 
 
 class ValencyFile(TypedDict):
     version: str
     """walenty-{release date}: part of the analyzer version string."""
-    frames: Lexicon
+    schemata: list[Schema]
+    expansions: Expansions
 
 
-def write(frames: Lexicon, version: str, path: Path) -> None:
-    content: ValencyFile = {"version": version, "frames": frames}
+def read_release(root: Path, date: str) -> ValencyFile:
+    """Parse every verified schema and the expansions of a release folder."""
+    with (root / EXPANSIONS_FILE.format(date=date)).open(encoding="utf-8") as lines:
+        expansions = parse_expansions(lines)
+    complex_prepositions = frozenset(expansions["complex_prepositions"])
+    schemata: list[Schema] = []
+    for pos, name in FILES.items():
+        with (root / name.format(date=date)).open(encoding="utf-8") as lines:
+            schemata += [
+                parse_schema(line, pos, complex_prepositions) for line in schema_lines(lines)
+            ]
+    return {"version": f"walenty-{date}", "schemata": schemata, "expansions": expansions}
+
+
+def write(content: ValencyFile, path: Path) -> None:
     path.write_text(json.dumps(content, ensure_ascii=False, separators=(",", ":")), "utf-8")
 
 
 def build_main() -> None:
     import argparse
-    import re
-    import sys
 
     parser = argparse.ArgumentParser(
         prog="skolia-build-valency",
-        description="Convert Walenty's verb file (plain-text release) into a frames file.",
+        description="Parse Walenty's plain-text release into one typed JSON file.",
     )
-    parser.add_argument("walenty", type=Path, help="walenty_YYYYMMDD_verbs_verified.txt")
+    parser.add_argument("release", type=Path, help="the unzipped walenty_YYYYMMDD-text folder")
     parser.add_argument("out", type=Path, help="output .json")
     args = parser.parse_args()
-    path: Path = args.walenty
-    date = re.search(r"(\d{8})", path.name)
-    version = f"walenty-{date.group(1) if date else 'unknown'}"
-    with path.open(encoding="utf-8-sig") as lines:
-        frames = read(lines)
-    write(frames, version, args.out)
-    count = sum(len(f) for f in frames.values())
-    print(f"{version}: {count} frames for {len(frames)} lemmas", file=sys.stderr)
+    root: Path = args.release
+    expansions = sorted(root.glob(EXPANSIONS_FILE.format(date="*")))
+    if not expansions:
+        sys.exit(f"no {EXPANSIONS_FILE.format(date='*')} in {root}")
+    date = re.search(r"(\d{8})", expansions[-1].name)
+    if date is None:
+        sys.exit(f"no date in {expansions[-1].name}")
+    content = read_release(root, date.group(1))
+    write(content, args.out)
+    lemmas = {(s["pos"], s["lemma"], s["reflexive"]) for s in content["schemata"]}
+    print(
+        f"{content['version']}: {len(content['schemata'])} schemata for {len(lemmas)} lemmas",
+        file=sys.stderr,
+    )
 
 
 @dataclass(frozen=True)
 class Requirement:
-    """What a verb's frames allow for one complement."""
+    """What a word's schemata allow for its complements without a preposition."""
 
     lexical: frozenset[Case]
-    """Cases the verb itself asks for (szukać: Gen; pomagać: Dat)."""
+    """Cases the word itself asks for (szukać: Gen; pomagać: Dat)."""
     structural: bool
     """An np(str) object: accusative, genitive when negated (mieć)."""
     partitive: bool
@@ -218,50 +113,60 @@ class Requirement:
         return frozenset(cases)
 
 
+type Key = tuple[PartOfSpeech, Lemma, bool]
+"""(part of speech, lemma, takes się)."""
+
+
 class Valency:
-    def __init__(self, frames: Lexicon, version: str) -> None:
-        self._frames = frames
-        self.version = version
+    def __init__(self, content: ValencyFile) -> None:
+        self.version = content["version"]
+        self.expansions = content["expansions"]
+        self._schemata: dict[Key, list[Schema]] = {}
+        for schema in content["schemata"]:
+            key = (schema["pos"], schema["lemma"], schema["reflexive"])
+            self._schemata.setdefault(key, []).append(schema)
 
     @classmethod
     def load(cls, path: Path) -> Valency:
-        content = cast(ValencyFile, json.loads(path.read_text("utf-8")))
-        return cls(content["frames"], content["version"])
+        return cls(cast(ValencyFile, json.loads(path.read_text("utf-8"))))
 
-    def known(self, lemma: str, reflexive: bool) -> bool:
-        return _key(lemma, reflexive) in self._frames
+    def schemata(self, lemma: str, reflexive: bool, pos: PartOfSpeech = "verb") -> list[Schema]:
+        return self._schemata.get((pos, Lemma(lemma), reflexive), [])
 
-    def bare_objects(self, lemma: str, reflexive: bool, negated: bool) -> Requirement | None:
-        """Cases of the verb's non-subject noun complements without a preposition, from
-        the frames that apply with or without negation. None if Walenty lacks the verb."""
-        frames = self._frames.get(_key(lemma, reflexive))
-        if frames is None:
+    def bare_objects(
+        self, lemma: str, reflexive: bool, negated: bool, pos: PartOfSpeech = "verb"
+    ) -> Requirement | None:
+        """Cases of the word's non-subject noun complements without a preposition, from
+        the schemata that apply with or without negation, leaving out idioms and schemata
+        marked wrong. None if Walenty lacks the word."""
+        schemata = self.schemata(lemma, reflexive, pos)
+        if not schemata:
             return None
         lexical: set[Case] = set()
         structural = partitive = False
-        for frame in _applicable(frames, negated):
-            if frame["idiom"]:
-                continue
-            for slot in frame["slots"]:
-                if SUBJECT in slot["labels"]:
-                    continue
-                for phrase in slot["phrases"]:
-                    if phrase["prep"] is not None:
-                        continue
+        for phrase in _bare_complements(schemata, negated):
+            match phrase["kind"]:
+                case "np" | "adjp" | "nump":
                     if phrase["case"] == "str":
                         structural = True
                     elif phrase["case"] == "part":
                         partitive = True
                     elif (case := UD_CASE.get(phrase["case"])) is not None:
                         lexical.add(case)
+                case _:
+                    pass
         return Requirement(frozenset(lexical), structural, partitive)
 
 
-def _key(lemma: str, reflexive: bool) -> str:
-    return lemma + REFLEXIVE_SUFFIX if reflexive else lemma
-
-
-def _applicable(frames: list[Frame], negated: bool) -> Iterator[Frame]:
-    for frame in frames:
-        if frame["negation"] == "_" or (frame["negation"] == "neg") == negated:
-            yield frame
+def _bare_complements(schemata: list[Schema], negated: bool) -> Iterator[Phrase]:
+    for schema in schemata:
+        if schema["certainty"] == "wrong":
+            continue
+        if schema["negation"] != "any" and (schema["negation"] == "neg") != negated:
+            continue
+        phrases = [p for position in schema["positions"] for p in position["phrases"]]
+        if any(p["kind"] in IDIOMATIC for p in phrases):
+            continue
+        for position in schema["positions"]:
+            if "subj" not in position["labels"]:
+                yield from position["phrases"]

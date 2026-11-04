@@ -1,4 +1,5 @@
-from skolia_analysis.valency import Valency, parse_line, read, split_top
+from skolia_analysis.valency import Valency
+from skolia_analysis.walenty.parse import empty_expansions, parse_schema
 
 SZUKAC = "szukać: pewny: _: : imperf: subj{np(str)} + obj{np(gen)} + {prepnp(w,loc)}"
 MIEC = "mieć: pewny: _: : imperf: subj{np(str)} + {np(str)} + {xp(locat)}"
@@ -10,34 +11,11 @@ NEG_ONLY = "bać się: pewny: neg: : imperf: subj{np(str)} + {np(dat)}"
 WRONG = "szukać: zły: _: : imperf: subj{np(str)} + {np(dat)}"
 
 
-def test_split_top_ignores_separators_inside_brackets() -> None:
-    frame = "subj{np(str)} + {lex(np(gen),sg,'woda',ratr({adjp(agr)}+{np(gen)}))}"
-    assert list(split_top(frame, " + ")) == [
-        "subj{np(str)}",
-        "{lex(np(gen),sg,'woda',ratr({adjp(agr)}+{np(gen)}))}",
-    ]
-
-
-def test_parse_line_keeps_cased_phrases_and_labels() -> None:
-    parsed = parse_line(SZUKAC)
-    assert parsed is not None
-    lemma, frame = parsed
-    assert lemma == "szukać"
-    assert frame["idiom"] is False
-    assert frame["slots"] == [
-        {"labels": ["subj"], "phrases": [{"case": "str", "prep": None}]},
-        {"labels": ["obj"], "phrases": [{"case": "gen", "prep": None}]},
-        {"labels": [], "phrases": [{"case": "loc", "prep": "w"}]},
-    ]
-
-
-def test_wrong_frames_and_comments_are_skipped() -> None:
-    assert parse_line(WRONG) is None
-    assert parse_line("% a comment") is None
-
-
 def valency(*lines: str) -> Valency:
-    return Valency(read(lines), "walenty-test")
+    schemata = [parse_schema(line, "verb") for line in lines]
+    return Valency(
+        {"version": "walenty-test", "schemata": schemata, "expansions": empty_expansions()}
+    )
 
 
 def test_lexical_case() -> None:
@@ -45,6 +23,12 @@ def test_lexical_case() -> None:
     assert requirement is not None
     assert requirement.lexical == {"Gen"}
     assert requirement.allowed(negated=False) == {"Gen"}
+
+
+def test_wrong_schemata_are_ignored() -> None:
+    requirement = valency(SZUKAC, WRONG).bare_objects("szukać", reflexive=False, negated=False)
+    assert requirement is not None
+    assert requirement.lexical == {"Gen"}
 
 
 def test_structural_object_is_genitive_when_negated() -> None:
@@ -55,14 +39,14 @@ def test_structural_object_is_genitive_when_negated() -> None:
     assert requirement.allowed(negated=True) == {"Gen"}
 
 
-def test_idiom_frames_say_nothing_about_the_verb() -> None:
+def test_idiom_schemata_say_nothing_about_the_verb() -> None:
     # mieć dość czegoś: the genitive is the idiom's, not mieć's
     requirement = valency(MIEC, MIEC_DOSC).bare_objects("mieć", reflexive=False, negated=False)
     assert requirement is not None
     assert requirement.lexical == frozenset()
 
 
-def test_reflexive_verbs_and_negation_only_frames() -> None:
+def test_reflexive_verbs_and_negation_only_schemata() -> None:
     v = valency(BAC_SIE, NEG_ONLY)
     assert v.bare_objects("bać", reflexive=False, negated=False) is None
     plain = v.bare_objects("bać", reflexive=True, negated=False)
