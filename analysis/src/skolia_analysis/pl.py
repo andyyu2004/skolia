@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from morfeusz2 import Edge, Interpretation
 
 LANG = "pl"
-PLUGIN_VERSION = "0.5"
+PLUGIN_VERSION = "0.6"
 
 # Parser models, by name. Each loads on first use. All are trained on UD Polish PDB, whose
 # conventions schema.py and the dictionary conversion assume. Scores: analysis/EVALUATION.md.
@@ -184,14 +184,16 @@ def assemble(
     expressions: Iterable[ExpressionDef] = (),
     snap: str | None = DEFAULT_SNAP,
     valency: Valency | None = None,
+    correct_cases: bool = True,
 ) -> Blob:
     """The blob for text already parsed, so one slow parse can be reused (e.g. to compare
-    snap policies)."""
+    snap policies). correct_cases: let verb valency fix a case it rules out (only off to
+    measure the correction)."""
     analyzer = f"{LANG}/{PLUGIN_VERSION}+{model_name}+morfeusz-{version('morfeusz2')}"
     if snap:
         analyzer += f"+snap-{snap}"
     if valency is not None:
-        analyzer += f"+{valency.version}"
+        analyzer += f"+{valency.version}" + ("" if correct_cases else "+no-case-correction")
     blob = build(
         parsed,
         lang=LANG,
@@ -203,5 +205,5 @@ def assemble(
         entry_upos=entry_upos,
         snap=reconcile.POLICIES[snap] if snap else None,
     )
-    pl_cases.apply([s["tokens"] for s in blob["sentences"]], valency)
+    pl_cases.apply([s["tokens"] for s in blob["sentences"]], valency, correct_cases)
     return blob

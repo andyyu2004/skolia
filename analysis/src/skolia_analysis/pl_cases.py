@@ -1,4 +1,4 @@
-"""Polish case: say why each word has its case.
+"""Polish case: fix a case the verb rules out, and say why each word has its case.
 
 Works on one sentence's tokens, using the dependency tree (head, deprel) and Walenty
 (valency.py). Relation names are UD Polish PDB's:
@@ -7,13 +7,15 @@ Works on one sentence's tokens, using the dependency tree (head, deprel) and Wal
     do   -> case on the noun                pięć, wiele -> nummod:gov, det:numgov on the noun
     być  -> cop on the predicate noun       starego -> amod on psa
 
-A correction step (switching a case the verb doesn't allow to one it does) was tried and
-removed: it broke more words than it fixed on PDB dev, test and train (EVALUATION.md).
+The correction is deliberately narrow: only verbs whose bare complements are all lexical
+(szukać: genitive only), only forms that look the same in the parser's case and the
+required one (psa: gen = acc), and not where się could be impersonal. EVALUATION.md has
+what a broader version did on PDB and why the treebank undercounts it.
 """
 
 from collections.abc import Sequence
 
-from .schema import Case, CaseReason, Deprel, Token, Upos, VerbForm
+from .schema import Case, CaseReason, Deprel, Feats, Reading, Token, Upos, VerbForm
 from .valency import Requirement, Valency
 
 # Complements whose case the verb decides
@@ -45,6 +47,11 @@ INFINITIVE_COMPLEMENT: frozenset[Deprel] = frozenset({"xcomp", "csubj"})
 VERBAL_FORMS: frozenset[VerbForm] = frozenset({"Part", "Vnoun", "Conv"})
 VERBAL_NOUN: VerbForm = "Vnoun"
 NOMINAL_HEADS: frozenset[Upos] = frozenset({"NOUN", "PROPN", "PRON"})
+# The correction only touches the head nouns of complements; quantity words (więcej,
+# dużo) are DET or NUM and have their own case rules
+CORRECTABLE: frozenset[Upos] = frozenset({"NOUN", "PROPN", "PRON"})
+# Question and relative words (co, jaki, który) open their own clause; leave their case
+CLAUSE_PRONOUNS = frozenset({"Int", "Rel"})
 
 
 class Sentence:
@@ -204,7 +211,105 @@ def _with_governor(reason: CaseReason, governor: Token) -> CaseReason:
     return reason
 
 
-def apply(sentences: Sequence[list[Token]], valency: Valency | None) -> None:
-    """Explain cases, sentence by sentence."""
+def correct_cases(tokens: list[Token], valency: Valency) -> int:
+    """Where a verb only takes lexical cases (szukać: genitive) and its complement has
+    another, but the form also has the required case (psa: genitive = accusative), switch
+    to that reading, and the words agreeing with it. Returns how many tokens changed.
+    The parser's reading is kept under "parser" and the change under "case_correction"."""
+    sentence = Sentence(tokens)
+    changed = 0
+    for index, token in enumerate(tokens):
+        case = token["feats"].get("Case")
+        verb = sentence.governing_verb(index)
+        if case is None or verb is None or "candidates" not in token:
+            continue
+        verb_token = tokens[verb]
+        lemma = verb_token["lemma"]
+        if verb_token["upos"] != "VERB" or lemma is None:
+            continue
+        # dwóch funkcjonariuszy: the numeral, not the verb, makes the noun genitive
+        if sentence.child(index, GOVERNING_NUMERAL) is not None:
+            continue
+        if token["upos"] not in CORRECTABLE or token["feats"].get("PronType") in CLAUSE_PRONOUNS:
+            continue
+        requirement = sentence.requirement(valency, verb)
+        if requirement is None or requirement.structural or requirement.partitive:
+            continue
+        if sentence.reflexive(verb) and _may_be_impersonal(valency, lemma):
+            continue
+        allowed = requirement.lexical
+        if not allowed or case in allowed:
+            continue
+        alternative = _only_reading_with_case(token, allowed)
+        if alternative is None:
+            continue
+        new_case = alternative["feats"].get("Case")
+        if new_case is None:
+            continue
+        _apply(token, alternative, case, lemma)
+        changed += 1
+        for child in sentence.children[index]:
+            dependent = tokens[child]
+            if dependent["deprel"] in AGREEING and dependent["feats"].get("Case") == case:
+                agreeing = _only_reading_with_case(dependent, frozenset({new_case}))
+                if agreeing is not None:
+                    _apply(dependent, agreeing, case, lemma)
+                    changed += 1
+    return changed
+
+
+def _may_be_impersonal(valency: Valency, lemma: str) -> bool:
+    """się after a verb that also takes an ordinary object without się may be the
+    impersonal się (takie przemiany nazywa się skojarzonymi: "one calls them"), not the
+    reflexive verb (nazywać się: "to be called"), so the reflexive frames may not apply."""
+    plain = valency.bare_objects(lemma, reflexive=False, negated=False)
+    return plain is not None and plain.structural
+
+
+def _only_reading_with_case(token: Token, allowed: frozenset[Case]) -> Reading | None:
+    """The token's dictionary reading that differs only in case, if exactly one allowed
+    case is available."""
+    matches = [
+        r
+        for r in token.get("candidates", [])
+        if r["lemma"] == token["lemma"]
+        and r["upos"] == token["upos"]
+        and r["feats"].get("Case") in allowed
+        and _without_case(r["feats"]) == _without_case(token["feats"])
+    ]
+    cases = {r["feats"].get("Case") for r in matches}
+    return matches[0] if len(cases) == 1 else None
+
+
+def _without_case(feats: Feats) -> dict[str, object]:
+    rest: dict[str, object] = dict(feats)
+    rest.pop("Case", None)
+    # The parser and the dictionary disagree on these without it mattering here
+    rest.pop("PronType", None)
+    rest.pop("ExtPos", None)
+    return rest
+
+
+def _apply(token: Token, reading: Reading, original: Case, governor: str) -> None:
+    if "parser" not in token:
+        token["parser"] = {
+            "lemma": token["lemma"] or token["text"],
+            "upos": token["upos"],
+            "xpos": token["xpos"] or "",
+            "feats": token["feats"],
+        }
+    feats: Feats = {**token["feats"], **reading["feats"]}
+    token["feats"] = feats
+    token["xpos"] = reading["xpos"] or None
+    token["case_correction"] = {"original": original, "governor": governor}
+
+
+def apply(sentences: Sequence[list[Token]], valency: Valency | None, correct: bool = True) -> int:
+    """Correct cases where the verb rules them out (needs valency), then explain every
+    case, sentence by sentence. Returns how many tokens the correction changed."""
+    changed = 0
     for tokens in sentences:
+        if valency is not None and correct:
+            changed += correct_cases(tokens, valency)
         explain_cases(tokens, valency)
+    return changed

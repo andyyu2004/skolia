@@ -225,6 +225,16 @@ class CaseReason(TypedDict):
     """Lemma of the verb or preposition, for the explanation: szukać, do."""
 
 
+class CaseCorrection(TypedDict):
+    """The case was changed from the parser's because the governing verb requires another
+    and the form is the same in both: psa after szukać is genitive, not accusative."""
+
+    original: Case
+    """The parser's case."""
+    governor: str
+    """Lemma of the verb that requires the case."""
+
+
 class Token(TypedDict):
     start: int
     """Character offset into the source text. Parts of a fused word share the whole word's span."""
@@ -252,6 +262,8 @@ class Token(TypedDict):
     requires (pl_cases.py). Worth showing: one of them is wrong."""
     case_reason: NotRequired[CaseReason]
     """Why the word has its case, for words with a Case feature, when a rule explains it."""
+    case_correction: NotRequired[CaseCorrection]
+    """Set when the case was corrected by the governing verb's valency (pl_cases.py)."""
 
 
 class ExpressionDef(TypedDict):

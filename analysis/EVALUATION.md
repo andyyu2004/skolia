@@ -50,13 +50,14 @@ Of the Kraków misses, 280 of 581 are numbers in digits or Roman numerals (tagge
 
 `scripts/eval_case_reasons.py` on PDB dev (combo, snap upos, Walenty 2018-07-26): 14,090 of 15,589 words with a case (90.4%) get a reason. By rule: agreement 24.5%, preposition 24.4%, subject 12.8%, structural object 7.6%, possessive 4.9%, coordination 4.6%, noun complement 4.2%, verb's lexical case 3.0%, verbal noun 1.7%, negation, numeral, predicate, instrumental, vocative and partitive under 1% each. The most common words without one: sentence roots in the nominative (headlines, list items) and numerals' own case. This counts coverage, not correctness; the 40-word samples the script prints read right, with one misleading reason found and fixed (multi-word prepositions now name the whole preposition: *w stosunku do*).
 
-### Case correction from valency: tried and dropped
+### Case correction from valency
 
-Switching a case the governing verb doesn't allow to one its form also has (`psa` acc → gen after `szukać`) didn't pay. Words changed, counted against the gold case:
+When the governing verb rules the parser's case out and the form also has the required case, the case is switched (`Szukam psa`: COMBO says accusative, `szukać` takes only the genitive, and `psa` is both). It's on, in its narrow form; the parser's reading is kept and the reader says what changed. Words changed, counted against the gold case (`scripts/eval_ud.py --valency`):
 
-| Mode | Dev | Test | Train |
+| Version | Dev | Test | Train |
 |---|---|---|---|
-| all verbs | 4 fixed, 0 broken | 2 fixed, 7 broken | 1 fixed, 37 broken |
-| only verbs whose bare complements are all lexical (no `np(str)`) | 1 fixed, 0 broken | 0 fixed, 0 broken | 0 fixed, 6 broken |
+| any verb, including those with a structural object | 4 fixed, 0 broken | 2 fixed, 7 broken | 1 fixed, 37 broken |
+| only verbs whose bare complements are all lexical | 1 fixed, 0 broken | 0 fixed, 0 broken | 0 fixed, 6 broken |
+| **lexical only, and not where się may be impersonal (current)** | **1 fixed, 0 broken** | **0, 0** | **0 fixed, 3 broken** |
 
-COMBO already gets case almost always right, so a correction mostly overrides correct tags. The breaks on test were subjects the parser labelled as objects (inverted word order); some on train may be treebank errors (`boją się go` annotated accusative), but neither mode helped on any split. The "lexical" mode was designed after seeing the test errors, so test isn't a clean estimate for it; train is in-domain for COMBO and optimistic. Without the correction, a case the verb doesn't allow simply gets no reason.
+The broad version broke correct subjects the parser had labelled as objects (inverted word order), so it's not used. Reading the narrow version's six train "breaks" by hand: two are treebank errors, where the verb takes the genitive and the look-alike form is annotated accusative (`Urzędnicy boją się go`, `mama oczekiwała mnie`), so the correction was right; one was a real error, an impersonal się taken for the reflexive verb (`Takie przemiany nazywa się skojarzonymi`), which the się check now excludes; two are unclear. So on the cases that can be judged, the current version is 3 right, 0 wrong. The narrow version was designed after seeing test and train errors, so neither is a clean estimate; it fires rarely (once on dev) because COMBO is usually right.

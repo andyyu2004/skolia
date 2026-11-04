@@ -105,6 +105,11 @@ export interface CaseReason {
   governor?: string;
 }
 
+export interface CaseCorrection {
+  original: Case;
+  governor: string;
+}
+
 export interface Token {
   start: number;
   end: number;
@@ -120,6 +125,7 @@ export interface Token {
   candidates?: Reading[];
   parser?: Reading;
   case_reason?: CaseReason;
+  case_correction?: CaseCorrection;
 }
 
 export interface ExpressionMatch {

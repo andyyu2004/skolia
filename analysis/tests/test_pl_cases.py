@@ -1,7 +1,7 @@
 """One test per case rule, on hand-built trees (PDB relation names), so no parser runs."""
 
-from skolia_analysis.pl_cases import explain_cases
-from skolia_analysis.schema import Case, Deprel, Feats, Token, Upos
+from skolia_analysis.pl_cases import correct_cases, explain_cases
+from skolia_analysis.schema import Case, Deprel, Feats, Reading, Token, Upos
 from skolia_analysis.valency import Valency
 from skolia_analysis.walenty.parse import empty_expansions, parse_schema
 
@@ -11,6 +11,11 @@ SCHEMATA = [
     "pomagać: pewny: _: : imperf: subj{np(str)} + {np(dat)}",
     "odnaleźć: pewny: _: : perf: subj{np(str)} + obj{np(str)}",
     "czytać: pewny: _: : imperf: subj{np(str)} + obj{np(str)}",
+    "bać się: pewny: _: : imperf: subj{np(str)} + {np(gen)}",
+    "oczekiwać: pewny: _: : imperf: subj{np(str)} + obj{np(gen)}",
+    # nazywać has an ordinary object without się, so a się after it may be impersonal
+    "nazywać: pewny: _: : imperf: subj{np(str)} + obj{np(str)} + {adjp(inst)}",
+    "nazywać się: pewny: _: : imperf: subj{np(str)} + {np(nom)}",
 ]
 VALENCY = Valency(
     {
@@ -153,16 +158,76 @@ def test_subject_predicate_possessive_vocative_coordination() -> None:
     assert reason_of(listing, 1) == ("coordination", 0, None)
 
 
-def szukam_psa(case: Case) -> list[Token]:
-    return [tok("Szukam", "szukać", "VERB", None, "root"), noun("psa", "pies", 0, "obj", case)]
+def reading(lemma: str, case: Case, upos: Upos = "NOUN") -> Reading:
+    feats: Feats = {"Case": case, "Number": "Sing", "Gender": "Masc", "Animacy": "Nhum"}
+    return {"lemma": lemma, "upos": upos, "xpos": f"x:{case.lower()}", "feats": feats}
+
+
+def ambiguous(token: Token, *cases: Case) -> Token:
+    """Give a token dictionary readings that differ only in case, like psa (gen = acc)."""
+    token["candidates"] = [reading(token["lemma"] or "", c, token["upos"]) for c in cases]
+    return token
+
+
+def szukam_starego_psa(case: Case) -> list[Token]:
+    stary = tok("starego", "stary", "ADJ", 2, "amod")
+    stary["feats"] = {"Case": case, "Number": "Sing", "Gender": "Masc", "Animacy": "Nhum"}
+    return [
+        tok("Szukam", "szukać", "VERB", None, "root"),
+        ambiguous(stary, "Gen", "Acc"),
+        ambiguous(noun("psa", "pies", 0, "obj", case), "Gen", "Acc"),
+    ]
 
 
 def test_lexical_genitive_object() -> None:
-    assert reason_of(szukam_psa("Gen"), 1) == ("verb", 0, "szukać")
+    assert reason_of(szukam_starego_psa("Gen"), 2) == ("verb", 0, "szukać")
 
 
-def test_a_case_the_verb_does_not_allow_gets_no_reason() -> None:
-    # The parser can tag psa accusative (genitive and accusative look the same). szukać
-    # only takes the genitive and the verb isn't negated, so no rule fits: better no
-    # explanation than a wrong one
-    assert reason_of(szukam_psa("Acc"), 1) == (None, None, None)
+def test_genitive_verb_corrects_a_look_alike_accusative_and_its_adjective() -> None:
+    # The parser tags psa accusative; szukać only takes the genitive, and psa (like
+    # starego) is the same form in both
+    tokens = szukam_starego_psa("Acc")
+    assert correct_cases(tokens, VALENCY) == 2
+    assert [t["feats"].get("Case") for t in tokens[1:]] == ["Gen", "Gen"]
+    assert tokens[2].get("case_correction") == {"original": "Acc", "governor": "szukać"}
+    assert tokens[2].get("parser", {}).get("feats", {}).get("Case") == "Acc"
+    assert reason_of(tokens, 2) == ("verb", 0, "szukać")
+
+
+def test_correction_from_the_treebank_review() -> None:
+    # Urzędnicy boją się go; mama oczekiwała mnie: PDB annotates both accusative, but the
+    # verbs take the genitive and go/mnie look the same in both
+    accusative: Feats = {"Case": "Acc", "Number": "Sing", "Gender": "Masc", "Animacy": "Nhum"}
+    go = ambiguous(tok("go", "on", "PRON", 0, "iobj", accusative.copy()), "Gen", "Acc")
+    boja = [tok("boją", "bać", "VERB", None, "root"), go, tok("się", "się", "PRON", 0, "expl:pv")]
+    assert correct_cases(boja, VALENCY) == 1
+    mnie = ambiguous(tok("mnie", "ja", "PRON", 0, "obj", accusative.copy()), "Gen", "Acc")
+    assert correct_cases([tok("oczekiwała", "oczekiwać", "VERB", None, "root"), mnie], VALENCY) == 1
+
+
+def test_no_correction_where_się_may_be_impersonal() -> None:
+    # Takie przemiany nazywa się skojarzonymi: "one calls such changes ...", an
+    # accusative object; not nazywać się (to be called) + nominative
+    przemiany = ambiguous(noun("przemiany", "przemiana", 0, "obj", "Acc"), "Nom", "Acc")
+    tokens = [
+        tok("nazywa", "nazywać", "VERB", None, "root"),
+        przemiany,
+        tok("się", "się", "PRON", 0, "expl:pv"),
+    ]
+    assert correct_cases(tokens, VALENCY) == 0
+
+
+def test_no_correction_for_verbs_with_a_structural_object() -> None:
+    # usta artykułowały: the parser labelled the subject as the object (from PDB test)
+    usta = ambiguous(noun("usta", "usta", 0, "obj", "Nom"), "Nom", "Acc")
+    assert correct_cases([tok("artykułowały", "czytać", "VERB", None, "root"), usta], VALENCY) == 0
+
+
+def test_no_correction_with_a_numeral_or_for_question_words() -> None:
+    tokens = szukam_starego_psa("Acc")
+    tokens.append(tok("dwóch", "dwa", "NUM", 2, "nummod:gov", {"Case": "Acc"}))
+    assert correct_cases(tokens, VALENCY) == 0
+    question = szukam_starego_psa("Acc")
+    question[2]["feats"]["PronType"] = "Int"
+    question[2]["upos"] = "PRON"
+    assert correct_cases(question, VALENCY) == 0
