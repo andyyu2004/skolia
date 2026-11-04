@@ -42,6 +42,7 @@ PRIMITIVES: dict[object, str] = {
 class Generator:
     def __init__(self) -> None:
         self.done: set[str] = set()
+        self.sources: dict[str, object] = {}
         self.order: list[str] = []
         self.definitions: dict[str, str] = {}
 
@@ -50,6 +51,9 @@ class Generator:
 
     def ref(self, tp: Any) -> str:
         """The TypeScript for a type used inside another, queueing named types."""
+        if isinstance(tp, typing.NewType):
+            # Lemma = NewType("Lemma", str): a distinct type in Python, a string in TS
+            return self.ref(tp.__supertype__)
         if isinstance(tp, TypeAliasType):
             self.define(tp)
             return tp.__name__
@@ -67,7 +71,10 @@ class Generator:
             inner = self.ref(args[0])
             return f"({inner})[]" if "|" in inner else f"{inner}[]"
         if origin is dict:
-            return f"Record<{self.ref(args[0])}, {self.ref(args[1])}>"
+            key = self.ref(args[0])
+            record = f"Record<{key}, {self.ref(args[1])}>"
+            # A Literal-keyed dict needn't have every key; a Record over a union would
+            return record if key == "string" else f"Partial<{record}>"
         if origin is tuple:
             return "[" + ", ".join(self.ref(a) for a in args) + "]"
         raise TypeError(f"no TypeScript for {tp!r}")
@@ -75,8 +82,11 @@ class Generator:
     def define(self, tp: Any) -> None:
         name = self.name_of(tp)
         if name in self.done:
+            if self.sources[name] is not tp:
+                raise TypeError(f"two different types are both named {name}")
             return
         self.done.add(name)
+        self.sources[name] = tp
         if isinstance(tp, TypeAliasType):
             body = f"export type {name} = {self.ref(tp.__value__)};"
         else:

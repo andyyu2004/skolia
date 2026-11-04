@@ -39,7 +39,7 @@ from typing import Literal, NewType, TypedDict
 
 from .vocabulary import (
     AdverbialCategory,
-    Aspect,
+    AspectSpec,
     Atom,
     CaseSpec,
     Certainty,
@@ -198,7 +198,7 @@ class Infinitive(TypedDict):
     """infp(perf): an infinitive phrase of the given aspect."""
 
     kind: Literal["infp"]
-    aspect: Aspect
+    aspect: AspectSpec
 
 
 # --- Adverbials and the rest ----------------------------------------------------------
@@ -428,7 +428,7 @@ class Schema(TypedDict):
     """Verbs only; "any" elsewhere."""
     predicative: bool
     """Adjectives and adverbs used as a predicate (jest pewny, że ...)."""
-    aspect: Aspect
+    aspect: AspectSpec
     """Verbs only; "any" elsewhere."""
     positions: list[Position]
 

@@ -170,12 +170,260 @@ export interface BundleParadigm {
   forms: FormRow[];
 }
 
+export type PartOfSpeech = "verb" | "noun" | "adj" | "adv";
+
+export type Certainty = "certain" | "doubtful" | "colloquial" | "archaic" | "vulgar" | "wrong";
+
+export type Negation = "aff" | "neg" | "any";
+
+export type AspectSpec = "perf" | "imperf" | "any";
+
+export type Label = "subj" | "obj" | "controller" | "controllee" | "controller2" | "controllee2" | "head";
+
+export type CaseSpec = "nom" | "gen" | "dat" | "acc" | "inst" | "loc" | "str" | "part" | "agr" | "pred" | "postp";
+
+export interface NounPhrase {
+  kind: "np";
+  case: CaseSpec;
+}
+
+export interface AdjectivePhrase {
+  kind: "adjp";
+  case: CaseSpec;
+}
+
+export interface NumeralPhrase {
+  kind: "nump";
+  case: CaseSpec;
+}
+
+export interface PassiveParticiplePhrase {
+  kind: "ppasp";
+  case: CaseSpec;
+}
+
+export interface ActiveParticiplePhrase {
+  kind: "pactp";
+  case: CaseSpec;
+}
+
+export type Preposition = "na" | "z" | "w" | "do" | "o" | "za" | "dla" | "od" | "po" | "przez" | "przed" | "co do" | "wobec" | "nad" | "względem" | "między" | "jako" | "przeciw" | "pod" | "u" | "przy" | "wskutek" | "ku" | "wokół" | "wśród" | "spod" | "bez" | "śród" | "pomiędzy" | "dzięki" | "pośród" | "według" | "poza" | "wśrzód" | "koło" | "spośród" | "poprzez" | "ponad" | "spomiędzy" | "podczas" | "sprzed" | "wpośród" | "wewnątrz" | "zza" | "dookoła" | "per" | "znad" | "powyżej" | "naokoło" | "wkoło" | "jak" | "poniżej" | "obok" | "spoza" | "dokoła" | "mimo" | "naprzeciw" | "niż" | "wzdłuż" | "lada" | "naokół" | "niedaleko" | "niedaleko od" | "nieopodal" | "około" | "opodal" | "pobocz" | "pobok" | "podal" | "podle" | "popod" | "pośrodku" | "skroś" | "sponad" | "spopod" | "via" | "vis-à-vis" | "wedle" | "wokoło" | "wskroś" | "wskróś" | "z dala od" | "z daleka od";
+
+export interface PrepNounPhrase {
+  kind: "prepnp";
+  prep: Preposition;
+  case: CaseSpec;
+}
+
+export interface PrepAdjectivePhrase {
+  kind: "prepadjp";
+  prep: Preposition;
+  case: CaseSpec;
+}
+
+export interface PrepNumeralPhrase {
+  kind: "prepnump";
+  prep: Preposition;
+  case: CaseSpec;
+}
+
+export interface PrepGerundPhrase {
+  kind: "prepgerp";
+  prep: Preposition;
+  case: CaseSpec;
+}
+
+export interface PrepPassiveParticiplePhrase {
+  kind: "prepppasp";
+  prep: Preposition;
+  case: CaseSpec;
+}
+
+export interface ComplexPrepPhrase {
+  kind: "comprepnp";
+  prep: string;
+}
+
+export type Complementizer = "że" | "żeby" | "żeby2" | "int" | "rel" | "jak" | "kiedy" | "gdy" | "jakoby" | "jeśli" | "bo" | "aż" | "jakby" | "zanim" | "dopóki";
+
+export type WhWord = "co" | "czemu" | "czy" | "czyj" | "dlaczego" | "dokąd" | "gdzie" | "ile" | "jak" | "jaki" | "kiedy" | "kto" | "którędy" | "który" | "odkąd" | "skąd" | "jakoby" | "jakby";
+
+export interface Clause {
+  kind: "cp";
+  complementizer: Complementizer;
+  words: WhWord[];
+}
+
+export interface NominalClause {
+  kind: "ncp";
+  case: CaseSpec;
+  complementizer: Complementizer;
+  words: WhWord[];
+}
+
+export interface PrepNominalClause {
+  kind: "prepncp";
+  prep: Preposition;
+  case: CaseSpec;
+  complementizer: Complementizer;
+  words: WhWord[];
+}
+
+export interface Infinitive {
+  kind: "infp";
+  aspect: AspectSpec;
+}
+
+export type AdverbialCategory = "locat" | "adl" | "abl" | "perl" | "temp" | "dur" | "mod" | "caus" | "instr" | "dest" | "misc" | "pron";
+
+export interface Adverbial {
+  kind: "xp";
+  category: AdverbialCategory;
+  realisations: Phrase[];
+}
+
+export interface Adverb {
+  kind: "advp";
+  category: AdverbialCategory;
+}
+
+export type Comparator = "jak" | "jako" | "niż" | "co";
+
+export interface Comparison {
+  kind: "compar";
+  comparator: Comparator;
+}
+
+export type Atom = "possp" | "refl" | "recip" | "or" | "nonch" | "E" | "distrp" | "qub";
+
+export interface AtomPhrase {
+  kind: Atom;
+}
+
+export interface Fixed {
+  kind: "fixed";
+  phrase: Phrase;
+  text: string;
+}
+
+export type NumberSpec = "sg" | "pl" | "agr" | "any";
+
+export interface NominalForm {
+  shape: "nominal";
+  number: NumberSpec;
+}
+
+export type GenderSpec = "m1" | "m2" | "m3" | "f" | "n" | "agr" | "any";
+
+export type DegreeSpec = "pos" | "com" | "sup" | "agr" | "any";
+
+export interface AdjectivalForm {
+  shape: "adjectival";
+  number: NumberSpec;
+  genders: GenderSpec[];
+  degree: DegreeSpec;
+}
+
+export interface ParticipialForm {
+  shape: "participial";
+  number: NumberSpec;
+  genders: GenderSpec[];
+  negation: Negation;
+  reflexive: boolean;
+}
+
+export interface VerbalForm {
+  shape: "verbal";
+  negation: Negation;
+  reflexive: boolean;
+}
+
+export interface GerundForm {
+  shape: "gerund";
+  number: NumberSpec;
+  negation: Negation;
+  reflexive: boolean;
+}
+
+export interface One {
+  kind: "one";
+  lemma: string;
+}
+
+export interface Xor {
+  kind: "xor";
+  lemmas: string[];
+}
+
+export interface Or {
+  kind: "or";
+  lemmas: string[];
+}
+
+export type LemmaChoice = One | Xor | Or;
+
+export interface NumeralForm {
+  shape: "numeral";
+  numeral: LemmaChoice;
+}
+
+export interface AdverbialForm {
+  shape: "adverbial";
+  degree: DegreeSpec;
+}
+
+export interface ParticleForm {
+  shape: "particle";
+}
+
+export type LexForm = NominalForm | AdjectivalForm | ParticipialForm | VerbalForm | GerundForm | NumeralForm | AdverbialForm | ParticleForm;
+
+export type Modifiability = "natr" | "atr" | "atr1" | "ratr" | "ratr1";
+
+export interface Modification {
+  kind: Modifiability;
+  positions: Position[];
+}
+
+export interface Lex {
+  kind: "lex";
+  phrase: Phrase;
+  form: LexForm;
+  lemmas: LemmaChoice;
+  modification: Modification;
+}
+
+export interface LexComparison {
+  kind: "lexcompar";
+  phrase: Phrase;
+  parts: Lex[];
+}
+
+export type Phrase = NounPhrase | AdjectivePhrase | NumeralPhrase | PassiveParticiplePhrase | ActiveParticiplePhrase | PrepNounPhrase | PrepAdjectivePhrase | PrepNumeralPhrase | PrepGerundPhrase | PrepPassiveParticiplePhrase | ComplexPrepPhrase | Clause | NominalClause | PrepNominalClause | Infinitive | Adverbial | Adverb | Comparison | AtomPhrase | Fixed | Lex | LexComparison;
+
+export interface Position {
+  labels: Label[];
+  phrases: Phrase[];
+}
+
+export interface Schema {
+  pos: PartOfSpeech;
+  lemma: string;
+  reflexive: boolean;
+  certainty: Certainty;
+  negation: Negation;
+  predicative: boolean;
+  aspect: AspectSpec;
+  positions: Position[];
+}
+
 export interface Entry {
   lemma: string;
   upos: Upos;
   senses: Sense[];
   relations: Relation[];
   paradigms: BundleParadigm[];
+  frames: Schema[];
 }
 
 export type Match = "exact" | "other-pos" | "lowercase" | "none";

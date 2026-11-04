@@ -227,7 +227,7 @@ class Parser:
             self.fail(f"unknown negation {value!r}")
         return value
 
-    def aspect(self) -> v.Aspect:
+    def aspect(self) -> v.AspectSpec:
         value = self.any_value()
         if not v.is_aspect(value):
             self.fail(f"unknown aspect {value!r}")

@@ -3,6 +3,7 @@
 from typing import Literal, NotRequired, TypedDict
 
 from ..schema import Feats, Upos
+from ..walenty.model import Schema
 
 
 class Example(TypedDict):
@@ -65,6 +66,9 @@ class Entry(TypedDict):
     senses: list[Sense]
     relations: list[Relation]
     paradigms: list[BundleParadigm]
+    frames: list[Schema]
+    """How the word combines with others (Walenty valency schemata), for a verb both
+    with and without się (Schema.reflexive). Empty when Walenty lacks the word."""
 
 
 type Match = Literal[

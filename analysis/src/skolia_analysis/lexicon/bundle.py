@@ -4,12 +4,19 @@ from collections.abc import Callable
 
 from .. import ud
 from ..schema import Blob, Feats, Upos
+from ..walenty.model import Schema
 from .schema import Bundle, BundleParadigm, Entry, Match, Paradigm
 from .store import Lexicon, Row
 
 LEMMA_ID_SEP = ":"
 
 type Paradigms = Callable[[str, Upos], list[Paradigm]]
+type Frames = Callable[[str, Upos], list[Schema]]
+"""A word's valency schemata, by lemma and part of speech."""
+
+
+def no_frames(_lemma: str, _upos: Upos) -> list[Schema]:
+    return []
 
 
 def parse_lemma_id(value: str) -> tuple[str, str, Upos]:
@@ -41,7 +48,7 @@ def resolve(lexicon: Lexicon, lemma_id: str) -> tuple[Row | None, Match]:
     return None, "none"
 
 
-def make(blob: Blob, lexicon: Lexicon, paradigms: Paradigms) -> Bundle:
+def make(blob: Blob, lexicon: Lexicon, paradigms: Paradigms, frames: Frames = no_frames) -> Bundle:
     meta = lexicon.meta()
     bundle: Bundle = {
         "lang": blob["lang"],
@@ -64,7 +71,7 @@ def make(blob: Blob, lexicon: Lexicon, paradigms: Paradigms) -> Bundle:
             if entry_id != token_id:
                 bundle["lookup"][token_id] = entry_id
             if entry_id not in bundle["entries"]:
-                bundle["entries"][entry_id] = _entry(entry_id, row, paradigms, feats)
+                bundle["entries"][entry_id] = _entry(entry_id, row, paradigms, frames, feats)
     return bundle
 
 
@@ -93,7 +100,9 @@ def _compact(paradigm: Paradigm, feats: FeatsTable) -> BundleParadigm:
     return {"homonym": paradigm["homonym"], "forms": list(by_form.items())}
 
 
-def _entry(entry_id: str, row: Row | None, paradigms: Paradigms, feats: FeatsTable) -> Entry:
+def _entry(
+    entry_id: str, row: Row | None, paradigms: Paradigms, frames: Frames, feats: FeatsTable
+) -> Entry:
     _lang, lemma, upos = parse_lemma_id(entry_id)
     return {
         "lemma": lemma,
@@ -101,4 +110,5 @@ def _entry(entry_id: str, row: Row | None, paradigms: Paradigms, feats: FeatsTab
         "senses": row.senses if row else [],
         "relations": row.relations if row else [],
         "paradigms": [_compact(p, feats) for p in paradigms(lemma, upos)],
+        "frames": frames(lemma, upos),
     }

@@ -44,7 +44,9 @@ def polish(lexicon_path: Path, valency_path: Path | None, model: str) -> Pipelin
     return Pipeline(
         lang=pl.LANG,
         analyze=lambda text: pl.analyze(text, parser, candidates, valency=valency),
-        bundle=lambda blob: bundle.make(blob, lexicon, converter.paradigms),
+        bundle=lambda blob: bundle.make(
+            blob, lexicon, converter.paradigms, valency.frames if valency else bundle.no_frames
+        ),
         lexicon_version=lexicon.meta().get("version", ""),
     )
 

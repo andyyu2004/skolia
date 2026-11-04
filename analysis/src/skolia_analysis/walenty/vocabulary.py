@@ -29,7 +29,7 @@ CERTAINTY: dict[str, Certainty] = {
 ANY = "_"
 """Walenty's "any value" for aspect, negation, number, gender and degree."""
 
-type Aspect = Literal["perf", "imperf", "any"]
+type AspectSpec = Literal["perf", "imperf", "any"]
 type Negation = Literal["aff", "neg", "any"]
 """aff: only without nie; neg: only with nie."""
 
@@ -123,7 +123,7 @@ def literal_values(alias: object) -> frozenset[str]:
     return frozenset(cast(tuple[str, ...], get_args(alias)))
 
 
-ASPECTS = literal_values(Aspect)
+ASPECTS = literal_values(AspectSpec)
 NEGATIONS = literal_values(Negation)
 LABELS = literal_values(Label)
 CASE_SPECS = literal_values(CaseSpec)
@@ -139,7 +139,7 @@ ATOMS = literal_values(Atom)
 MODIFIABILITIES = literal_values(Modifiability)
 
 
-def is_aspect(value: str) -> TypeGuard[Aspect]:
+def is_aspect(value: str) -> TypeGuard[AspectSpec]:
     return value in ASPECTS
 
 

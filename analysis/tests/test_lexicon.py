@@ -7,6 +7,7 @@ from skolia_analysis.lexicon import pl as lexicon_pl
 from skolia_analysis.lexicon.kaikki import KaikkiEntry
 from skolia_analysis.lexicon.schema import Form, Paradigm, Sense
 from skolia_analysis.schema import Blob, Feats, Token, Upos
+from skolia_analysis.walenty.parse import parse_schema
 
 DOG: Sense = {"gloss": "dog", "tags": [], "when": [{"Gender": "Masc", "Animacy": "Nhum"}]}
 COP: Sense = {"gloss": "cop", "tags": [], "when": [{"Gender": "Masc", "Animacy": "Hum"}]}
@@ -172,3 +173,13 @@ def test_bundle_shares_feature_sets_and_groups_forms(tmp_path: Path) -> None:
         ("psu", [{"Case": "Dat"}]),
     ]
     assert result["match"] == {"pl:pies:NOUN": "exact"}
+    assert result["entries"]["pl:pies:NOUN"]["frames"] == []
+
+    strach = parse_schema("pies: pewny: : : : {np(gen)}", "noun")
+    with_frames = bundle.make(
+        blob,
+        store.Lexicon(path),
+        paradigms,
+        lambda lemma, upos: [strach] if (lemma, upos) == ("pies", "NOUN") else [],
+    )
+    assert with_frames["entries"]["pl:pies:NOUN"]["frames"] == [strach]

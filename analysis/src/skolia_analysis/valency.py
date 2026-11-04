@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict, cast
 
-from .schema import Case
+from .schema import Case, Upos
 from .walenty.model import Expansions, Phrase, Schema
 from .walenty.parse import parse_expansions, parse_schema, schema_lines
 from .walenty.vocabulary import CaseSpec, Lemma, PartOfSpeech
@@ -28,6 +28,16 @@ UD_CASE: dict[CaseSpec, Case] = {
     "acc": "Acc",
     "inst": "Ins",
     "loc": "Loc",
+}
+
+# Which Walenty file a lexicon entry's part of speech looks in
+WALENTY_POS: dict[Upos, PartOfSpeech] = {
+    "VERB": "verb",
+    "AUX": "verb",
+    "NOUN": "noun",
+    "PROPN": "noun",
+    "ADJ": "adj",
+    "ADV": "adv",
 }
 
 # The release's files, by part of speech
@@ -132,6 +142,15 @@ class Valency:
 
     def schemata(self, lemma: str, reflexive: bool, pos: PartOfSpeech = "verb") -> list[Schema]:
         return self._schemata.get((pos, Lemma(lemma), reflexive), [])
+
+    def frames(self, lemma: str, upos: Upos) -> list[Schema]:
+        """A lexicon entry's schemata for the word sheet: with and without się, leaving
+        out those Walenty marks wrong."""
+        pos = WALENTY_POS.get(upos)
+        if pos is None:
+            return []
+        both = self.schemata(lemma, False, pos) + self.schemata(lemma, True, pos)
+        return [s for s in both if s["certainty"] != "wrong"]
 
     def bare_objects(
         self, lemma: str, reflexive: bool, negated: bool, pos: PartOfSpeech = "verb"

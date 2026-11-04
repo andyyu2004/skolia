@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import cast
 
 from ..schema import Blob
+from ..valency import Valency
 from . import build, bundle
 from . import pl as lexicon_pl
 from .store import Lexicon
@@ -32,10 +33,12 @@ def bundle_main() -> None:
         description="Read an analysis blob on stdin, write the document's lexicon bundle.",
     )
     parser.add_argument("--lexicon", type=Path, required=True, help="lexicon .sqlite file")
+    parser.add_argument("--valency", type=Path, help="Walenty frames .json (skolia-build-valency)")
     parser.add_argument("--indent", type=int, default=None)
     args = parser.parse_args()
     blob = cast(Blob, json.load(sys.stdin))
     converter = lexicon_pl.Converter()
-    result = bundle.make(blob, Lexicon(args.lexicon), converter.paradigms)
+    frames = Valency.load(args.valency).frames if args.valency else bundle.no_frames
+    result = bundle.make(blob, Lexicon(args.lexicon), converter.paradigms, frames)
     json.dump(result, sys.stdout, ensure_ascii=False, indent=args.indent)
     sys.stdout.write("\n")
