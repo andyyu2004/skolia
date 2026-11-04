@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { DocumentList, DocumentSummary } from "@skolia/shared/api";
+import { MAX_TEXT_LENGTH, type DocumentList, type DocumentSummary } from "@skolia/shared/api";
 import { docId, statusKey } from "@skolia/shared/keys";
 import type { IngestJob } from "@skolia/shared/schema";
-import { countWords, createApp, parseImport, parseStatus } from "./app.ts";
+import { brotliCompressSync, brotliDecompressSync } from "node:zlib";
+import { acceptsEncoding, countWords, createApp, parseImport, parseStatus } from "./app.ts";
 import type { BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob } from "./ports.ts";
 
 class MemoryDocuments implements DocumentStore {
@@ -43,7 +44,13 @@ function setup() {
   const documents = new MemoryDocuments();
   const blobs = new MemoryBlobs();
   const queue = new MemoryQueue();
-  const app = createApp({ documents, blobs, queue, now: () => new Date("2026-11-04T00:00:00Z") });
+  const app = createApp({
+    documents,
+    blobs,
+    queue,
+    decode: async (body) => brotliDecompressSync(body),
+    now: () => new Date("2026-11-04T00:00:00Z"),
+  });
   return { app, documents, blobs, queue };
 }
 
@@ -66,7 +73,7 @@ test("import stores the text, queues a job and reports queued", async () => {
   assert.equal(summary.title, "Idę do starego psa.");
   assert.equal(summary.words, 4);
   assert.deepEqual(queue.sent, [{ doc: id, lang: "pl" }]);
-  assert.ok(blobs.objects.has(`text/${id}.txt`));
+  assert.ok(blobs.objects.has(`doc/${id}/text.txt`));
 });
 
 test("importing the same text again doesn't queue it twice, unless it failed", async () => {
@@ -80,6 +87,45 @@ test("importing the same text again doesn't queue it twice, unless it failed", a
   const retry = await importText(app);
   assert.equal(retry.status, 202);
   assert.equal(queue.sent.length, 2);
+});
+
+test("brotli blobs are sent as stored when accepted, decoded otherwise", async () => {
+  const { app, blobs } = setup();
+  await importText(app);
+  const id = await docId(TEXT);
+  const json = '{"lang":"pl"}';
+  blobs.objects.set("b.json.br", {
+    body: brotliCompressSync(json),
+    contentType: "application/json",
+    contentEncoding: "br",
+  });
+  await blobs.put(
+    statusKey(id),
+    JSON.stringify({ state: "ready", updated: "x", analysis: "a", bundle: "b.json.br" }),
+    "application/json",
+  );
+  const url = `/api/documents/${id}/bundle`;
+  const accepted = await app.request(url, { headers: { "accept-encoding": "gzip, br" } });
+  assert.equal(accepted.headers.get("content-encoding"), "br");
+  assert.equal(brotliDecompressSync(new Uint8Array(await accepted.arrayBuffer())).toString(), json);
+  const plain = await app.request(url, { headers: { "accept-encoding": "gzip" } });
+  assert.equal(plain.headers.get("content-encoding"), null);
+  assert.equal(await plain.text(), json);
+});
+
+test("texts over the limit are refused, oversized bodies without being parsed", async () => {
+  const { app, queue } = setup();
+  assert.equal((await importText(app, "a".repeat(MAX_TEXT_LENGTH + 1))).status, 400);
+  assert.equal((await importText(app, "a".repeat(MAX_TEXT_LENGTH * 5))).status, 413);
+  assert.equal(queue.sent.length, 0);
+});
+
+test("accept-encoding parsing", () => {
+  assert.equal(acceptsEncoding("gzip, deflate, br, zstd", "br"), true);
+  assert.equal(acceptsEncoding("br;q=0", "br"), false);
+  assert.equal(acceptsEncoding("*", "br"), true);
+  assert.equal(acceptsEncoding("gzip", "br"), false);
+  assert.equal(acceptsEncoding(undefined, "br"), false);
 });
 
 test("analysis is 409 until ready, then served as stored", async () => {

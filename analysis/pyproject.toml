@@ -12,6 +12,7 @@ dependencies = [
     "redis>=8.1.0",
     # Listed only to pick its source below; COMBO and Stanza are what need it
     "torch==2.15.0",
+    "brotli>=1.2.1",
 ]
 
 # On Linux (the ingest container) take PyTorch's CPU-only build: the default Linux

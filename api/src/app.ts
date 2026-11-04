@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import type { Context } from "hono";
 import {
   LANGS,
@@ -11,18 +12,22 @@ import {
 } from "@skolia/shared/api";
 import { docId, statusKey, textKey } from "@skolia/shared/keys";
 import type { State, Status } from "@skolia/shared/schema";
-import type { BlobStore, DocumentRecord, DocumentStore, JobQueue } from "./ports.ts";
+import type { BlobStore, Decode, DocumentRecord, DocumentStore, JobQueue } from "./ports.ts";
 
 export interface Deps {
   documents: DocumentStore;
   blobs: BlobStore;
   queue: JobQueue;
+  decode: Decode;
   now?: () => Date;
 }
 
 const STATES: readonly State[] = ["queued", "analysing", "ready", "failed"];
 const ID = /^[0-9a-f]{64}$/;
 const MAX_TITLE_LENGTH = 200;
+// A character is at most 4 UTF-8 bytes; JSON escaping (\n, \") can double a few more.
+// The exact character limit is checked after parsing.
+const MAX_BODY_BYTES = MAX_TEXT_LENGTH * 4 + 64 * 1024;
 const JSON_TYPE = "application/json";
 
 export function createApp(deps: Deps): Hono {
@@ -40,7 +45,13 @@ export function createApp(deps: Deps): Hono {
     return c.json<DocumentList>({ documents });
   });
 
-  app.post("/api/documents", async (c) => {
+  // Stop reading an oversized body early instead of parsing it and then refusing it
+  const limit = bodyLimit({
+    maxSize: MAX_BODY_BYTES,
+    onError: (c) => c.json<ApiError>({ error: `text is longer than ${MAX_TEXT_LENGTH} characters` }, 413),
+  });
+
+  app.post("/api/documents", limit, async (c) => {
     const request = parseImport(await c.req.json().catch(() => null));
     if (typeof request === "string") return c.json<ApiError>({ error: request }, 400);
     const id = await docId(request.text);
@@ -76,7 +87,7 @@ export function createApp(deps: Deps): Hono {
   app.get("/api/documents/:id/text", async (c) => {
     const record = await findDocument(deps, c.req.param("id"));
     if (!record) return notFound(c);
-    return sendBlob(c, await deps.blobs.get(textKey(record.id)));
+    return sendBlob(c, deps.decode, await deps.blobs.get(textKey(record.id)));
   });
 
   for (const part of ["analysis", "bundle"] as const) {
@@ -88,7 +99,7 @@ export function createApp(deps: Deps): Hono {
       if (status?.state !== "ready" || key === undefined) {
         return c.json<ApiError>({ error: `${part} not ready` }, 409);
       }
-      return sendBlob(c, await deps.blobs.get(key));
+      return sendBlob(c, deps.decode, await deps.blobs.get(key));
     });
   }
 
@@ -103,15 +114,36 @@ function notFound(c: Context): Response {
   return c.json<ApiError>({ error: "no such document" }, 404);
 }
 
-function sendBlob(c: Context, blob: Awaited<ReturnType<BlobStore["get"]>>): Response {
+async function sendBlob(
+  c: Context,
+  decode: Decode,
+  blob: Awaited<ReturnType<BlobStore["get"]>>,
+): Promise<Response> {
   if (!blob) return c.json<ApiError>({ error: "missing blob" }, 500);
   const headers: Record<string, string> = {
     "content-type": blob.contentType ?? "application/octet-stream",
     // Ids are content hashes and blob keys carry versions: a URL's content never changes
     "cache-control": "private, max-age=31536000, immutable",
   };
-  if (blob.contentEncoding) headers["content-encoding"] = blob.contentEncoding;
-  return new Response(blob.body, { headers });
+  const encoding = blob.contentEncoding;
+  if (encoding === undefined) return new Response(blob.body, { headers });
+  headers["vary"] = "accept-encoding";
+  if (acceptsEncoding(c.req.header("accept-encoding"), encoding)) {
+    headers["content-encoding"] = encoding;
+    return new Response(blob.body, { headers });
+  }
+  return new Response(await decode(blob.body, encoding), { headers });
+}
+
+/** Whether an Accept-Encoding header ("gzip, deflate, br;q=0.8") allows the encoding. */
+export function acceptsEncoding(header: string | undefined, encoding: string): boolean {
+  if (!header) return false;
+  return header.split(",").some((part) => {
+    const [name, ...params] = part.trim().toLowerCase().split(";");
+    if (name !== encoding && name !== "*") return false;
+    const q = params.map((p) => p.trim()).find((p) => p.startsWith("q="));
+    return q === undefined || Number(q.slice(2)) > 0;
+  });
 }
 
 async function summarize(blobs: BlobStore, record: DocumentRecord): Promise<DocumentSummary> {

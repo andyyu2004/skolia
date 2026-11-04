@@ -5,6 +5,8 @@
 //   SKOLIA_S3_ENDPOINT   S3 endpoint (RustFS locally)
 //   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY   S3 credentials
 //   HOST, PORT           where to listen (default 127.0.0.1:8787)
+import { promisify } from "node:util";
+import { brotliDecompress as brotliDecompressCallback } from "node:zlib";
 import { serve } from "@hono/node-server";
 import { createApp } from "../app.ts";
 import { RedisQueue } from "./redis.ts";
@@ -12,6 +14,7 @@ import { S3Blobs } from "./s3.ts";
 import { SqliteDocuments } from "./sqlite.ts";
 
 const DEFAULT_PORT = 8787;
+const brotliDecompress = promisify(brotliDecompressCallback);
 
 function env(name: string): string {
   const value = process.env[name];
@@ -26,6 +29,10 @@ const app = createApp({
   documents: new SqliteDocuments(env("SKOLIA_DB")),
   blobs: new S3Blobs(env("SKOLIA_S3_BUCKET"), process.env["SKOLIA_S3_ENDPOINT"] || undefined),
   queue: await RedisQueue.connect(env("SKOLIA_REDIS_URL")),
+  decode: async (body, encoding) => {
+    if (encoding === "br") return brotliDecompress(body);
+    throw new Error(`can't decode content-encoding ${encoding}`);
+  },
 });
 
 const hostname = process.env["HOST"] || "127.0.0.1";

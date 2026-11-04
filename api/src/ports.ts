@@ -22,9 +22,13 @@ export interface DocumentStore {
 export interface StoredBlob {
   body: Uint8Array;
   contentType: string | undefined;
-  /** "gzip" for the analysis and bundle: sent to the client as stored. */
+  /** "br" for the analysis and bundle: sent as stored to clients that accept it. */
   contentEncoding: string | undefined;
 }
+
+/** Undo a Content-Encoding, for clients that don't accept it. Async so a large blob
+ * doesn't block other requests (Node: zlib on the thread pool). */
+export type Decode = (body: Uint8Array, encoding: string) => Promise<Uint8Array>;
 
 export interface BlobStore {
   get(key: string): Promise<StoredBlob | null>;

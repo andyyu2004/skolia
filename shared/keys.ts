@@ -1,12 +1,18 @@
 // Blob keys the API writes and ingest reads. Must match
-// analysis/src/skolia_analysis/ingest/schema.py (text_key, status_key).
+// analysis/src/skolia_analysis/ingest/schema.py (doc_prefix, text_key, status_key).
+// Ingest writes the analysis and bundle under the same prefix; the API finds their
+// keys in the status.
+
+export function docPrefix(doc: string): string {
+  return `doc/${doc}/`;
+}
 
 export function textKey(doc: string): string {
-  return `text/${doc}.txt`;
+  return `${docPrefix(doc)}text.txt`;
 }
 
 export function statusKey(doc: string): string {
-  return `status/${doc}.json`;
+  return `${docPrefix(doc)}status.json`;
 }
 
 /** Document id: sha256 hex of the UTF-8 text, as ingest's doc_id. */

@@ -1,6 +1,5 @@
 """Process import jobs: text blob -> analysis + bundle blobs, with the status kept current."""
 
-import gzip
 import json
 import logging
 import time
@@ -8,18 +7,32 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+import brotli
+
 from ..blob import SCHEMA
 from ..lexicon.schema import Bundle
 from ..schema import Blob
-from .blobs import GZIP, Blobs
+from .blobs import BROTLI, Blobs
 from .jobs import JobQueue, Received
-from .schema import IngestJob, State, Status, analysis_key, bundle_key, doc_id, status_key, text_key
+from .schema import (
+    MAX_TEXT_LENGTH,
+    IngestJob,
+    State,
+    Status,
+    analysis_key,
+    bundle_key,
+    doc_id,
+    status_key,
+    text_key,
+)
 
 log = logging.getLogger(__name__)
 
 JSON = "application/json"
 POLL_SECONDS = 5.0
 MAX_BACKOFF_SECONDS = 60.0
+# Highest quality: about 1.6 s for a 2,800-word story, paid once per import
+BROTLI_QUALITY = 11
 
 
 class JobError(Exception):
@@ -41,8 +54,9 @@ def now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
-def gzip_json(value: object) -> bytes:
-    return gzip.compress(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode())
+def compressed_json(value: object) -> bytes:
+    data = json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
+    return brotli.compress(data, quality=BROTLI_QUALITY)
 
 
 class Ingester:
@@ -72,13 +86,15 @@ class Ingester:
         text = raw.decode("utf-8")
         if doc_id(text) != doc:
             raise JobError("text doesn't match the document id (sha256 of the text)")
+        if len(text) > MAX_TEXT_LENGTH:
+            raise JobError(f"text is longer than {MAX_TEXT_LENGTH} characters")
         self._status(doc, "analysing")
         analysis = pipeline.analyze(text)
         bundle = pipeline.bundle(analysis)
         a_key = analysis_key(doc, SCHEMA, analysis["analyzer"])
         b_key = bundle_key(doc, analysis["analyzer"], pipeline.lexicon_version)
-        self._blobs.put(a_key, gzip_json(analysis), JSON, GZIP)
-        self._blobs.put(b_key, gzip_json(bundle), JSON, GZIP)
+        self._blobs.put(a_key, compressed_json(analysis), JSON, BROTLI)
+        self._blobs.put(b_key, compressed_json(bundle), JSON, BROTLI)
         return self._status(
             doc,
             "ready",

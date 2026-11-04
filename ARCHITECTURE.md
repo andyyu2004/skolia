@@ -22,7 +22,7 @@ Phone or desktop (responsive PWA) ──► skolia-api (Worker) ──► D1 (us
   └─ IndexedDB: cached document bundles
 ```
 
-Locally (`compose.yaml`): the API runs on Node, Redis replaces the Queue, RustFS (S3 API) replaces R2 and a SQLite file replaces D1. The API reaches them through small interfaces (`api/src/ports.ts`); ingest reaches storage over the S3 API, which R2 also speaks. Ingest writes `status/{doc}.json` as it goes (queued, analysing, ready, failed), and the API reads it to tell the reader.
+Locally (`compose.yaml`): the API runs on Node, Redis replaces the Queue, RustFS (S3 API) replaces R2 and a SQLite file replaces D1. The API reaches them through small interfaces (`api/src/ports.ts`); ingest reaches storage over the S3 API, which R2 also speaks. Ingest writes `doc/{doc}/status.json` as it goes (queued, analysing, ready, failed), and the API reads it to tell the reader.
 
 | Part | Tech | Responsibility |
 |---|---|---|
@@ -79,10 +79,15 @@ Later: `frame` (government/valency) and `expression` (multi-word, matched by lem
 ## Documents and versioning
 
 ```
-text/{hash}.txt                                 -- permanent
-analysis/{hash}/s{schema}-a{analyzer}.json.gz   -- derived, disposable
+doc/{hash}/text.txt                                     -- permanent
+doc/{hash}/status.json                                  -- import state; points at the current analysis and bundle
+doc/{hash}/analysis/s{schema}-a{analyzer}.json.br       -- derived, disposable
+doc/{hash}/bundle/a{analyzer}-l{lexicon}.json.br        -- derived, disposable
 ```
 
+- Analyses and bundles are JSON compressed with Brotli (quality 11), stored with `Content-Encoding: br` and sent as stored to clients that accept it (the API decompresses for those that don't). On *Kamizelka*, Brotli was 41% (analysis) and 59% (bundle) the size of gzip, and smaller than zstd at level 22; MessagePack was no smaller than JSON once compressed.
+- Texts are limited to 200,000 characters per import (about 30,000 words, roughly 10 minutes of analysis), checked by the API and again by ingest.
+- Everything about a document is under one prefix, so it can be inspected or deleted in one place. `{analyzer}` and `{lexicon}` are short hashes of the version strings. Stale analyses and bundles are the ones `status.json` doesn't point at; clean them up by that rule, not by age (an old document's current analysis is old too).
 - Documents are deduped by content hash: if many users import the same text, it's analyzed once. A user only sees texts they imported themselves or texts in the shared library.
 - `schema_version` covers the JSON shape. `analyzer_version` covers the plugin and model versions.
 - Migration: when a document opens with stale versions, serve the old blob and queue a re-analysis. Backfill the shared library ahead of time. Add read-time upgrade functions only if re-analysis gets expensive.

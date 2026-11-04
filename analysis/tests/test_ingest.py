@@ -1,12 +1,13 @@
-import gzip
 import json
+import re
 from pathlib import Path
 
+import brotli
 import pytest
 
 from skolia_analysis.ingest.blobs import DirBlobs
 from skolia_analysis.ingest.jobs import InvalidJob, MemoryQueue, Received, parse_job
-from skolia_analysis.ingest.schema import doc_id, status_key, text_key
+from skolia_analysis.ingest.schema import MAX_TEXT_LENGTH, doc_id, status_key, text_key
 from skolia_analysis.ingest.worker import Ingester, Pipeline
 from skolia_analysis.lexicon.schema import Bundle
 from skolia_analysis.schema import Blob
@@ -52,8 +53,17 @@ def test_job_writes_analysis_bundle_and_ready_status(tmp_path: Path) -> None:
     assert ready["state"] == "ready"
     analysis = blobs.get(ready["analysis"])
     assert analysis is not None
-    assert json.loads(gzip.decompress(analysis))["analyzer"] == "test/1"
+    assert json.loads(brotli.decompress(analysis))["analyzer"] == "test/1"
     assert blobs.get(ready["bundle"]) is not None
+
+
+def test_all_of_a_document_is_under_one_prefix(tmp_path: Path) -> None:
+    blobs = DirBlobs(tmp_path)
+    doc = doc_id(TEXT)
+    blobs.put(text_key(doc), TEXT.encode(), "text/plain")
+    ready = Ingester(blobs, pipelines()).process({"doc": doc, "lang": "pl"})
+    keys = [text_key(doc), status_key(doc), ready.get("analysis", ""), ready.get("bundle", "")]
+    assert all(key.startswith(f"doc/{doc}/") for key in keys), keys
 
 
 def test_missing_text_and_unknown_language_fail_without_retry(tmp_path: Path) -> None:
@@ -65,6 +75,25 @@ def test_missing_text_and_unknown_language_fail_without_retry(tmp_path: Path) ->
     failed = ingester.process({"doc": doc, "lang": "xx"})
     assert failed["state"] == "failed"
     assert "xx" in failed.get("error", "")
+
+
+def test_text_over_the_limit_fails_before_analysis(tmp_path: Path) -> None:
+    blobs = DirBlobs(tmp_path)
+    text = "a" * (MAX_TEXT_LENGTH + 1)
+    doc = doc_id(text)
+    blobs.put(text_key(doc), text.encode(), "text/plain")
+    analysed: list[str] = []
+    pipeline = Pipeline("pl", lambda t: analysed.append(t) or fake_analysis(t), fake_bundle, "")
+    failed = Ingester(blobs, {"pl": pipeline}).process({"doc": doc, "lang": "pl"})
+    assert failed["state"] == "failed"
+    assert analysed == []
+
+
+def test_limit_matches_the_api() -> None:
+    shared = Path(__file__).resolve().parents[2] / "shared" / "api.ts"
+    declared = re.search(r"MAX_TEXT_LENGTH = ([\d_]+);", shared.read_text(encoding="utf-8"))
+    assert declared is not None
+    assert int(declared.group(1).replace("_", "")) == MAX_TEXT_LENGTH
 
 
 def test_text_must_match_its_id(tmp_path: Path) -> None:
