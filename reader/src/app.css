@@ -179,6 +179,17 @@ button {
   text-underline-offset: 4px;
 }
 
+.mark-head {
+  color: var(--text);
+  text-decoration: underline 2px var(--head);
+  text-underline-offset: 4px;
+}
+
+.mark-trigger {
+  text-decoration: underline 2px dashed var(--trigger);
+  text-underline-offset: 4px;
+}
+
 .w:focus-visible {
   outline: 2px solid var(--accent);
 }

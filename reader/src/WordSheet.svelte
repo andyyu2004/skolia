@@ -71,7 +71,7 @@
           ref: w,
           entry,
           isPersonEnding,
-          role: role && head ? `${role} ${head}` : null,
+          role: role && head ? { role, head } : null,
           caseWhy: explainCase(sentenceTokens(w.sentence), w.index),
           senses: entry ? rankSenses(entry, w.token.feats) : [],
           uses: shownFrames.filter((f) => !f.idiom),
@@ -104,12 +104,15 @@
         )}
       </p>
       {#if word.role}
-        <p class="role muted" lang="pl">{word.role}</p>
+        <p class="role muted">{word.role.role} <span lang="pl" class="mark-head">{word.role.head}</span></p>
       {/if}
       {#if word.caseWhy && token.feats.Case}
         <p class="why">
           <span class="why-label">Why {CASE_NAME[token.feats.Case]}?</span>
-          <span lang="pl">{word.caseWhy.text}</span>
+          <span lang="pl"
+            >{#each word.caseWhy.parts as part, j (j)}{#if part.trigger}<span class="mark-trigger">{part.text}</span
+                >{:else}{part.text}{/if}{/each}</span
+          >
         </p>
       {/if}
 

@@ -31,6 +31,8 @@ export interface CaseExplanation {
   text: string;
   /** Index in the sentence of the word that causes the case, to mark in the text. */
   trigger: number | null;
+  /** Where the text names the trigger, so the sheet can mark it the way the text does. */
+  parts: { text: string; trigger: boolean }[];
 }
 
 export function explainCase(tokens: Token[], index: number, depth = 0): CaseExplanation | null {
@@ -86,5 +88,22 @@ export function explainCase(tokens: Token[], index: number, depth = 0): CaseExpl
         return "Instrumental without a preposition: by means of, or when (pisać długopisem, wieczorem).";
     }
   })();
-  return { text, trigger };
+  const named = trigger === null ? null : [word, governor].find((w) => w !== "" && wholeWord(w).test(text));
+  return { text, trigger, parts: named ? splitFirst(text, named) : [{ text, trigger: false }] };
+}
+
+function wholeWord(word: string): RegExp {
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp(`(?<!\\p{L})${escaped}(?!\\p{L})`, "u");
+}
+
+function splitFirst(text: string, word: string): { text: string; trigger: boolean }[] {
+  const match = wholeWord(word).exec(text);
+  if (!match) return [{ text, trigger: false }];
+  const end = match.index + word.length;
+  return [
+    { text: text.slice(0, match.index), trigger: false },
+    { text: word, trigger: true },
+    { text: text.slice(end), trigger: false },
+  ].filter((part) => part.text !== "");
 }

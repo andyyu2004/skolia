@@ -120,8 +120,20 @@ test("case explanations: governor, two-case prepositions, agreement chains", () 
     token(19, 20, "w", { upos: "ADP", head: 4, deprel: "case" }),
     token(21, 25, "domu", { head: 0, deprel: "obl", feats: { Case: "Loc" }, case_reason: { rule: "preposition", trigger: 3, governor: "w" } }),
   ];
-  assert.deepEqual(explainCase(tokens, 2), { text: "szukać governs the genitive for its object.", trigger: 0 });
+  assert.deepEqual(explainCase(tokens, 2), {
+    text: "szukać governs the genitive for its object.",
+    trigger: 0,
+    parts: [
+      { text: "szukać", trigger: true },
+      { text: " governs the genitive for its object.", trigger: false },
+    ],
+  });
   assert.equal(explainCase(tokens, 1)?.text, "It agrees with psa. psa: szukać governs the genitive for its object.");
+  assert.deepEqual(
+    explainCase(tokens, 1)?.parts.filter((p) => p.trigger).map((p) => p.text),
+    ["psa"],
+  );
+  assert.deepEqual(explainCase(tokens, 4)?.parts[0], { text: "w", trigger: true });
   assert.equal(explainCase(tokens, 4)?.text, "w + locative means where (w domu).");
   assert.equal(explainCase(tokens, 0), null);
 });
