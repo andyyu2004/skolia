@@ -1,0 +1,10 @@
+{
+  "name": "@skolia/shared",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./schema": "./schema.gen.ts",
+    "./api": "./api.ts",
+    "./keys": "./keys.ts"
+  }
+}
