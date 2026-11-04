@@ -32,6 +32,15 @@ def no_gaps(_token: Token) -> bool:
     return False
 
 
+type EntryUpos = Callable[[Reading], Upos]
+"""The part of speech of the lexicon entry a reading belongs to, for its lemma_id. Usually
+the reading's own; Polish participles and gerunds belong to their verb."""
+
+
+def own_upos(reading: Reading) -> Upos:
+    return reading["upos"]
+
+
 def lemma_id(lang: str, lemma: str | None, upos: Upos) -> str | None:
     if not lemma or upos in NO_LEMMA_ID:
         return None
@@ -83,6 +92,7 @@ def build_token(
     word: ParsedWord,
     readings: list[Reading] | None,
     snap: reconcile.Policy | None,
+    entry_upos: EntryUpos = own_upos,
 ) -> Token:
     chosen = parser_reading(word)
     replaced = False
@@ -95,7 +105,7 @@ def build_token(
         "end": tok.end,
         "text": word.text,
         "lemma": chosen["lemma"] if word.lemma or replaced else None,
-        "lemma_id": lemma_id(lang, chosen["lemma"], chosen["upos"]),
+        "lemma_id": lemma_id(lang, chosen["lemma"], entry_upos(chosen)),
         "upos": chosen["upos"],
         "xpos": chosen["xpos"] or None,
         "feats": chosen["feats"],
@@ -117,10 +127,12 @@ def build_tokens(
     tok: ParsedToken,
     candidates: CandidateLookup | None,
     snap: reconcile.Policy | None,
+    entry_upos: EntryUpos = own_upos,
 ) -> Iterator[Token]:
     readings = candidates(tok.text, [w.text for w in tok.words]) if candidates else None
     for index, word in enumerate(tok.words):
-        yield build_token(lang, tok, word, readings[index] if readings else None, snap)
+        reading = readings[index] if readings else None
+        yield build_token(lang, tok, word, reading, snap, entry_upos)
 
 
 def build(
@@ -133,12 +145,15 @@ def build(
     expressions: Iterable[ExpressionDef] = (),
     expression_gap: ExpressionGap = no_gaps,
     snap: reconcile.Policy | None = None,
+    entry_upos: EntryUpos = own_upos,
 ) -> Blob:
     expression_list = list(expressions)
     built: list[Sentence] = []
     for sent in sentences:
         tokens = [
-            token for tok in sent.tokens for token in build_tokens(lang, tok, candidates, snap)
+            token
+            for tok in sent.tokens
+            for token in build_tokens(lang, tok, candidates, snap, entry_upos)
         ]
         lemmas = [t["lemma"] for t in tokens]
         gaps = [expression_gap(t) for t in tokens]

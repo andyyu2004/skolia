@@ -12,13 +12,13 @@ from .nkjp import tag_class, to_ud
 from .parsed import ParsedSentence, Parser
 from .parsers.combo_parser import ComboParser
 from .parsers.stanza_parser import StanzaParser
-from .schema import Blob, ExpressionDef, Reading, Token
+from .schema import Blob, ExpressionDef, Reading, Token, Upos
 
 if TYPE_CHECKING:
-    from morfeusz2 import Edge
+    from morfeusz2 import Edge, Interpretation
 
 LANG = "pl"
-PLUGIN_VERSION = "0.3"
+PLUGIN_VERSION = "0.4"
 
 # Parser models, by name. Each loads on first use. All are trained on UD Polish PDB, whose
 # conventions schema.py and the dictionary conversion assume. Scores: analysis/EVALUATION.md.
@@ -46,6 +46,9 @@ MORFEUSZ_LEMMA_QUALIFIER_SEP = ":"
 # Morfeusz's name label for ordinary nouns; any other label (imię, nazwisko,
 # nazwa_geograficzna, ...) marks a proper name
 MORFEUSZ_COMMON_NOUN = "nazwa_pospolita"
+# Participles (robiący, robiony) and gerunds (robienie) are tagged ADJ and NOUN but have the
+# verb as lemma (the PDB convention), and for a learner they are forms of the verb
+VERB_FORM_CLASSES = {"pact", "ppas", "ger"}
 
 
 def parser(model: str = DEFAULT_MODEL) -> Parser:
@@ -99,19 +102,30 @@ def _align(edges: list[Edge], words: Sequence[str]) -> list[list[Edge]] | None:
 
 
 def _readings(edges: Iterable[Edge]) -> Iterator[Reading]:
-    for _start, _end, (_orth, base, tag, names, _qualifiers) in edges:
-        if tag_class(tag) in NO_CANDIDATE_CLASSES:
-            continue
-        lemma = base.split(MORFEUSZ_LEMMA_QUALIFIER_SEP)[0] or base
-        # Morfeusz capitalises lemmas of names; ethnonyms (Czeczen) carry no name label
-        proper_name = lemma[:1].isupper() or any(name != MORFEUSZ_COMMON_NOUN for name in names)
-        for reading in to_ud(tag, lemma, proper_name):
-            yield {
-                "lemma": lemma,
-                "upos": reading.upos,
-                "xpos": reading.xpos,
-                "feats": reading.feats,
-            }
+    for _start, _end, interpretation in edges:
+        if tag_class(interpretation[2]) not in NO_CANDIDATE_CLASSES:
+            yield from interpretation_readings(interpretation)
+
+
+def split_homonym(base: str) -> tuple[str, str]:
+    """Morfeusz's lemma field into (lemma, homonym label): "pies:Sm1" -> ("pies", "Sm1")."""
+    lemma, _, homonym = base.partition(MORFEUSZ_LEMMA_QUALIFIER_SEP)
+    return (lemma or base, homonym)
+
+
+def interpretation_readings(interpretation: Interpretation) -> Iterator[Reading]:
+    """The UD readings of one Morfeusz interpretation (one tag can stand for several)."""
+    _orth, base, tag, names, _qualifiers = interpretation
+    lemma, _homonym = split_homonym(base)
+    # Morfeusz capitalises lemmas of names; ethnonyms (Czeczen) carry no name label
+    proper_name = lemma[:1].isupper() or any(name != MORFEUSZ_COMMON_NOUN for name in names)
+    for reading in to_ud(tag, lemma, proper_name):
+        yield {
+            "lemma": lemma,
+            "upos": reading.upos,
+            "xpos": reading.xpos,
+            "feats": reading.feats,
+        }
 
 
 def _dedupe(readings: Iterable[Reading]) -> list[Reading]:
@@ -129,6 +143,13 @@ def _dedupe(readings: Iterable[Reading]) -> list[Reading]:
 
 def candidate_lookup() -> CandidateLookup:
     return MorfeuszCandidates()
+
+
+def entry_upos(reading: Reading) -> Upos:
+    """Participles and gerunds belong to the verb's lexicon entry: pl:robić:VERB."""
+    if tag_class(reading["xpos"]) in VERB_FORM_CLASSES:
+        return "VERB"
+    return reading["upos"]
 
 
 def expression_gap(token: Token) -> bool:
@@ -170,5 +191,6 @@ def assemble(
         candidates=candidates,
         expressions=expressions,
         expression_gap=expression_gap,
+        entry_upos=entry_upos,
         snap=reconcile.POLICIES[snap] if snap else None,
     )

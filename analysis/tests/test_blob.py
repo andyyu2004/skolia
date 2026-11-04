@@ -30,3 +30,18 @@ def test_expression_steps_over_gaps() -> None:
     assert match_expressions(lemmas, DAC_SOBIE_RADE, gaps) == [
         {"from": 0, "to": 3, "id": "pl:dać sobie radę"}
     ]
+
+
+def test_participle_belongs_to_the_verb_entry() -> None:
+    from skolia_analysis.pl import entry_upos
+
+    assert (
+        entry_upos(
+            {"lemma": "położyć", "upos": "ADJ", "xpos": "ppas:sg:nom:m3:perf:aff", "feats": {}}
+        )
+        == "VERB"
+    )
+    assert (
+        entry_upos({"lemma": "stary", "upos": "ADJ", "xpos": "adj:sg:nom:m3:pos", "feats": {}})
+        == "ADJ"
+    )

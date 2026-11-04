@@ -8,7 +8,7 @@ from typing import Protocol
 
 from .blob import CandidateLookup
 from .parsed import Parser
-from .schema import Blob, ExpressionDef, Token
+from .schema import Blob, ExpressionDef, Reading, Token, Upos
 
 
 class LanguagePlugin(Protocol):
@@ -34,6 +34,10 @@ class LanguagePlugin(Protocol):
 
     def candidate_lookup(self) -> CandidateLookup:
         """Load the lookup that lists every possible reading of each word."""
+        ...
+
+    def entry_upos(self, reading: Reading) -> Upos:
+        """Part of speech of the lexicon entry a reading belongs to (its lemma_id)."""
         ...
 
     def expression_gap(self, token: Token) -> bool:
