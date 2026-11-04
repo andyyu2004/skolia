@@ -97,6 +97,14 @@ export interface Reading {
   feats: Feats;
 }
 
+export type CaseRule = "vocative" | "preposition" | "agreement" | "numeral" | "verb" | "negation" | "structural" | "partitive" | "subject" | "predicate" | "possessive" | "noun-complement" | "verbal-noun" | "coordination" | "instrumental";
+
+export interface CaseReason {
+  rule: CaseRule;
+  trigger?: number;
+  governor?: string;
+}
+
 export interface Token {
   start: number;
   end: number;
@@ -111,6 +119,7 @@ export interface Token {
   mwt?: string;
   candidates?: Reading[];
   parser?: Reading;
+  case_reason?: CaseReason;
 }
 
 export interface ExpressionMatch {

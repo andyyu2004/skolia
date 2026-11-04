@@ -69,6 +69,7 @@ services:
       SKOLIA_S3_ENDPOINT: http://storage:9000
       SKOLIA_REDIS_URL: redis://redis:6379/0
       SKOLIA_LEXICON: /lexicon/pl.sqlite
+      SKOLIA_VALENCY: /lexicon/pl-valency.json
     volumes:
       - ./data/lexicon:/lexicon:ro
       - models:/root/.cache/huggingface

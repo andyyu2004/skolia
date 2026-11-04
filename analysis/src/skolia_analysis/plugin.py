@@ -9,6 +9,7 @@ from typing import Protocol
 from .blob import CandidateLookup
 from .parsed import Parser
 from .schema import Blob, ExpressionDef, Reading, Token, Upos
+from .valency import Valency
 
 
 class LanguagePlugin(Protocol):
@@ -51,4 +52,8 @@ class LanguagePlugin(Protocol):
         candidates: CandidateLookup | None = None,
         expressions: Iterable[ExpressionDef] = (),
         snap: str | None = ...,
-    ) -> Blob: ...
+        valency: Valency | None = None,
+    ) -> Blob:
+        """valency: verb frames for explaining cases. Only Polish has them so far (Walenty);
+        generalise the type when a second language does."""
+        ...

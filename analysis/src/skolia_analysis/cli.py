@@ -7,6 +7,7 @@ from . import conllu, pl, reconcile
 from .blob import CandidateLookup
 from .plugin import LanguagePlugin
 from .schema import ExpressionDef
+from .valency import Valency
 
 PLUGINS: dict[str, LanguagePlugin] = {pl.LANG: pl}
 
@@ -60,6 +61,11 @@ def main() -> None:
         "--format", choices=["json", "conllu"], default="json", help="output format"
     )
     parser.add_argument("--indent", type=int, help="pretty-print the JSON with this indent")
+    parser.add_argument(
+        "--valency",
+        type=Path,
+        help="verb frames file (skolia-build-valency), to explain cases by what verbs require",
+    )
     args = parser.parse_args()
 
     plugin = PLUGINS[args.lang]
@@ -74,8 +80,11 @@ def main() -> None:
     )
     candidates: CandidateLookup | None = None if args.no_candidates else plugin.candidate_lookup()
 
+    valency = Valency.load(args.valency) if args.valency else None
+
     text = sys.stdin.read()
-    blob = plugin.analyze(text, plugin.parser(model_name), candidates, expressions, snap)
+    model = plugin.parser(model_name)
+    blob = plugin.analyze(text, model, candidates, expressions, snap, valency)
     if args.format == "conllu":
         sys.stdout.write(conllu.write(blob, text))
     else:

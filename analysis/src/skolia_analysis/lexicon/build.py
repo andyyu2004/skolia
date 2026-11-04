@@ -15,7 +15,8 @@ from .schema import Relation, Sense
 LEXICON_VERSION = "1"
 ATTRIBUTION = (
     "Meanings from Wiktionary (https://en.wiktionary.org) via kaikki.org, CC BY-SA 4.0; "
-    "forms from Morfeusz 2 / SGJP (http://morfeusz.sgjp.pl), BSD 2-clause"
+    "forms from Morfeusz 2 / SGJP (http://morfeusz.sgjp.pl), BSD 2-clause; "
+    "verb valency from Walenty, IPI PAN (http://zil.ipipan.waw.pl/Walenty), CC BY-SA 4.0"
 )
 
 

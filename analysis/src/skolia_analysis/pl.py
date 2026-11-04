@@ -6,19 +6,20 @@ from collections.abc import Callable, Iterable, Iterator, Sequence
 from importlib.metadata import version
 from typing import TYPE_CHECKING
 
-from . import reconcile
+from . import pl_cases, reconcile
 from .blob import CandidateLookup, build
 from .nkjp import tag_class, to_ud
 from .parsed import ParsedSentence, Parser
 from .parsers.combo_parser import ComboParser
 from .parsers.stanza_parser import StanzaParser
 from .schema import Blob, ExpressionDef, Reading, Token, Upos
+from .valency import Valency
 
 if TYPE_CHECKING:
     from morfeusz2 import Edge, Interpretation
 
 LANG = "pl"
-PLUGIN_VERSION = "0.4"
+PLUGIN_VERSION = "0.5"
 
 # Parser models, by name. Each loads on first use. All are trained on UD Polish PDB, whose
 # conventions schema.py and the dictionary conversion assume. Scores: analysis/EVALUATION.md.
@@ -36,6 +37,8 @@ MODELS: dict[str, Callable[[], Parser]] = {
 # reading isn't one Morfeusz allows.
 DEFAULT_MODEL = "combo"
 DEFAULT_SNAP: str | None = "upos"
+# Off until measured on unseen text; see pl_cases.apply and analysis/EVALUATION.md
+DEFAULT_CASE_CORRECTION: pl_cases.Correction = "off"
 
 # Classes with no dictionary reading worth listing: ign is a word Morfeusz doesn't know;
 # a number in digits can be a cardinal (18 osób) or an ordinal (2000 roku) in any case,
@@ -167,9 +170,15 @@ def analyze(
     candidates: CandidateLookup | None = None,
     expressions: Iterable[ExpressionDef] = (),
     snap: str | None = DEFAULT_SNAP,
+    valency: Valency | None = None,
+    correct_cases: pl_cases.Correction = DEFAULT_CASE_CORRECTION,
 ) -> Blob:
-    """snap: a reconcile.POLICIES name, or None to keep the parser's readings as they are."""
-    return assemble(text, model(text), model.name, candidates, expressions, snap)
+    """snap: a reconcile.POLICIES name, or None to keep the parser's readings as they are.
+    valency: Walenty frames, to explain cases by what verbs require; without it, case
+    reasons use only the tree. correct_cases: also switch a case the verb doesn't allow
+    (see pl_cases.apply)."""
+    parsed = model(text)
+    return assemble(text, parsed, model.name, candidates, expressions, snap, valency, correct_cases)
 
 
 def assemble(
@@ -179,14 +188,20 @@ def assemble(
     candidates: CandidateLookup | None = None,
     expressions: Iterable[ExpressionDef] = (),
     snap: str | None = DEFAULT_SNAP,
+    valency: Valency | None = None,
+    correct_cases: pl_cases.Correction = DEFAULT_CASE_CORRECTION,
 ) -> Blob:
     """The blob for text already parsed, so one slow parse can be reused (e.g. to compare
     snap policies)."""
     analyzer = f"{LANG}/{PLUGIN_VERSION}+{model_name}+morfeusz-{version('morfeusz2')}"
-    return build(
+    if snap:
+        analyzer += f"+snap-{snap}"
+    if valency is not None:
+        analyzer += f"+{valency.version}+cases-{correct_cases}"
+    blob = build(
         parsed,
         lang=LANG,
-        analyzer=analyzer + (f"+snap-{snap}" if snap else ""),
+        analyzer=analyzer,
         text=text,
         candidates=candidates,
         expressions=expressions,
@@ -194,3 +209,5 @@ def assemble(
         entry_upos=entry_upos,
         snap=reconcile.POLICIES[snap] if snap else None,
     )
+    pl_cases.apply([s["tokens"] for s in blob["sentences"]], valency, correct_cases)
+    return blob

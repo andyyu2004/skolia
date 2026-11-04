@@ -197,6 +197,34 @@ class Reading(TypedDict):
     feats: Feats
 
 
+type CaseRule = Literal[
+    "vocative",  # addressing someone: Kasiu!
+    "preposition",  # the preposition decides: do psa (gen), z psem (ins)
+    "agreement",  # takes the case of the noun it describes: starego psa
+    "numeral",  # numbers from five, and quantity words, take the genitive: pięć psów
+    "verb",  # the verb asks for this case: szukać psa (gen), pomagać bratu (dat)
+    "negation",  # a negated verb's object is genitive: nie mam czasu
+    "structural",  # a verb's ordinary object is accusative: mam czas
+    "partitive",  # genitive for "some of", accusative for "all of": nalać wody / wodę
+    "subject",  # the subject is nominative
+    "predicate",  # after być, a noun is instrumental: jest lekarzem
+    "possessive",  # "of": dom brata
+    "noun-complement",  # a noun's complement is genitive: osiągnięcie kompromisu
+    "verbal-noun",  # a verbal noun's object is genitive: czytać książkę -> czytanie książki
+    "coordination",  # same case as the first item of a list: ryż, pszenica i żyto
+    "instrumental",  # by means of, or when: pisać długopisem, wieczorem
+]
+
+
+class CaseReason(TypedDict):
+    rule: CaseRule
+    trigger: NotRequired[int]
+    """Index in the sentence of the word that causes the case: the preposition, the verb,
+    nie, the numeral, or the noun an adjective agrees with."""
+    governor: NotRequired[str]
+    """Lemma of the verb or preposition, for the explanation: szukać, do."""
+
+
 class Token(TypedDict):
     start: int
     """Character offset into the source text. Parts of a fused word share the whole word's span."""
@@ -220,7 +248,10 @@ class Token(TypedDict):
     """All readings the dictionary knows for this form. Only present when there is more than one."""
     parser: NotRequired[Reading]
     """What the parser said, when it was replaced by the closest dictionary reading because
-    the dictionary doesn't allow it (see reconcile.py). Worth showing: one of them is wrong."""
+    the dictionary doesn't allow it (see reconcile.py), or by the case the governing verb
+    requires (pl_cases.py). Worth showing: one of them is wrong."""
+    case_reason: NotRequired[CaseReason]
+    """Why the word has its case, for words with a Case feature, when a rule explains it."""
 
 
 class ExpressionDef(TypedDict):
