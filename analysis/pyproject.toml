@@ -8,18 +8,34 @@ dependencies = [
     "morfeusz2>=1.99",
     "transformers>=5.22.1",
     "combo-nlp==4.0.14",
+    "boto3>=1.43.123",
+    "redis>=8.1.0",
+    # Listed only to pick its source below; COMBO and Stanza are what need it
+    "torch==2.15.0",
 ]
+
+# On Linux (the ingest container) take PyTorch's CPU-only build: the default Linux
+# wheels pull in several GB of CUDA libraries the container never uses
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [project.scripts]
 skolia-analyze = "skolia_analysis.cli:main"
 skolia-build-lexicon = "skolia_analysis.lexicon.cli:build_main"
 skolia-bundle = "skolia_analysis.lexicon.cli:bundle_main"
+skolia-ingest = "skolia_analysis.ingest.cli:main"
 
 [dependency-groups]
 dev = [
     "pyright[nodejs]>=1.1.414",
     "pytest>=8",
     "ruff>=0.17.3",
+    "types-boto3-lite[s3]>=1.43.123",
 ]
 
 [tool.ruff]

@@ -1,0 +1,74 @@
+# skolia-ingest, for linux/amd64 and linux/arm64.
+# Models download on first start into /root/.cache/huggingface (mount a volume there).
+
+# --- Morfeusz from source ---------------------------------------------------------
+# PyPI's morfeusz2 has a Linux wheel for x86-64 only, so the library and its Python
+# binding are compiled here for whatever platform the image is built for. The
+# dictionary is SGJP's own compiled one from the same release as the PyPI wheel
+# (morfeusz2 1.99.15, build 20260601), installed where the library looks for it.
+FROM python:3.12.13-slim AS morfeusz
+
+ARG MORFEUSZ_RELEASE=20260601
+ARG MORFEUSZ_SRC_SHA256=733f24fccd1031a87b81fc4f1c6451157633bdf67308f81ffa1e712e54db2b71
+ARG MORFEUSZ_DICT_SHA256=06492b2267183af375e370cc06530b87d93fd0ac0ca904370a775f4c305d8a2b
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates cmake curl g++ make swig unzip \
+ && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir build==1.6.1 setuptools==84.2.1 wheel==0.48.0
+
+WORKDIR /build
+RUN base=https://download.sgjp.pl/morfeusz/$MORFEUSZ_RELEASE \
+ && curl -fsSL -o src.tar.gz $base/morfeusz-src-$MORFEUSZ_RELEASE.tar.gz \
+ && curl -fsSL -o dict.tgz $base/morfeusz2-dictionary-sgjp-$MORFEUSZ_RELEASE.tgz \
+ && echo "$MORFEUSZ_SRC_SHA256  src.tar.gz" | sha256sum -c - \
+ && echo "$MORFEUSZ_DICT_SHA256  dict.tgz" | sha256sum -c - \
+ && tar xzf src.tar.gz \
+ && mkdir dictionaries && tar xzf dict.tgz -C dictionaries
+
+# Patches to the upstream build:
+# - it always configures the Java binding (needs a JDK) and the GUI: drop both
+# - the wheel's platform tag is hard-coded to manylinux_2_28_x86_64: use this machine's
+# SKIP_DICTIONARY_BUILDING without INPUT_DICTIONARIES gives a library that loads
+# sgjp-a.dict / sgjp-s.dict from /usr/local/share/morfeusz2/dictionaries at runtime.
+RUN sed -i '/add_subdirectory (java)/d' Morfeusz/morfeusz/wrappers/CMakeLists.txt \
+ && sed -i '/add_subdirectory (gui)/d' Morfeusz/CMakeLists.txt \
+ && sed -i "s/^plat_name=.*/plat_name=linux_$(uname -m)/" Morfeusz/morfeusz/wrappers/python3/setup.cfg \
+ && mkdir -p /wheels \
+ && cmake -S Morfeusz -B out \
+      -D CMAKE_BUILD_TYPE=Release \
+      -D DEFAULT_DICT_NAME=sgjp \
+      -D DICT_VERSION=$MORFEUSZ_RELEASE \
+      -D SKIP_DICTIONARY_BUILDING=1 \
+      -D SKIP_TESTING=1 \
+      -D DEFAULT_DICT_DIR=/build/dictionaries \
+      -D PY=3.12 \
+      -D TARGET_DIR=/wheels \
+ && make -C out -j"$(nproc)" package-python3-fatwhl
+
+# --- skolia-ingest ----------------------------------------------------------------
+FROM python:3.12.13-slim
+
+COPY --from=ghcr.io/astral-sh/uv:0.12.1 /uv /usr/local/bin/uv
+COPY --from=morfeusz /build/dictionaries/ /usr/local/share/morfeusz2/dictionaries/
+COPY --from=morfeusz /wheels/ /wheels/
+
+WORKDIR /app
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
+
+# Dependencies first, so code changes don't reinstall PyTorch. morfeusz2 comes from
+# the wheel built above instead of PyPI.
+COPY pyproject.toml uv.lock .python-version ./
+# uv's download cache lives in a build cache mount, not in the image (about 1 GB)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-project --no-install-package morfeusz2
+
+COPY src ./src
+COPY typings ./typings
+# uv sync removes packages the lockfile doesn't install, so the wheel goes in last
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev --no-install-package morfeusz2 \
+ && uv pip install --python .venv/bin/python --no-deps /wheels/morfeusz2-*.whl
+
+ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
+CMD ["skolia-ingest"]
