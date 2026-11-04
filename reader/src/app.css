@@ -154,7 +154,6 @@ button {
 }
 
 .w {
-  all: unset;
   cursor: pointer;
   border-radius: 3px;
   -webkit-tap-highlight-color: transparent;

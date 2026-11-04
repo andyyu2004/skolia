@@ -47,6 +47,10 @@
     };
   });
 
+  function toggle(id: number): void {
+    selected = id === selected ? null : id;
+  }
+
   function move(step: number): void {
     if (!doc) return;
     let next = selected ?? (step > 0 ? -1 : doc.words.length);
@@ -88,12 +92,21 @@
     {:else}
       <article class="text" lang="pl">
         {#each doc.pieces as p, i (i)}
-          {#if p.kind === "gap"}{p.text}{:else if p.punct}<span class="punct">{p.text}</span>{:else}<button
-              type="button"
+          <!-- Words are spans, not buttons: a button is laid out as an inline block, so a
+               line could break between a word and the punctuation after it -->
+          {#if p.kind === "gap"}{p.text}{:else if p.punct}<span class="punct">{p.text}</span>{:else}<span
+              role="button"
+              tabindex="0"
               class="w"
               class:selected={p.id === selected}
               class:head={p.id === headPiece}
-              onclick={() => (selected = p.id === selected ? null : p.id)}>{p.text}</button
+              onclick={() => toggle(p.id)}
+              onkeydown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  toggle(p.id);
+                }
+              }}>{p.text}</span
             >{/if}
         {/each}
       </article>
