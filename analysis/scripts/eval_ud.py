@@ -24,8 +24,6 @@ from typing import cast
 
 from skolia_analysis import conllu, pl, reconcile
 from skolia_analysis.parsed import ParsedSentence, Parser
-from skolia_analysis.schema import Blob
-from skolia_analysis.valency import Valency
 
 EVALUATOR = Path(__file__).parent / "vendor" / "conll18_ud_eval.py"
 METRICS = [
@@ -55,55 +53,6 @@ def evaluate(gold: Path, system: Path) -> dict[str, float]:
         if len(cells) >= 4 and cells[0] in METRICS:
             scores[cells[0]] = float(cells[3])
     return scores
-
-
-SHOW_CHANGES = 25
-
-
-def report_case_changes(gold: Path, text: str, before: Blob, after: Blob) -> None:
-    """Words whose Case the valency correction changed, scored against the gold Case.
-    Only sentences the analyser tokenized like the gold (same word forms) are compared."""
-    gold_by_text = {s.text: s for s in conllu.read(gold)}
-    fixed = broken = still_wrong = unmatched = 0
-    examples: list[str] = []
-    for old_sentence, new_sentence in zip(before["sentences"], after["sentences"], strict=True):
-        pairs = list(zip(old_sentence["tokens"], new_sentence["tokens"], strict=True))
-        changed = [
-            (i, old, new)
-            for i, (old, new) in enumerate(pairs)
-            if old["feats"].get("Case") != new["feats"].get("Case")
-        ]
-        if not changed:
-            continue
-        reference = gold_by_text.get(text[old_sentence["start"] : old_sentence["end"]])
-        forms = [t["text"] for t in old_sentence["tokens"]]
-        if reference is None or [w.form for w in reference.words] != forms:
-            unmatched += len(changed)
-            continue
-        for i, old, new in changed:
-            truth = reference.words[i].feats.get("Case")
-            if new["feats"].get("Case") == truth:
-                fixed += 1
-                verdict = "fixed"
-            elif old["feats"].get("Case") == truth:
-                broken += 1
-                verdict = "BROKEN"
-            else:
-                still_wrong += 1
-                verdict = "still wrong"
-            if len(examples) < SHOW_CHANGES:
-                head = new["head"]
-                verb = new_sentence["tokens"][head]["text"] if head is not None else "-"
-                examples.append(
-                    f"    {verdict:11} {new['text']:14} {old['feats'].get('Case')} -> "
-                    f"{new['feats'].get('Case')} (gold {truth}), governed by {verb}"
-                )
-    print(
-        f"valency case changes: {fixed} fixed, {broken} broken, {still_wrong} changed but "
-        f"still wrong, {unmatched} in sentences tokenized differently from the gold",
-        file=sys.stderr,
-    )
-    print("\n".join(examples), file=sys.stderr)
 
 
 class CachedParser:
@@ -147,9 +96,6 @@ def main() -> None:
     )
     parser.add_argument("--limit", type=int, help="only the first N sentences")
     parser.add_argument("--out", type=Path, help="keep the system CoNLL-U files here")
-    parser.add_argument(
-        "--valency", type=Path, help="also score with case correction from this frames file"
-    )
     args = parser.parse_args()
 
     gold: Path = args.gold
@@ -171,24 +117,12 @@ def main() -> None:
     out: Path = args.out or Path(tempfile.mkdtemp())
     out.mkdir(parents=True, exist_ok=True)
     rows: list[tuple[str, dict[str, float]]] = []
-    walenty = Valency.load(args.valency) if args.valency else None
     for snap in args.snap:
         policy = None if snap == NO_SNAP else snap
         blob = pl.assemble(text, parsed, model.name, lookup, snap=policy)
         system = out / f"{args.model}-snap-{snap}.conllu"
         system.write_text(conllu.write(blob, text), encoding="utf-8")
         rows.append((snap, evaluate(gold, system)))
-        if walenty is None:
-            continue
-        for mode in ("lexical", "all"):
-            corrected = pl.assemble(
-                text, parsed, model.name, lookup, snap=policy, valency=walenty, correct_cases=mode
-            )
-            system = out / f"{args.model}-snap-{snap}-cases-{mode}.conllu"
-            system.write_text(conllu.write(corrected, text), encoding="utf-8")
-            rows.append((f"{snap}+{mode}", evaluate(gold, system)))
-            print(f"case correction {mode}:", file=sys.stderr)
-            report_case_changes(gold, text, blob, corrected)
 
     print(f"model {model.name}, gold {args.gold.name}, F1 %")
     print(f"{'snap':12}" + "".join(f"{m:>9}" for m in METRICS))

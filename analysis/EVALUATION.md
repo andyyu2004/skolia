@@ -45,3 +45,18 @@ Share of word tokens (not punctuation, symbols or X) whose entry has at least on
 | Wikipedia *Kraków*, intro + history | 5009 | 86.3% | 0.8% | 1.3% | 11.6% |
 
 Of the Kraków misses, 280 of 581 are numbers in digits or Roman numerals (tagged ADJ as ordinals: *w 1918 roku*), which need no meaning. The rest: place names (Rudawa, Prądnik), rare derived adjectives (likwidacyjny), fixed phrases COMBO joins into one lemma (między_innymi, na_przykład) and a few wrong lemmas (stopień_Celsju). In *Kamizelka* they are rare words and the dialect spellings in a character's speech (kamyzelka, wjatr).
+
+## Case reasons
+
+`scripts/eval_case_reasons.py` on PDB dev (combo, snap upos, Walenty 2018-07-26): 14,090 of 15,589 words with a case (90.4%) get a reason. By rule: agreement 24.5%, preposition 24.4%, subject 12.8%, structural object 7.6%, possessive 4.9%, coordination 4.6%, noun complement 4.2%, verb's lexical case 3.0%, verbal noun 1.7%, negation, numeral, predicate, instrumental, vocative and partitive under 1% each. The most common words without one: sentence roots in the nominative (headlines, list items) and numerals' own case. This counts coverage, not correctness; the 40-word samples the script prints read right, with one misleading reason found and fixed (multi-word prepositions now name the whole preposition: *w stosunku do*).
+
+### Case correction from valency: tried and dropped
+
+Switching a case the governing verb doesn't allow to one its form also has (`psa` acc → gen after `szukać`) didn't pay. Words changed, counted against the gold case:
+
+| Mode | Dev | Test | Train |
+|---|---|---|---|
+| all verbs | 4 fixed, 0 broken | 2 fixed, 7 broken | 1 fixed, 37 broken |
+| only verbs whose bare complements are all lexical (no `np(str)`) | 1 fixed, 0 broken | 0 fixed, 0 broken | 0 fixed, 6 broken |
+
+COMBO already gets case almost always right, so a correction mostly overrides correct tags. The breaks on test were subjects the parser labelled as objects (inverted word order); some on train may be treebank errors (`boją się go` annotated accusative), but neither mode helped on any split. The "lexical" mode was designed after seeing the test errors, so test isn't a clean estimate for it; train is in-domain for COMBO and optimistic. Without the correction, a case the verb doesn't allow simply gets no reason.

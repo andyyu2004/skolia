@@ -1,7 +1,7 @@
 """One test per case rule, on hand-built trees (PDB relation names), so no parser runs."""
 
-from skolia_analysis.pl_cases import correct_cases, explain_cases
-from skolia_analysis.schema import Case, Deprel, Feats, Reading, Token, Upos
+from skolia_analysis.pl_cases import explain_cases
+from skolia_analysis.schema import Case, Deprel, Feats, Token, Upos
 from skolia_analysis.valency import Valency, read
 
 VALENCY = Valency(
@@ -44,11 +44,6 @@ def tok(
 def noun(text: str, lemma: str, head: int | None, deprel: Deprel, case: Case) -> Token:
     feats: Feats = {"Case": case, "Number": "Sing", "Gender": "Masc", "Animacy": "Nhum"}
     return tok(text, lemma, "NOUN", head, deprel, feats)
-
-
-def reading(lemma: str, case: Case) -> Reading:
-    feats: Feats = {"Case": case, "Number": "Sing", "Gender": "Masc", "Animacy": "Nhum"}
-    return {"lemma": lemma, "upos": "NOUN", "xpos": f"subst:sg:{case.lower()}:m2", "feats": feats}
 
 
 def reasons(tokens: list[Token]) -> list[tuple[str, str | None, int | None]]:
@@ -157,48 +152,15 @@ def test_subject_predicate_possessive_vocative_coordination() -> None:
 
 
 def szukam_psa(case: Case) -> list[Token]:
-    psa = noun("psa", "pies", 0, "obj", case)
-    psa["candidates"] = [reading("pies", "Gen"), reading("pies", "Acc")]
-    return [tok("Szukam", "szukać", "VERB", None, "root"), psa]
+    return [tok("Szukam", "szukać", "VERB", None, "root"), noun("psa", "pies", 0, "obj", case)]
 
 
-def test_lexical_correction_fixes_an_ambiguous_form() -> None:
-    # psa is genitive or accusative; szukać only takes the genitive
-    tokens = szukam_psa("Acc")
-    assert correct_cases(tokens, VALENCY, "lexical") == 1
-    assert tokens[1]["feats"].get("Case") == "Gen"
-    assert tokens[1].get("parser", {}).get("feats", {}).get("Case") == "Acc"
-    assert reason_of(tokens, 1) == ("verb", 0, "szukać")
+def test_lexical_genitive_object() -> None:
+    assert reason_of(szukam_psa("Gen"), 1) == ("verb", 0, "szukać")
 
 
-def test_correction_off_leaves_the_parser_alone() -> None:
-    tokens = szukam_psa("Acc")
-    assert correct_cases(tokens, VALENCY, "off") == 0
-    assert tokens[1]["feats"].get("Case") == "Acc"
-
-
-def test_lexical_correction_skips_verbs_with_a_structural_object() -> None:
-    # usta artykułowały: the parser labelled the subject as the object (from PDB test);
-    # "all" would make it accusative, "lexical" leaves verbs with np(str) alone
-    usta = noun("usta", "usta", 1, "obj", "Nom")
-    usta["candidates"] = [reading("usta", "Nom"), reading("usta", "Acc")]
-    tokens = [
-        tok("Wargi", "warga", "NOUN", 1, "nsubj"),
-        tok("artykułowały", "artykułować", "VERB", None, "root"),
-        usta,
-    ]
-    tokens[2]["head"] = 1
-    assert correct_cases(tokens, VALENCY, "lexical") == 0
-    assert tokens[2]["feats"].get("Case") == "Nom"
-
-
-def test_correction_skips_numerals_and_question_words() -> None:
-    # szukam dwóch psów: the numeral makes psów genitive whatever the verb says
-    tokens = szukam_psa("Acc")
-    tokens.append(tok("dwóch", "dwa", "NUM", 1, "nummod:gov", {"Case": "Acc"}))
-    assert correct_cases(tokens, VALENCY, "all") == 0
-    # co: a question word opens its own clause
-    co = szukam_psa("Acc")
-    co[1]["feats"]["PronType"] = "Int"
-    co[1]["upos"] = "PRON"
-    assert correct_cases(co, VALENCY, "all") == 0
+def test_a_case_the_verb_does_not_allow_gets_no_reason() -> None:
+    # The parser can tag psa accusative (genitive and accusative look the same). szukać
+    # only takes the genitive and the verb isn't negated, so no rule fits: better no
+    # explanation than a wrong one
+    assert reason_of(szukam_psa("Acc"), 1) == (None, None, None)

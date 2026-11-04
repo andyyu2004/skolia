@@ -37,8 +37,6 @@ MODELS: dict[str, Callable[[], Parser]] = {
 # reading isn't one Morfeusz allows.
 DEFAULT_MODEL = "combo"
 DEFAULT_SNAP: str | None = "upos"
-# Off until measured on unseen text; see pl_cases.apply and analysis/EVALUATION.md
-DEFAULT_CASE_CORRECTION: pl_cases.Correction = "off"
 
 # Classes with no dictionary reading worth listing: ign is a word Morfeusz doesn't know;
 # a number in digits can be a cardinal (18 osób) or an ordinal (2000 roku) in any case,
@@ -171,14 +169,11 @@ def analyze(
     expressions: Iterable[ExpressionDef] = (),
     snap: str | None = DEFAULT_SNAP,
     valency: Valency | None = None,
-    correct_cases: pl_cases.Correction = DEFAULT_CASE_CORRECTION,
 ) -> Blob:
     """snap: a reconcile.POLICIES name, or None to keep the parser's readings as they are.
     valency: Walenty frames, to explain cases by what verbs require; without it, case
-    reasons use only the tree. correct_cases: also switch a case the verb doesn't allow
-    (see pl_cases.apply)."""
-    parsed = model(text)
-    return assemble(text, parsed, model.name, candidates, expressions, snap, valency, correct_cases)
+    reasons use only the tree."""
+    return assemble(text, model(text), model.name, candidates, expressions, snap, valency)
 
 
 def assemble(
@@ -189,7 +184,6 @@ def assemble(
     expressions: Iterable[ExpressionDef] = (),
     snap: str | None = DEFAULT_SNAP,
     valency: Valency | None = None,
-    correct_cases: pl_cases.Correction = DEFAULT_CASE_CORRECTION,
 ) -> Blob:
     """The blob for text already parsed, so one slow parse can be reused (e.g. to compare
     snap policies)."""
@@ -197,7 +191,7 @@ def assemble(
     if snap:
         analyzer += f"+snap-{snap}"
     if valency is not None:
-        analyzer += f"+{valency.version}+cases-{correct_cases}"
+        analyzer += f"+{valency.version}"
     blob = build(
         parsed,
         lang=LANG,
@@ -209,5 +203,5 @@ def assemble(
         entry_upos=entry_upos,
         snap=reconcile.POLICIES[snap] if snap else None,
     )
-    pl_cases.apply([s["tokens"] for s in blob["sentences"]], valency, correct_cases)
+    pl_cases.apply([s["tokens"] for s in blob["sentences"]], valency)
     return blob
