@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from morfeusz2 import Edge, Interpretation
 
 LANG = "pl"
-PLUGIN_VERSION = "0.6"
+PLUGIN_VERSION = "0.7"
 
 # Parser models, by name. Each loads on first use. All are trained on UD Polish PDB, whose
 # conventions schema.py and the dictionary conversion assume. Scores: analysis/EVALUATION.md.

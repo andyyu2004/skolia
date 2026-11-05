@@ -100,12 +100,14 @@ def build_token(
         better = snap(chosen, readings)
         if better is not None:
             chosen, replaced = better, True
+    # parser_reading stands the text in for a missing lemma; that's no lemma to link by
+    lemma = chosen["lemma"] if word.lemma or replaced else None
     entry: Token = {
         "start": tok.start,
         "end": tok.end,
         "text": word.text,
-        "lemma": chosen["lemma"] if word.lemma or replaced else None,
-        "lemma_id": lemma_id(lang, chosen["lemma"], entry_upos(chosen)),
+        "lemma": lemma,
+        "lemma_id": lemma_id(lang, lemma, entry_upos(chosen)),
         "upos": chosen["upos"],
         "xpos": chosen["xpos"] or None,
         "feats": chosen["feats"],
@@ -150,6 +152,9 @@ def build(
     expression_list = list(expressions)
     built: list[Sentence] = []
     for sent in sentences:
+        if not sent.tokens:
+            # Nothing to show, and no offsets to give it
+            continue
         tokens = [
             token
             for tok in sent.tokens
