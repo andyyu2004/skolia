@@ -95,7 +95,7 @@
       <h2>
         <span lang="pl">{token.text}</span>
         {#if token.lemma && token.lemma !== token.text}
-          <span class="arrow">→</span> <span lang="pl" class="lemma">{word.entry?.lemma ?? token.lemma}</span>
+          <span class="lemma">(<span lang="pl">{word.entry?.lemma ?? token.lemma}</span>)</span>
         {/if}
       </h2>
       <p class="grammar">

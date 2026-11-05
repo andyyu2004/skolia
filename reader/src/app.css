@@ -300,7 +300,7 @@ button {
   margin: 0.25rem 0;
 }
 
-.word .arrow {
+.word .lemma {
   color: var(--muted);
   font-weight: 400;
 }
