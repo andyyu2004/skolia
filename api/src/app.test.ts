@@ -1,10 +1,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MAX_TEXT_LENGTH, type DocumentList, type DocumentSummary } from "@skolia/shared/api";
-import { docId, statusKey } from "@skolia/shared/keys";
+import { docId, partKey, statusKey, versionsKey } from "@skolia/shared/keys";
 import type { IngestJob } from "@skolia/shared/schema";
 import { brotliCompressSync, brotliDecompressSync } from "node:zlib";
-import { acceptsEncoding, countWords, createApp, parseImport, parseStatus } from "./app.ts";
+import {
+  STUCK_AFTER_MS,
+  acceptsEncoding,
+  countWords,
+  createApp,
+  isOutdated,
+  isStuck,
+  nameOf,
+  parseImport,
+  parseStatus,
+  parseVersions,
+} from "./app.ts";
 import type { BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob } from "./ports.ts";
 
 class MemoryDocuments implements DocumentStore {
@@ -89,24 +100,47 @@ test("importing the same text again doesn't queue it twice, unless it failed", a
   assert.equal(queue.sent.length, 2);
 });
 
-test("brotli blobs are sent as stored when accepted, decoded otherwise", async () => {
+const NOW = "2026-11-04T00:00:00Z";
+
+/** A ready document whose analysis and bundle were made by version v, as ingest leaves it. */
+async function readyAt(blobs: MemoryBlobs, id: string, v: string, state = "ready"): Promise<void> {
+  for (const [part, name] of [["analysis", `s2-a${v}`], ["bundle", `b1-a${v}-l1`]] as const) {
+    blobs.objects.set(partKey(id, part, name), {
+      body: brotliCompressSync(`{"${part}":"${v}"}`),
+      contentType: "application/json",
+      contentEncoding: "br",
+    });
+  }
+  const status = {
+    state,
+    updated: NOW,
+    analyzer: `pl/${v}`,
+    lexicon: "lex/1",
+    analysis: partKey(id, "analysis", `s2-a${v}`),
+    bundle: partKey(id, "bundle", `b1-a${v}-l1`),
+  };
+  await blobs.put(statusKey(id), JSON.stringify(status), "application/json");
+}
+
+async function publish(blobs: MemoryBlobs, v: string): Promise<void> {
+  const versions = { analyzer: `pl/${v}`, lexicon: "lex/1", analysis: `s2-a${v}`, bundle: `b1-a${v}-l1` };
+  await blobs.put(versionsKey("pl"), JSON.stringify(versions), "application/json");
+}
+
+async function summaryOf(app: ReturnType<typeof setup>["app"], id: string): Promise<DocumentSummary> {
+  return (await (await app.request(`/api/documents/${id}`)).json()) as DocumentSummary;
+}
+
+test("brotli blobs are sent as stored when accepted, decoded otherwise, cached forever", async () => {
   const { app, blobs } = setup();
   await importText(app);
   const id = await docId(TEXT);
-  const json = '{"lang":"pl"}';
-  blobs.objects.set("b.json.br", {
-    body: brotliCompressSync(json),
-    contentType: "application/json",
-    contentEncoding: "br",
-  });
-  await blobs.put(
-    statusKey(id),
-    JSON.stringify({ state: "ready", updated: "x", analysis: "a", bundle: "b.json.br" }),
-    "application/json",
-  );
-  const url = `/api/documents/${id}/bundle`;
+  await readyAt(blobs, id, "1");
+  const json = '{"bundle":"1"}';
+  const url = `/api/documents/${id}/bundle/b1-a1-l1`;
   const accepted = await app.request(url, { headers: { "accept-encoding": "gzip, br" } });
   assert.equal(accepted.headers.get("content-encoding"), "br");
+  assert.equal(accepted.headers.get("cache-control"), "private, max-age=31536000, immutable");
   assert.equal(brotliDecompressSync(new Uint8Array(await accepted.arrayBuffer())).toString(), json);
   const plain = await app.request(url, { headers: { "accept-encoding": "gzip" } });
   assert.equal(plain.headers.get("content-encoding"), null);
@@ -128,20 +162,19 @@ test("accept-encoding parsing", () => {
   assert.equal(acceptsEncoding(undefined, "br"), false);
 });
 
-test("analysis is 409 until ready, then served as stored", async () => {
+test("the summary names the reading once there is one, and it's served by name", async () => {
   const { app, blobs } = setup();
   await importText(app);
   const id = await docId(TEXT);
-  assert.equal((await app.request(`/api/documents/${id}/analysis`)).status, 409);
-  await blobs.put("analysis/x.json.gz", "{}", "application/json");
-  await blobs.put(
-    statusKey(id),
-    JSON.stringify({ state: "ready", updated: "x", analysis: "analysis/x.json.gz", bundle: "b" }),
-    "application/json",
-  );
-  const response = await app.request(`/api/documents/${id}/analysis`);
-  assert.equal(response.status, 200);
-  assert.equal(await response.text(), "{}");
+  assert.equal((await summaryOf(app, id)).reading, undefined);
+  await readyAt(blobs, id, "1");
+  const summary = await summaryOf(app, id);
+  assert.deepEqual(summary.reading, { analysis: "s2-a1", bundle: "b1-a1-l1" });
+  const analysis = await app.request(`/api/documents/${id}/analysis/s2-a1`);
+  assert.equal(analysis.status, 200);
+  assert.equal(await analysis.text(), '{"analysis":"1"}');
+  assert.equal((await app.request(`/api/documents/${id}/analysis/s2-a9`)).status, 404);
+  assert.equal((await app.request(`/api/documents/${id}/analysis/..%2Fstatus`)).status, 404);
   const list = (await (await app.request("/api/documents")).json()) as DocumentList;
   assert.deepEqual(
     list.documents.map((d) => d.state),
@@ -149,29 +182,86 @@ test("analysis is 409 until ready, then served as stored", async () => {
   );
 });
 
-test("a re-analysis at the same URL isn't hidden by the cache", async () => {
-  const { app, blobs } = setup();
+test("an outdated document is queued once, and its old reading is kept meanwhile", async () => {
+  const { app, blobs, queue } = setup();
   await importText(app);
   const id = await docId(TEXT);
-  const ready = (analysis: string) =>
-    blobs.put(
-      statusKey(id),
-      JSON.stringify({ state: "ready", updated: "x", analysis, bundle: "b" }),
-      "application/json",
-    );
-  await blobs.put("analysis/v1.json", '{"v":1}', "application/json");
-  await blobs.put("analysis/v2.json", '{"v":2}', "application/json");
-  await ready("analysis/v1.json");
-  const url = `/api/documents/${id}/analysis`;
-  const first = await app.request(url);
-  assert.equal(first.headers.get("cache-control"), "private, no-cache");
-  const etag = first.headers.get("etag") ?? "";
-  assert.equal((await app.request(url, { headers: { "if-none-match": etag } })).status, 304);
-  // Re-analysed: same URL, new blob key, so the old ETag no longer matches
-  await ready("analysis/v2.json");
-  const after = await app.request(url, { headers: { "if-none-match": etag } });
-  assert.equal(after.status, 200);
-  assert.equal(await after.text(), '{"v":2}');
+  await readyAt(blobs, id, "1");
+  await publish(blobs, "2");
+  queue.sent.length = 0;
+
+  const list = (await (await app.request("/api/documents")).json()) as DocumentList;
+  assert.deepEqual(
+    list.documents.map((d) => [d.state, d.reading?.analysis]),
+    [["queued", "s2-a1"]],
+  );
+  assert.deepEqual(queue.sent, [{ doc: id, lang: "pl" }]);
+  // Already queued: opening it again doesn't queue it twice
+  assert.equal((await summaryOf(app, id)).state, "queued");
+  assert.equal(queue.sent.length, 1);
+});
+
+test("a bundle of another shape is out of date even if the analyser is the same", async () => {
+  const { app, blobs, queue } = setup();
+  await importText(app);
+  const id = await docId(TEXT);
+  await readyAt(blobs, id, "1");
+  const versions = { analyzer: "pl/1", lexicon: "lex/1", analysis: "s2-a1", bundle: "b2-a1-l1" };
+  await blobs.put(versionsKey("pl"), JSON.stringify(versions), "application/json");
+  queue.sent.length = 0;
+  assert.equal((await summaryOf(app, id)).state, "queued");
+  assert.equal(queue.sent.length, 1);
+});
+
+test("a current document isn't queued, nor any before ingest publishes its versions", async () => {
+  const { app, blobs, queue } = setup();
+  await importText(app);
+  const id = await docId(TEXT);
+  await readyAt(blobs, id, "2");
+  queue.sent.length = 0;
+  await app.request("/api/documents");
+  assert.equal(queue.sent.length, 0);
+  await publish(blobs, "2");
+  assert.equal((await summaryOf(app, id)).state, "ready");
+  assert.equal(queue.sent.length, 0);
+});
+
+test("a document queued or analysing for too long is queued again", async () => {
+  const { app, blobs, queue } = setup();
+  await importText(app);
+  const id = await docId(TEXT);
+  queue.sent.length = 0;
+  // Just queued (by the import, at NOW): left alone
+  assert.equal((await summaryOf(app, id)).state, "queued");
+  assert.equal(queue.sent.length, 0);
+  const lost = { state: "analysing", updated: "2026-11-03T23:00:00Z" };
+  await blobs.put(statusKey(id), JSON.stringify(lost), "application/json");
+  assert.equal((await summaryOf(app, id)).state, "queued");
+  assert.equal(queue.sent.length, 1);
+});
+
+test("stuck and outdated rules", () => {
+  const at = new Date(NOW);
+  const old = new Date(at.getTime() - STUCK_AFTER_MS - 1).toISOString();
+  assert.equal(isStuck({ state: "queued", updated: NOW }, at), false);
+  assert.equal(isStuck({ state: "queued", updated: old }, at), true);
+  assert.equal(isStuck({ state: "ready", updated: old }, at), false);
+  assert.equal(isStuck({ state: "analysing", updated: "garbage" }, at), true);
+  assert.equal(nameOf("doc/x/analysis/s2-a1.json.br"), "s2-a1");
+  assert.equal(nameOf(undefined), undefined);
+  const latest = { analyzer: "a", lexicon: "l", analysis: "s2-a1", bundle: "b1-a1-l1" };
+  const ready = { state: "ready", updated: NOW, analysis: "d/analysis/s2-a1.json.br", bundle: "d/bundle/b1-a1-l1.json.br" } as const;
+  assert.equal(isOutdated(ready, latest), false);
+  assert.equal(isOutdated(ready, { ...latest, analysis: "s3-a1" }), true);
+  assert.equal(isOutdated(ready, null), false);
+  assert.equal(isOutdated({ ...ready, state: "failed" }, { ...latest, analysis: "s3-a1" }), false);
+});
+
+test("versions parsing ignores malformed blobs", () => {
+  const versions = { analyzer: "a", lexicon: "l", analysis: "s2-a1", bundle: "b1-a1-l1" };
+  assert.deepEqual(parseVersions(JSON.stringify(versions)), versions);
+  assert.equal(parseVersions('{"analyzer":"a","lexicon":"l"}'), null);
+  assert.equal(parseVersions("nope"), null);
 });
 
 test("bad requests and ids are rejected", async () => {

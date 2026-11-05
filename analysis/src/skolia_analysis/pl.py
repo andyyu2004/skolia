@@ -162,6 +162,22 @@ def expression_gap(token: Token) -> bool:
     return is_person_ending or is_conditional
 
 
+def analyzer_name(
+    model_name: str,
+    snap: str | None = DEFAULT_SNAP,
+    valency: Valency | None = None,
+    correct_cases: bool = True,
+) -> str:
+    """The version of everything that shapes an analysis. A document analysed under
+    another name is out of date."""
+    analyzer = f"{LANG}/{PLUGIN_VERSION}+{model_name}+morfeusz-{version('morfeusz2')}"
+    if snap:
+        analyzer += f"+snap-{snap}"
+    if valency is not None:
+        analyzer += f"+{valency.version}" + ("" if correct_cases else "+no-case-correction")
+    return analyzer
+
+
 def analyze(
     text: str,
     model: Parser,
@@ -189,11 +205,7 @@ def assemble(
     """The blob for text already parsed, so one slow parse can be reused (e.g. to compare
     snap policies). correct_cases: let verb valency fix a case it rules out (only off to
     measure the correction)."""
-    analyzer = f"{LANG}/{PLUGIN_VERSION}+{model_name}+morfeusz-{version('morfeusz2')}"
-    if snap:
-        analyzer += f"+snap-{snap}"
-    if valency is not None:
-        analyzer += f"+{valency.version}" + ("" if correct_cases else "+no-case-correction")
+    analyzer = analyzer_name(model_name, snap, valency, correct_cases)
     blob = build(
         parsed,
         lang=LANG,

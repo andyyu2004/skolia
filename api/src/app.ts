@@ -10,9 +10,9 @@ import {
   type ImportRequest,
   type Lang,
 } from "@skolia/shared/api";
-import { docId, statusKey, textKey } from "@skolia/shared/keys";
-import type { State, Status } from "@skolia/shared/schema";
-import type { BlobStore, Decode, DocumentRecord, DocumentStore, JobQueue } from "./ports.ts";
+import { docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
+import type { State, Status, Versions } from "@skolia/shared/schema";
+import type { BlobStore, Decode, DocumentRecord, DocumentStore, JobQueue, StoredBlob } from "./ports.ts";
 
 export interface Deps {
   documents: DocumentStore;
@@ -39,9 +39,20 @@ export function createApp(deps: Deps): Hono {
     return c.json<ApiError>({ error: "internal error" }, 500);
   });
 
+  /** The summary, after queueing the document again if ingest now produces other
+   * versions, or if its job seems lost. */
+  async function current(record: DocumentRecord, versions: VersionsOf): Promise<DocumentSummary> {
+    const status = await readStatus(deps.blobs, record.id);
+    if (status !== null && (isStuck(status, now()) || isOutdated(status, await versions(record.lang)))) {
+      return summarize(record, await requeue(deps, record, status, now()));
+    }
+    return summarize(record, status);
+  }
+
   app.get("/api/documents", async (c) => {
     const records = await deps.documents.list();
-    const documents = await Promise.all(records.map((r) => summarize(deps.blobs, r)));
+    const versions = versionsOf(deps.blobs);
+    const documents = await Promise.all(records.map((r) => current(r, versions)));
     return c.json<DocumentList>({ documents });
   });
 
@@ -57,7 +68,7 @@ export function createApp(deps: Deps): Hono {
     const id = await docId(request.text);
     const existing = await deps.documents.get(id);
     if (existing) {
-      const summary = await summarize(deps.blobs, existing);
+      const summary = await current(existing, versionsOf(deps.blobs));
       // A failed import is retried by importing the same text again
       if (summary.state !== "failed") return c.json<DocumentSummary>(summary, 200);
     } else {
@@ -70,43 +81,37 @@ export function createApp(deps: Deps): Hono {
         words: countWords(request.text),
       });
     }
-    const queued: Status = { state: "queued", updated: now().toISOString() };
-    await deps.blobs.put(statusKey(id), JSON.stringify(queued), JSON_TYPE);
-    await deps.queue.send({ doc: id, lang: request.lang });
     const record = existing ?? (await deps.documents.get(id));
     if (!record) throw new Error(`document ${id} vanished after insert`);
-    return c.json<DocumentSummary>(await summarize(deps.blobs, record), 202);
+    const queued = await requeue(deps, record, await readStatus(deps.blobs, id), now());
+    return c.json<DocumentSummary>(summarize(record, queued), 202);
   });
 
   app.get("/api/documents/:id", async (c) => {
     const record = await findDocument(deps, c.req.param("id"));
     if (!record) return notFound(c);
-    return c.json<DocumentSummary>(await summarize(deps.blobs, record));
+    return c.json<DocumentSummary>(await current(record, versionsOf(deps.blobs)));
   });
 
   app.get("/api/documents/:id/text", async (c) => {
     const record = await findDocument(deps, c.req.param("id"));
     if (!record) return notFound(c);
     // The id is the text's hash, so the text at this URL never changes
-    return sendBlob(c, deps.decode, await deps.blobs.get(textKey(record.id)), IMMUTABLE);
+    const blob = await deps.blobs.get(textKey(record.id));
+    if (!blob) return c.json<ApiError>({ error: "missing text" }, 500);
+    return sendBlob(c, deps.decode, blob);
   });
 
+  // By name (DocumentSummary.reading): a name is a version, so what's at the URL never
+  // changes, and the reader gets an analysis and bundle that belong together
   for (const part of ["analysis", "bundle"] as const) {
-    app.get(`/api/documents/:id/${part}`, async (c) => {
+    app.get(`/api/documents/:id/${part}/:name`, async (c) => {
       const record = await findDocument(deps, c.req.param("id"));
-      if (!record) return notFound(c);
-      const status = await readStatus(deps.blobs, record.id);
-      const key = status?.[part];
-      if (status?.state !== "ready" || key === undefined) {
-        return c.json<ApiError>({ error: `${part} not ready` }, 409);
-      }
-      // A re-analysis puts new content at this same URL; the blob key changes with the
-      // analyser and lexicon versions, so it is the ETag and clients revalidate
-      const etag = `"${key}"`;
-      if (c.req.header("if-none-match") === etag) {
-        return new Response(null, { status: 304, headers: { etag, "cache-control": REVALIDATE } });
-      }
-      return sendBlob(c, deps.decode, await deps.blobs.get(key), { etag });
+      const name = c.req.param("name");
+      if (!record || !NAME.test(name)) return notFound(c);
+      const blob = await deps.blobs.get(partKey(record.id, part, name));
+      if (!blob) return c.json<ApiError>({ error: `no ${part} ${name}` }, 404);
+      return sendBlob(c, deps.decode, blob);
     });
   }
 
@@ -121,28 +126,12 @@ function notFound(c: Context): Response {
   return c.json<ApiError>({ error: "no such document" }, 404);
 }
 
-/** How a blob may be cached: forever (its URL's content never changes) or with
- * revalidation against an ETag (the content can change at the same URL). */
-type Caching = typeof IMMUTABLE | { etag: string };
-const IMMUTABLE = "immutable";
-const REVALIDATE = "private, no-cache";
-
-async function sendBlob(
-  c: Context,
-  decode: Decode,
-  blob: Awaited<ReturnType<BlobStore["get"]>>,
-  caching: Caching,
-): Promise<Response> {
-  if (!blob) return c.json<ApiError>({ error: "missing blob" }, 500);
+/** A blob whose URL names its version, so it can be cached forever. */
+async function sendBlob(c: Context, decode: Decode, blob: StoredBlob): Promise<Response> {
   const headers: Record<string, string> = {
     "content-type": blob.contentType ?? "application/octet-stream",
+    "cache-control": "private, max-age=31536000, immutable",
   };
-  if (caching === IMMUTABLE) {
-    headers["cache-control"] = "private, max-age=31536000, immutable";
-  } else {
-    headers["cache-control"] = REVALIDATE;
-    headers["etag"] = caching.etag;
-  }
   const encoding = blob.contentEncoding;
   if (encoding === undefined) return new Response(blob.body, { headers });
   headers["vary"] = "accept-encoding";
@@ -164,9 +153,78 @@ export function acceptsEncoding(header: string | undefined, encoding: string): b
   });
 }
 
-async function summarize(blobs: BlobStore, record: DocumentRecord): Promise<DocumentSummary> {
-  const status = await readStatus(blobs, record.id);
+/** Queue the document, keeping the last analysis readable until the new one is ready. */
+async function requeue(deps: Deps, record: DocumentRecord, status: Status | null, at: Date): Promise<Status> {
+  const queued: Status = { state: "queued", updated: at.toISOString() };
+  for (const key of ["analyzer", "lexicon", "analysis", "bundle"] as const) {
+    const value = status?.[key];
+    if (value !== undefined) queued[key] = value;
+  }
+  await deps.blobs.put(statusKey(record.id), JSON.stringify(queued), JSON_TYPE);
+  await deps.queue.send({ doc: record.id, lang: record.lang });
+  return queued;
+}
+
+/** A ready document whose analysis or bundle isn't what ingest makes now. Unknown
+ * until ingest has published its versions. */
+export function isOutdated(status: Status, latest: Versions | null): boolean {
+  if (status.state !== "ready" || latest === null) return false;
+  return nameOf(status.analysis) !== latest.analysis || nameOf(status.bundle) !== latest.bundle;
+}
+
+/** Longer than any job takes (a text at the limit takes about 10 minutes on a laptop),
+ * so a document queued or analysing for this long has lost its job. Queueing it again is
+ * safe: ingest reuses blobs that already exist. */
+export const STUCK_AFTER_MS = 30 * 60 * 1000;
+
+export function isStuck(status: Status, at: Date): boolean {
+  if (status.state !== "queued" && status.state !== "analysing") return false;
+  const updated = Date.parse(status.updated);
+  return Number.isNaN(updated) || at.getTime() - updated > STUCK_AFTER_MS;
+}
+
+/** The name in a blob key: doc/{id}/analysis/{name}.json.br -> {name}. */
+export function nameOf(key: string | undefined): string | undefined {
+  return key?.match(/\/([^/]+)\.json\.br$/u)?.[1];
+}
+
+const NAME = /^[a-z0-9-]{1,64}$/;
+
+type VersionsOf = (lang: Lang) => Promise<Versions | null>;
+
+/** Each language's versions, read once per request. Null until ingest has started and
+ * published them; documents aren't queued again until then. */
+function versionsOf(blobs: BlobStore): VersionsOf {
+  const read = new Map<Lang, Promise<Versions | null>>();
+  return (lang) => {
+    let versions = read.get(lang);
+    if (versions === undefined) {
+      versions = blobs.get(versionsKey(lang)).then((blob) => (blob ? parseVersions(new TextDecoder().decode(blob.body)) : null));
+      read.set(lang, versions);
+    }
+    return versions;
+  };
+}
+
+export function parseVersions(raw: string): Versions | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isRecord(value)) return null;
+  const { analyzer, lexicon, analysis, bundle } = value;
+  if (typeof analyzer !== "string" || typeof lexicon !== "string") return null;
+  if (typeof analysis !== "string" || typeof bundle !== "string") return null;
+  return { analyzer, lexicon, analysis, bundle };
+}
+
+function summarize(record: DocumentRecord, status: Status | null): DocumentSummary {
   const summary: DocumentSummary = { ...record, state: status?.state ?? "failed" };
+  const analysis = nameOf(status?.analysis);
+  const bundle = nameOf(status?.bundle);
+  if (analysis !== undefined && bundle !== undefined) summary.reading = { analysis, bundle };
   if (status === null) summary.error = "no status";
   else if (status.error !== undefined) summary.error = status.error;
   return summary;

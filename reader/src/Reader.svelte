@@ -1,18 +1,19 @@
 <script lang="ts">
-  import type { DocumentSummary } from "@skolia/shared/api";
+  import type { DocumentSummary, ReadingNames } from "@skolia/shared/api";
   import type { Token } from "@skolia/shared/schema";
   import { getDocument, loadReading, type Reading } from "./lib/api.ts";
   import { layout, tokenKey, type Layout } from "./lib/doc.ts";
+  import { afterPoll, notice as noticeFor, retryAfter } from "./lib/reading.ts";
   import WordSheet from "./WordSheet.svelte";
 
   let { id }: { id: string } = $props();
-
-  const POLL_MS = 1500;
 
   let summary = $state<DocumentSummary | null>(null);
   let reading = $state<Reading | null>(null);
   let error = $state<string | null>(null);
   let selected = $state<number | null>(null);
+
+  const notice = $derived(noticeFor(summary, reading !== null, error));
 
   const doc: Layout | null = $derived(reading ? layout(reading.text, reading.analysis) : null);
   const piece = $derived(doc && selected !== null ? doc.words[selected] : undefined);
@@ -39,18 +40,33 @@
   $effect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let tried: ReadingNames | null = null;
+    let failures = 0;
     async function poll(): Promise<void> {
       try {
         const current = await getDocument(id);
         if (cancelled) return;
         summary = current;
-        if (current.state === "ready") {
-          reading = await loadReading(current);
-        } else if (current.state !== "failed") {
-          timer = setTimeout(() => void poll(), POLL_MS);
+        const step = afterPoll(current, tried);
+        if (step.load !== null) {
+          const next = await loadReading(id, step.load);
+          if (cancelled) return;
+          tried = step.load;
+          if (next !== "unsupported") {
+            // Word ids come from the analysis, so a selection doesn't carry over
+            if (reading !== null) selected = null;
+            reading = next;
+          }
         }
+        failures = 0;
+        error = null;
+        if (step.pollAfter !== null) timer = setTimeout(() => void poll(), step.pollAfter);
       } catch (e: unknown) {
-        if (!cancelled) error = e instanceof Error ? e.message : String(e);
+        if (cancelled) return;
+        // Offline or the API restarting: keep what's on screen and try again
+        failures += 1;
+        error = e instanceof Error ? e.message : String(e);
+        timer = setTimeout(() => void poll(), retryAfter(failures));
       }
     }
     void poll();
@@ -96,13 +112,20 @@
       <h1>{summary.title}</h1>
     {/if}
 
-    {#if error}
-      <p class="error">{error}</p>
-    {:else if summary?.state === "failed"}
-      <p class="error">Analysis failed: {summary.error ?? "unknown error"}</p>
-    {:else if !doc}
-      <p class="muted">{summary?.state === "analysing" ? "Analysing…" : summary ? "Queued…" : "Loading…"}</p>
-    {:else}
+    {#if notice.kind === "unreachable"}
+      <p class="error">Can't reach skolia ({notice.error}); trying again…</p>
+    {:else if notice.kind === "failed"}
+      <p class="error">
+        {notice.previous ? "Updating the analysis failed, so this is the previous one" : "Analysis failed"}:
+        {notice.error}
+      </p>
+    {:else if notice.kind === "updating"}
+      <p class="muted small">Updating to the latest analysis…</p>
+    {:else if notice.kind === "waiting" && !doc}
+      <p class="muted">{notice.text}</p>
+    {/if}
+
+    {#if doc}
       <article class="text" lang="pl">
         {#each doc.pieces as p, i (i)}
           <!-- Words are spans, not buttons: a button is laid out as an inline block, so a
@@ -131,6 +154,9 @@
   </main>
 
   {#if piece && reading}
-    <WordSheet bundle={reading.bundle} {piece} {headText} {sentenceTokens} onclose={() => (selected = null)} />
+    <!-- Keyed, so a new word starts with its lists folded -->
+    {#key selected}
+      <WordSheet bundle={reading.bundle} {piece} {headText} {sentenceTokens} onclose={() => (selected = null)} />
+    {/key}
   {/if}
 </div>

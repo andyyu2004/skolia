@@ -80,6 +80,7 @@ const PIES: Entry = {
 };
 
 const BUNDLE: Bundle = {
+  schema: 1,
   lang: "pl",
   lexicon: "t",
   attribution: "",

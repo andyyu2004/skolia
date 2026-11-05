@@ -79,7 +79,14 @@ type Match = Literal[
 ]
 
 
+BUNDLE_SCHEMA = 1
+"""The bundle's JSON shape. Bump it when the shape changes, so documents get new bundles
+and the reader can refuse one it doesn't know."""
+
+
 class Bundle(TypedDict):
+    schema: int
+    """BUNDLE_SCHEMA when it was made."""
     lang: str
     lexicon: str
     """Lexicon version: sources and their dates."""

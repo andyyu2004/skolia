@@ -1,10 +1,9 @@
 // skolia-api client. Response shapes are the API's (shared/api.ts) and the Python
 // schemas' (shared/schema.gen.ts); the API is ours, so responses are trusted to match.
-import type { ApiError, DocumentList, DocumentSummary, ImportRequest } from "@skolia/shared/api";
-import type { Blob, Bundle } from "@skolia/shared/schema";
+import type { ApiError, DocumentList, DocumentSummary, ImportRequest, ReadingNames } from "@skolia/shared/api";
+import { BUNDLE_SCHEMA, SCHEMA, type Blob, type Bundle } from "@skolia/shared/schema";
 
 export interface Reading {
-  summary: DocumentSummary;
   text: string;
   analysis: Blob;
   bundle: Bundle;
@@ -35,12 +34,21 @@ export function importDocument(body: ImportRequest): Promise<DocumentSummary> {
   });
 }
 
-export async function loadReading(summary: DocumentSummary): Promise<Reading> {
-  const base = `/api/documents/${summary.id}`;
+/** The reading by name, or "unsupported" when its shape is one this reader doesn't
+ * know (an old analysis, served while a new one is made). */
+export async function loadReading(id: string, names: ReadingNames): Promise<Reading | "unsupported"> {
+  const base = `/api/documents/${id}`;
   const [text, analysis, bundle] = await Promise.all([
-    fetch(`${base}/text`).then((r) => r.text()),
-    request<Blob>(`${base}/analysis`),
-    request<Bundle>(`${base}/bundle`),
+    fetchText(`${base}/text`),
+    request<Blob>(`${base}/analysis/${names.analysis}`),
+    request<Bundle>(`${base}/bundle/${names.bundle}`),
   ]);
-  return { summary, text, analysis, bundle };
+  if (analysis.schema !== SCHEMA || bundle.schema !== BUNDLE_SCHEMA) return "unsupported";
+  return { text, analysis, bundle };
+}
+
+async function fetchText(path: string): Promise<string> {
+  const response = await fetch(path);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return response.text();
 }

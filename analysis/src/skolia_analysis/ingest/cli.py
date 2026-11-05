@@ -47,7 +47,8 @@ def polish(lexicon_path: Path, valency_path: Path | None, model: str) -> Pipelin
         bundle=lambda blob: bundle.make(
             blob, lexicon, converter.paradigms, valency.frames if valency else bundle.no_frames
         ),
-        lexicon_version=lexicon.meta().get("version", ""),
+        analyzer=pl.analyzer_name(parser.name, valency=valency),
+        lexicon_version=lexicon.version(),
     )
 
 
@@ -68,5 +69,7 @@ def main() -> None:
     recovered = queue.recover()
     if recovered:
         log.info("put %d unfinished jobs back on the queue", recovered)
+    ingester = Ingester(blobs, pipelines)
+    ingester.publish_versions()
     log.info("waiting for jobs")
-    Ingester(blobs, pipelines).run(queue)
+    ingester.run(queue)

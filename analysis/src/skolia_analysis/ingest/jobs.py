@@ -39,6 +39,10 @@ class JobQueue(Protocol):
         """Done with the job (whether it succeeded or failed): don't deliver it again."""
         ...
 
+    def release(self, received: Received) -> None:
+        """Not done: deliver the job again later."""
+        ...
+
 
 def parse_job(raw: str) -> IngestJob:
     value: object = json.loads(raw)
@@ -92,6 +96,11 @@ class RedisQueue:
     def ack(self, received: Received) -> None:
         self._redis.lrem(PROCESSING, 1, received.raw)
 
+    def release(self, received: Received) -> None:
+        # Back of the line (the end receive() doesn't take from), then out of processing
+        self._redis.lpush(QUEUE, received.raw)
+        self._redis.lrem(PROCESSING, 1, received.raw)
+
     def send(self, job: IngestJob) -> None:
         """For testing and scripts; the API is what normally enqueues."""
         self._redis.lpush(QUEUE, json.dumps(job))
@@ -103,6 +112,7 @@ class MemoryQueue:
     def __init__(self) -> None:
         self.pending: deque[str] = deque()
         self.acked: list[IngestJob] = []
+        self.released: list[IngestJob] = []
 
     def send(self, job: IngestJob) -> None:
         self.pending.append(json.dumps(job))
@@ -115,3 +125,7 @@ class MemoryQueue:
 
     def ack(self, received: Received) -> None:
         self.acked.append(received.job)
+
+    def release(self, received: Received) -> None:
+        self.released.append(received.job)
+        self.pending.append(received.raw)

@@ -26,6 +26,20 @@ class Status(TypedDict):
     error: NotRequired[str]
 
 
+class Versions(TypedDict):
+    """What ingest currently produces for a language, written when it starts. A ready
+    document whose analysis or bundle has another name is out of date, and the API
+    queues it again; until the new analysis is ready, the status keeps the old keys and
+    the reader shows the old analysis."""
+
+    analyzer: str
+    lexicon: str
+    analysis: str
+    """analysis_name: the blob shape and analyzer, the part of the key that changes."""
+    bundle: str
+    """bundle_name: the bundle shape, analyzer and lexicon."""
+
+
 SHORT_HASH = 12
 
 MAX_TEXT_LENGTH = 200_000
@@ -48,8 +62,10 @@ def short_hash(value: str) -> str:
 # in one place:
 #   doc/{doc}/text.txt
 #   doc/{doc}/status.json
-#   doc/{doc}/analysis/s{schema}-a{analyzer}.json.br
-#   doc/{doc}/bundle/a{analyzer}-l{lexicon}.json.br
+#   doc/{doc}/analysis/{analysis_name}.json.br   s{schema}-a{analyzer}
+#   doc/{doc}/bundle/{bundle_name}.json.br       b{bundle schema}-a{analyzer}-l{lexicon}
+# and, per language:
+#   versions/{lang}.json
 
 
 def doc_prefix(doc: str) -> str:
@@ -64,9 +80,21 @@ def status_key(doc: str) -> str:
     return f"{doc_prefix(doc)}status.json"
 
 
-def analysis_key(doc: str, schema: int, analyzer: str) -> str:
-    return f"{doc_prefix(doc)}analysis/s{schema}-a{short_hash(analyzer)}.json.br"
+def analysis_name(schema: int, analyzer: str) -> str:
+    return f"s{schema}-a{short_hash(analyzer)}"
 
 
-def bundle_key(doc: str, analyzer: str, lexicon: str) -> str:
-    return f"{doc_prefix(doc)}bundle/a{short_hash(analyzer)}-l{short_hash(lexicon)}.json.br"
+def bundle_name(bundle_schema: int, analyzer: str, lexicon: str) -> str:
+    return f"b{bundle_schema}-a{short_hash(analyzer)}-l{short_hash(lexicon)}"
+
+
+def analysis_key(doc: str, name: str) -> str:
+    return f"{doc_prefix(doc)}analysis/{name}.json.br"
+
+
+def bundle_key(doc: str, name: str) -> str:
+    return f"{doc_prefix(doc)}bundle/{name}.json.br"
+
+
+def versions_key(lang: str) -> str:
+    return f"versions/{lang}.json"

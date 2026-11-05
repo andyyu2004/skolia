@@ -65,6 +65,14 @@ class Lexicon:
     def meta(self) -> dict[str, str]:
         return dict(self._db.execute("SELECT key, value FROM meta").fetchall())
 
+    def version(self) -> str:
+        """The lexicon's version: its sources and their dates. Bundle names depend on it,
+        so a lexicon without one is refused."""
+        version = self.meta().get("version")
+        if not version:
+            raise ValueError("the lexicon has no version in its meta table")
+        return version
+
     def get(self, lemma_id: str) -> Row | None:
         found = self._select("WHERE lemma_id = ?", lemma_id)
         return next(found, None)

@@ -435,6 +435,7 @@ export interface Entry {
 export type Match = "exact" | "other-pos" | "lowercase" | "none";
 
 export interface Bundle {
+  schema: number;
   lang: string;
   lexicon: string;
   attribution: string;
@@ -460,3 +461,14 @@ export interface Status {
   bundle?: string;
   error?: string;
 }
+
+export interface Versions {
+  analyzer: string;
+  lexicon: string;
+  analysis: string;
+  bundle: string;
+}
+
+export const SCHEMA = 2;
+export const BUNDLE_SCHEMA = 1;
+export const MAX_TEXT_LENGTH = 200000;

@@ -10,20 +10,24 @@ from datetime import UTC, datetime
 import brotli
 
 from ..blob import SCHEMA
-from ..lexicon.schema import Bundle
+from ..lexicon.schema import BUNDLE_SCHEMA, Bundle
 from ..schema import Blob
-from .blobs import BROTLI, Blobs
+from .blobs import BROTLI, BlobError, Blobs
 from .jobs import JobQueue, Received
 from .schema import (
     MAX_TEXT_LENGTH,
     IngestJob,
     State,
     Status,
+    Versions,
     analysis_key,
+    analysis_name,
     bundle_key,
+    bundle_name,
     doc_id,
     status_key,
     text_key,
+    versions_key,
 )
 
 log = logging.getLogger(__name__)
@@ -47,7 +51,17 @@ class Pipeline:
     lang: str
     analyze: Callable[[str], Blob]
     bundle: Callable[[Blob], Bundle]
+    analyzer: str
+    """The name analyze() puts in its blobs, known without analysing anything."""
     lexicon_version: str
+
+    def versions(self) -> Versions:
+        return {
+            "analyzer": self.analyzer,
+            "lexicon": self.lexicon_version,
+            "analysis": analysis_name(SCHEMA, self.analyzer),
+            "bundle": bundle_name(BUNDLE_SCHEMA, self.analyzer, self.lexicon_version),
+        }
 
 
 def now() -> str:
@@ -64,10 +78,19 @@ class Ingester:
         self._blobs = blobs
         self._pipelines = pipelines
 
+    def publish_versions(self) -> None:
+        """Tell the API what's current, so it can queue documents analysed before."""
+        for lang, pipeline in self._pipelines.items():
+            self._blobs.put(versions_key(lang), json.dumps(pipeline.versions()).encode(), JSON)
+
     def process(self, job: IngestJob) -> Status:
+        """Raises BlobError when storage fails: that's worth retrying, unlike a failed
+        analysis, which would fail the same way again."""
         doc = job["doc"]
         try:
             status = self._process(job)
+        except BlobError:
+            raise
         except JobError as error:
             status = self._status(doc, "failed", error=str(error))
         except Exception as error:
@@ -88,17 +111,26 @@ class Ingester:
             raise JobError("text doesn't match the document id (sha256 of the text)")
         if len(text) > MAX_TEXT_LENGTH:
             raise JobError(f"text is longer than {MAX_TEXT_LENGTH} characters")
-        self._status(doc, "analysing")
-        analysis = pipeline.analyze(text)
-        bundle = pipeline.bundle(analysis)
-        a_key = analysis_key(doc, SCHEMA, analysis["analyzer"])
-        b_key = bundle_key(doc, analysis["analyzer"], pipeline.lexicon_version)
-        self._blobs.put(a_key, compressed_json(analysis), JSON, BROTLI)
-        self._blobs.put(b_key, compressed_json(bundle), JSON, BROTLI)
+        versions = pipeline.versions()
+        a_key = analysis_key(doc, versions["analysis"])
+        b_key = bundle_key(doc, versions["bundle"])
+        # Already made (the job was queued twice, or the API wrote "queued" over a fresh
+        # "ready"): the keys name the versions, so the blobs are current
+        if not (self._blobs.exists(a_key) and self._blobs.exists(b_key)):
+            self._status(doc, "analysing")
+            analysis = pipeline.analyze(text)
+            if analysis["analyzer"] != pipeline.analyzer:
+                # Otherwise the API would keep finding it out of date and queueing it
+                raise JobError(
+                    f"analysed as {analysis['analyzer']!r}, but published {pipeline.analyzer!r}"
+                )
+            bundle = pipeline.bundle(analysis)
+            self._blobs.put(a_key, compressed_json(analysis), JSON, BROTLI)
+            self._blobs.put(b_key, compressed_json(bundle), JSON, BROTLI)
         return self._status(
             doc,
             "ready",
-            analyzer=analysis["analyzer"],
+            analyzer=pipeline.analyzer,
             lexicon=pipeline.lexicon_version,
             analysis=a_key,
             bundle=b_key,
@@ -116,6 +148,13 @@ class Ingester:
         error: str | None = None,
     ) -> Status:
         status: Status = {"state": state, "updated": now()}
+        previous = self._read_status(doc) if state != "ready" else None
+        if previous is not None:
+            # Keep serving the last analysis until the new one is ready
+            analyzer = analyzer or previous.get("analyzer")
+            lexicon = lexicon or previous.get("lexicon")
+            analysis = analysis or previous.get("analysis")
+            bundle = bundle or previous.get("bundle")
         if analyzer is not None:
             status["analyzer"] = analyzer
         if lexicon is not None:
@@ -128,6 +167,16 @@ class Ingester:
             status["error"] = error
         self._blobs.put(status_key(doc), json.dumps(status).encode(), JSON)
         return status
+
+    def _read_status(self, doc: str) -> Status | None:
+        raw = self._blobs.get(status_key(doc))
+        if raw is None:
+            return None
+        try:
+            value: Status = json.loads(raw)
+        except ValueError:
+            return None
+        return value
 
     def run(
         self,
@@ -150,6 +199,16 @@ class Ingester:
             if received is None:
                 continue
             log.info("ingesting %s (%s)", received.job["doc"], received.job["lang"])
-            status = self.process(received.job)
+            try:
+                status = self.process(received.job)
+            except BlobError:
+                # Storage is down: put the job back for later rather than fail the document
+                failures += 1
+                delay = min(MAX_BACKOFF_SECONDS, 2.0**failures)
+                log.exception("storage failed; job back on the queue, waiting %.0f s", delay)
+                queue.release(received)
+                sleep(delay)
+                continue
+            failures = 0
             queue.ack(received)
             log.info("%s: %s", received.job["doc"], status["state"])

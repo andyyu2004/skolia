@@ -2,19 +2,13 @@
   import type { DocumentSummary } from "@skolia/shared/api";
   import { MAX_TEXT_LENGTH } from "@skolia/shared/api";
   import { importDocument, listDocuments } from "./lib/api.ts";
+  import { badge } from "./lib/reading.ts";
 
   let documents = $state<DocumentSummary[] | null>(null);
   let error = $state<string | null>(null);
   let title = $state("");
   let text = $state("");
   let importing = $state(false);
-
-  const STATE_LABEL: Record<DocumentSummary["state"], string> = {
-    queued: "queued",
-    analysing: "analysing…",
-    ready: "",
-    failed: "failed",
-  };
 
   async function refresh(): Promise<void> {
     try {
@@ -81,8 +75,9 @@
           <li>
             <a href={`#/doc/${doc.id}`}>{doc.title}</a>
             <span class="muted">{doc.words} words</span>
-            {#if STATE_LABEL[doc.state]}
-              <span class="badge" class:failed={doc.state === "failed"}>{STATE_LABEL[doc.state]}</span>
+            {#if badge(doc)}
+              {@const shown = badge(doc)}
+              <span class="badge" class:failed={shown?.failed}>{shown?.text}</span>
             {/if}
           </li>
         {/each}

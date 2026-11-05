@@ -5,8 +5,8 @@ import type { State } from "./schema.gen.ts";
 export const LANGS = ["pl"] as const;
 export type Lang = (typeof LANGS)[number];
 
-/** Longest text accepted by one import, in characters. */
-export const MAX_TEXT_LENGTH = 200_000;
+/** Longest text accepted by one import, in characters (ingest checks it too). */
+export { MAX_TEXT_LENGTH } from "./schema.gen.ts";
 
 export interface ImportRequest {
   title: string;
@@ -23,7 +23,16 @@ export interface DocumentSummary {
   imported: string;
   words: number;
   state: State;
+  /** The analysis and bundle to show, by name (GET .../analysis/{name}): the current
+   * ones, or while newer ones are queued or analysing (or failed), the previous ones.
+   * Absent until a first analysis is ready. */
+  reading?: ReadingNames;
   error?: string;
+}
+
+export interface ReadingNames {
+  analysis: string;
+  bundle: string;
 }
 
 export interface DocumentList {

@@ -5,7 +5,7 @@ from collections.abc import Callable
 from .. import ud
 from ..schema import Blob, Feats, Upos
 from ..walenty.model import Schema
-from .schema import Bundle, BundleParadigm, Entry, Match, Paradigm
+from .schema import BUNDLE_SCHEMA, Bundle, BundleParadigm, Entry, Match, Paradigm
 from .store import Lexicon, Row
 
 LEMMA_ID_SEP = ":"
@@ -49,11 +49,11 @@ def resolve(lexicon: Lexicon, lemma_id: str) -> tuple[Row | None, Match]:
 
 
 def make(blob: Blob, lexicon: Lexicon, paradigms: Paradigms, frames: Frames = no_frames) -> Bundle:
-    meta = lexicon.meta()
     bundle: Bundle = {
+        "schema": BUNDLE_SCHEMA,
         "lang": blob["lang"],
-        "lexicon": meta.get("version", ""),
-        "attribution": meta.get("attribution", ""),
+        "lexicon": lexicon.version(),
+        "attribution": lexicon.meta().get("attribution", ""),
         "entries": {},
         "lookup": {},
         "match": {},

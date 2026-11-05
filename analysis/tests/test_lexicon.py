@@ -135,7 +135,7 @@ def test_resolve_falls_back(tmp_path: Path) -> None:
 
 def test_bundle_shares_feature_sets_and_groups_forms(tmp_path: Path) -> None:
     path = tmp_path / "pl.sqlite"
-    store.write(path, [store.Row("pl:pies:NOUN", "pies", "NOUN", [DOG], [])], {})
+    store.write(path, [store.Row("pl:pies:NOUN", "pies", "NOUN", [DOG], [])], {"version": "test/1"})
     gen: Feats = {"Case": "Gen", "Number": "Sing"}
     acc: Feats = {"Case": "Acc", "Number": "Sing"}
 
