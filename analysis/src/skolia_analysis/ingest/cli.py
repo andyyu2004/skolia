@@ -16,8 +16,10 @@ Jobs come from one of (set exactly one):
 
 import logging
 import os
+import signal
 import sys
 from pathlib import Path
+from types import FrameType
 
 from .. import pl
 from ..lexicon import bundle
@@ -56,6 +58,11 @@ def polish(lexicon_path: Path, valency_path: Path | None, model: str) -> Pipelin
     )
 
 
+def stop_on_sigterm(_signum: int, _frame: FrameType | None) -> None:
+    log.info("SIGTERM: stopping")
+    sys.exit(0)
+
+
 def job_source() -> RedisQueue | HttpJobs:
     """Listening starts before the pipeline loads (which takes a while), so the container
     counts as started and jobs wait in memory meanwhile."""
@@ -76,6 +83,9 @@ def main() -> None:
         print(__doc__)
         return
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    # In a container ingest is PID 1, which ignores SIGTERM unless it handles it: the
+    # Cloudflare container (and docker compose) would never stop it
+    signal.signal(signal.SIGTERM, stop_on_sigterm)
     queue = job_source()
     blobs = S3Blobs(env("SKOLIA_S3_BUCKET"), os.environ.get("SKOLIA_S3_ENDPOINT") or None)
     lexicon_path = Path(env("SKOLIA_LEXICON"))
