@@ -60,7 +60,7 @@ services:
     volumes: ["./data/api:/data"]
 
   ingest:
-    build: {context: analysis}
+    build: {context: ., dockerfile: analysis/Dockerfile, target: ingest}
     depends_on:
       redis: {condition: service_healthy}
       storage-init: {condition: service_completed_successfully}

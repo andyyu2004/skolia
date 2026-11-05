@@ -27,8 +27,9 @@ export interface StoredBlob {
 }
 
 /** Undo a Content-Encoding, for clients that don't accept it. Async so a large blob
- * doesn't block other requests (Node: zlib on the thread pool). */
-export type Decode = (body: Uint8Array, encoding: string) => Promise<Uint8Array>;
+ * doesn't block other requests (Node: zlib on the thread pool). Null where the runtime
+ * can't (Workers has no Brotli): such clients get 406. */
+export type Decode = ((body: Uint8Array, encoding: string) => Promise<Uint8Array>) | null;
 
 export interface BlobStore {
   get(key: string): Promise<StoredBlob | null>;

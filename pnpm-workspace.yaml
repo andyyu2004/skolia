@@ -2,3 +2,8 @@ packages:
   - api
   - reader
   - shared
+# Their install scripts check the platform binary and download it if it's missing;
+# pnpm already installs it from an optional dependency (e.g. @cloudflare/workerd-darwin-arm64)
+allowBuilds:
+  esbuild: false
+  workerd: false

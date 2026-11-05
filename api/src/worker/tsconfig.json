@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": [".", "../app.ts", "../ports.ts", "../documents.ts", "../../../shared"],
+  "exclude": []
+}

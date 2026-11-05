@@ -12,6 +12,7 @@ COPY api/package.json ./api/
 RUN pnpm install --frozen-lockfile --prod --filter @skolia/api...
 
 COPY api/src ./api/src
+COPY api/migrations ./api/migrations
 
 WORKDIR /app/api
 ENV HOST=0.0.0.0 PORT=8787

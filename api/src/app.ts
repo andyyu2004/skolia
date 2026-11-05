@@ -137,8 +137,11 @@ async function sendBlob(c: Context, decode: Decode, blob: StoredBlob): Promise<R
   headers["vary"] = "accept-encoding";
   if (acceptsEncoding(c.req.header("accept-encoding"), encoding)) {
     headers["content-encoding"] = encoding;
-    return new Response(blob.body, { headers });
+    // Workers otherwise compress the body again by its content-encoding; Node ignores it
+    const init: ResponseInit & { encodeBody: "manual" } = { headers, encodeBody: "manual" };
+    return new Response(blob.body, init);
   }
+  if (decode === null) return c.json<ApiError>({ error: `needs Accept-Encoding: ${encoding}` }, 406);
   return new Response(await decode(blob.body, encoding), { headers });
 }
 

@@ -17,5 +17,6 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["src", "../shared"]
+  "include": ["src", "../shared"],
+  "exclude": ["src/worker"]
 }

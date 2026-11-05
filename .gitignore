@@ -4,3 +4,6 @@ __pycache__/
 /data/
 node_modules/
 /reader/dist/
+.wrangler/
+/api/dist/
+.dev.vars

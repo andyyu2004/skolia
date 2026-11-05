@@ -1,9 +1,12 @@
 """skolia-ingest: configured by environment variables, so the same image runs locally
 (docker compose) and in production.
 
-  SKOLIA_REDIS_URL     queue, e.g. redis://localhost:6379/0
+Jobs come from one of (set exactly one):
+  SKOLIA_REDIS_URL     a Redis queue, e.g. redis://localhost:6379/0 (local stack)
+  SKOLIA_HTTP_PORT     POST /jobs on this port (the Cloudflare container; see http.py)
+
   SKOLIA_S3_BUCKET     blob bucket
-  SKOLIA_S3_ENDPOINT   S3 endpoint (MinIO or R2); unset for AWS
+  SKOLIA_S3_ENDPOINT   S3 endpoint (RustFS or R2); unset for AWS
   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION   S3 credentials
   SKOLIA_LEXICON       Polish lexicon .sqlite (skolia-build-lexicon)
   SKOLIA_VALENCY       Polish verb frames .json (skolia-build-valency); optional, for
@@ -22,6 +25,7 @@ from ..lexicon import pl as lexicon_pl
 from ..lexicon.store import Lexicon
 from ..valency import Valency
 from .blobs import S3Blobs
+from .http import HttpJobs, serve
 from .jobs import RedisQueue
 from .worker import Ingester, Pipeline
 
@@ -52,12 +56,27 @@ def polish(lexicon_path: Path, valency_path: Path | None, model: str) -> Pipelin
     )
 
 
+def job_source() -> RedisQueue | HttpJobs:
+    """Listening starts before the pipeline loads (which takes a while), so the container
+    counts as started and jobs wait in memory meanwhile."""
+    redis_url = os.environ.get("SKOLIA_REDIS_URL")
+    port = os.environ.get("SKOLIA_HTTP_PORT")
+    if bool(redis_url) == bool(port):
+        sys.exit("skolia-ingest: set one of SKOLIA_REDIS_URL and SKOLIA_HTTP_PORT")
+    if redis_url:
+        return RedisQueue(redis_url)
+    jobs = HttpJobs()
+    serve(jobs, "0.0.0.0", int(port or 0))
+    log.info("accepting jobs on port %s", port)
+    return jobs
+
+
 def main() -> None:
     if "--help" in sys.argv or "-h" in sys.argv:
         print(__doc__)
         return
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    queue = RedisQueue(env("SKOLIA_REDIS_URL"))
+    queue = job_source()
     blobs = S3Blobs(env("SKOLIA_S3_BUCKET"), os.environ.get("SKOLIA_S3_ENDPOINT") or None)
     lexicon_path = Path(env("SKOLIA_LEXICON"))
     model = os.environ.get("SKOLIA_MODEL") or pl.DEFAULT_MODEL
@@ -66,9 +85,10 @@ def main() -> None:
     if not valency:
         log.warning("SKOLIA_VALENCY not set: case reasons won't use verb frames")
     pipelines = {pl.LANG: polish(lexicon_path, Path(valency) if valency else None, model)}
-    recovered = queue.recover()
-    if recovered:
-        log.info("put %d unfinished jobs back on the queue", recovered)
+    if isinstance(queue, RedisQueue):
+        recovered = queue.recover()
+        if recovered:
+            log.info("put %d unfinished jobs back on the queue", recovered)
     ingester = Ingester(blobs, pipelines)
     ingester.publish_versions()
     log.info("waiting for jobs")

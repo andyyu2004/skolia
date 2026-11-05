@@ -1,5 +1,19 @@
+# Build context for api/Dockerfile and analysis/Dockerfile (both built from the repo
+# root; wrangler only reads this file, not per-Dockerfile ones). Only what they copy.
+*
+!package.json
+!pnpm-workspace.yaml
+!pnpm-lock.yaml
+!shared
+!api/package.json
+!api/src
+!api/migrations
+!analysis/pyproject.toml
+!analysis/uv.lock
+!analysis/.python-version
+!analysis/src
+!analysis/typings
+!data/lexicon/pl.sqlite
+!data/lexicon/pl-valency.json
 **/node_modules
-data
-analysis
-reader
-.git
+**/__pycache__

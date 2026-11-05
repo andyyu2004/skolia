@@ -1,0 +1,33 @@
+// skolia-ingest: the queue consumer and its analysis container (src/worker/ingest.ts).
+// Deployed with wrangler, since Terraform's Cloudflare provider has no container
+// resource. The queue itself is created by Terraform (infra/).
+//
+// Secrets (from terraform output): S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY. See
+// infra/README.md for the deploy command.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "skolia-ingest",
+  "main": "src/worker/ingest.ts",
+  "compatibility_date": "2026-10-19",
+  "observability": { "enabled": true },
+  "containers": [
+    {
+      "class_name": "Ingest",
+      "image": "../analysis/Dockerfile",
+      "image_build_context": "..",
+      // 1 vCPU, 6 GiB: ingest peaks at about 3.8 GiB
+      "instance_type": "standard-2",
+      "max_instances": 1
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "INGEST", "class_name": "Ingest" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Ingest"] }],
+  "queues": {
+    "consumers": [{ "queue": "skolia-ingest", "max_batch_size": 10, "max_retries": 10 }]
+  },
+  // S3_ENDPOINT is passed at deploy (--var, terraform output r2_s3_endpoint) and
+  // locally in .dev.vars, which a value here would override
+  "vars": { "S3_BUCKET": "skolia" }
+}

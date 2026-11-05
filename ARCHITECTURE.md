@@ -14,15 +14,17 @@ An assisted-reading app built around morphology. Tap a word or select a span. Yo
 ## Components
 
 ```
-Phone or desktop (responsive PWA) ──► skolia-api (Worker) ──► D1 (users, cards, quotas, doc metadata)
-  │                                      │               └─► R2 (source texts, analyses, bundles, status)
+Phone or desktop (responsive PWA) ──► skolia (Worker: reader assets + API) ──► D1 (users, cards, quotas, doc metadata)
+  │                                      │                                └─► R2 (source texts, analyses, bundles, status)
   │                                      │
-  │                                      └─► Queue ──► skolia-ingest (Python container) ──► R2
+  │                                      └─► Queue ──► skolia-ingest (Worker) ──► Durable Object ──► container (Python) ──► R2
   │
   └─ IndexedDB: cached document bundles
 ```
 
 Locally (`compose.yaml`): the API runs on Node, Redis replaces the Queue, RustFS (S3 API) replaces R2 and a SQLite file replaces D1. The API reaches them through small interfaces (`api/src/ports.ts`); ingest reaches storage over the S3 API, which R2 also speaks. Ingest writes `doc/{doc}/status.json` as it goes (queued, analysing, ready, failed), and the API reads it to tell the reader.
+
+On Cloudflare: Terraform (`infra/`) manages R2, D1, the queue, the `skolia` Worker with the reader as static assets, the skolia.io domain and ingest's R2 token. The `skolia-ingest` Worker and its container are deployed with wrangler (`api/wrangler.ingest.jsonc`), as the provider has no container resource. The consumer hands each job to the container over HTTP and acks it once accepted: a consumer may run 15 minutes and an analysis can take longer. The container keeps jobs in memory, sleeps when idle (the Durable Object asks ingest whether it's busy before stopping it), and has the models and lexicon in its image. A job lost with its container is re-queued by the stuck rule below.
 
 | Part | Tech | Responsibility |
 |---|---|---|
@@ -30,7 +32,7 @@ Locally (`compose.yaml`): the API runs on Node, Redis replaces the Queue, RustFS
 | API | Cloudflare Workers (TypeScript) | Auth, sync, import job submission, explain proxy + cache, quotas |
 | User data | D1 | Users, document metadata, known lemmas, cards, overrides, explanation cache |
 | Blobs | R2 | Lexicon files per language, source texts, analysis blobs |
-| Analysis | Python container (Cloudflare Containers or a small VPS) pulling from Cloudflare Queues | Segment, analyze, match lexicon, write blob |
+| Analysis | Python on Cloudflare Containers, fed from Cloudflare Queues by a consumer Worker | Segment, analyze, match lexicon, write blob |
 | Lexicon build | Offline Python scripts | Kaikki/Wiktionary + Morfeusz → per-language lexicon files |
 
 ## Frontend / backend split
@@ -155,6 +157,5 @@ Steps 1 and 2 are the main risk. Validate them before building UI.
 
 ## Open questions
 
-- Cloudflare Containers vs VPS for analysis (check current limits and pricing)
 - Auth provider
 - Name: skolia.com is registered (2026-07, by a domain reseller); skolia.io was free on 2026-11-04

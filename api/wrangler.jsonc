@@ -1,0 +1,28 @@
+// skolia on Cloudflare: one Worker serves the reader (static assets) and the API.
+// In production Terraform (infra/) deploys it; this file is for wrangler dev, building
+// the bundle Terraform uploads (wrangler deploy --dry-run --outdir dist), and D1
+// migrations. Ingest is a separate Worker: wrangler.ingest.jsonc.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "skolia",
+  "main": "src/worker/main.ts",
+  "compatibility_date": "2026-10-19",
+  "assets": {
+    "directory": "../reader/dist",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "skolia",
+      // Set when the database is created (wrangler d1 create skolia)
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "skolia" }],
+  "queues": {
+    "producers": [{ "binding": "INGEST", "queue": "skolia-ingest" }]
+  }
+}

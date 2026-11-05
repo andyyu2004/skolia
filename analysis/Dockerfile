@@ -1,5 +1,9 @@
-# skolia-ingest, for linux/amd64 and linux/arm64.
-# Models download on first start into /root/.cache/huggingface (mount a volume there).
+# skolia-ingest, for linux/amd64 and linux/arm64. Build from the repo root:
+#   docker build -f analysis/Dockerfile --target ingest .
+# Stage "ingest" (docker compose): models download on first start into
+# /root/.cache/huggingface (mount a volume there), the lexicon is mounted.
+# Stage "cloudflare" (the default, built by wrangler): models and lexicon are in the
+# image, so a container that wakes for a job needs nothing from outside but R2.
 
 # --- Morfeusz from source ---------------------------------------------------------
 # PyPI's morfeusz2 has a Linux wheel for x86-64 only, so the library and its Python
@@ -47,7 +51,7 @@ RUN sed -i '/add_subdirectory (java)/d' Morfeusz/morfeusz/wrappers/CMakeLists.tx
  && make -C out -j"$(nproc)" package-python3-fatwhl
 
 # --- skolia-ingest ----------------------------------------------------------------
-FROM python:3.12.13-slim
+FROM python:3.12.13-slim AS ingest
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.1 /uv /usr/local/bin/uv
 COPY --from=morfeusz /build/dictionaries/ /usr/local/share/morfeusz2/dictionaries/
@@ -58,13 +62,13 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 
 # Dependencies first, so code changes don't reinstall PyTorch. morfeusz2 comes from
 # the wheel built above instead of PyPI.
-COPY pyproject.toml uv.lock .python-version ./
+COPY analysis/pyproject.toml analysis/uv.lock analysis/.python-version ./
 # uv's download cache lives in a build cache mount, not in the image (about 1 GB)
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project --no-install-package morfeusz2
 
-COPY src ./src
-COPY typings ./typings
+COPY analysis/src ./src
+COPY analysis/typings ./typings
 # uv sync removes packages the lockfile doesn't install, so the wheel goes in last
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-package morfeusz2 \
@@ -72,3 +76,16 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
 CMD ["skolia-ingest"]
+
+# --- the Cloudflare container -------------------------------------------------------
+FROM ingest AS cloudflare
+
+# Loading the parser downloads every model it uses; the image is then the pin
+RUN python -c "from skolia_analysis import pl; pl.parser(pl.DEFAULT_MODEL)"
+COPY data/lexicon/pl.sqlite data/lexicon/pl-valency.json /lexicon/
+
+ENV HF_HUB_OFFLINE=1 \
+    SKOLIA_HTTP_PORT=8080 \
+    SKOLIA_LEXICON=/lexicon/pl.sqlite \
+    SKOLIA_VALENCY=/lexicon/pl-valency.json
+EXPOSE 8080
