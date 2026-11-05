@@ -13,6 +13,7 @@ import {
   isStuck,
   nameOf,
   parseImport,
+  parseImportCap,
   parseStatus,
   parseVersions,
 } from "./app.ts";
@@ -28,6 +29,9 @@ class MemoryDocuments implements DocumentStore {
   }
   async add(record: DocumentRecord): Promise<void> {
     if (!this.rows.has(record.id)) this.rows.set(record.id, record);
+  }
+  async countImportedSince(since: string): Promise<number> {
+    return [...this.rows.values()].filter((r) => r.imported >= since).length;
   }
 }
 
@@ -51,11 +55,12 @@ class MemoryQueue implements JobQueue {
 
 const TEXT = "Idę do starego psa.";
 
-function setup() {
+function setup(maxImportsPerDay = 100) {
   const documents = new MemoryDocuments();
   const blobs = new MemoryBlobs();
   const queue = new MemoryQueue();
   const app = createApp({
+    maxImportsPerDay,
     documents,
     blobs,
     queue,
@@ -147,10 +152,29 @@ test("brotli blobs are sent as stored when accepted, decoded otherwise, cached f
   assert.equal(await plain.text(), json);
 });
 
+test("new texts past the daily cap are refused; texts already here still open", async () => {
+  const { app, queue } = setup(2);
+  assert.equal((await importText(app, "Pierwszy tekst.")).status, 202);
+  assert.equal((await importText(app, "Drugi tekst.")).status, 202);
+  const refused = await importText(app, "Trzeci tekst.");
+  assert.equal(refused.status, 429);
+  assert.match(((await refused.json()) as { error: string }).error, /tomorrow/);
+  assert.equal((await importText(app, "Pierwszy tekst.")).status, 200);
+  assert.equal(queue.sent.length, 2);
+});
+
+test("the import cap must be a whole number", () => {
+  assert.equal(parseImportCap("50"), 50);
+  assert.equal(parseImportCap(" 0 "), 0);
+  assert.equal(parseImportCap(undefined), null);
+  assert.equal(parseImportCap("-1"), null);
+  assert.equal(parseImportCap("lots"), null);
+});
+
 test("texts over the limit are refused, oversized bodies without being parsed", async () => {
   const { app, queue } = setup();
   assert.equal((await importText(app, "a".repeat(MAX_TEXT_LENGTH + 1))).status, 400);
-  assert.equal((await importText(app, "a".repeat(MAX_TEXT_LENGTH * 5))).status, 413);
+  assert.equal((await importText(app, "a".repeat(MAX_TEXT_LENGTH * 10))).status, 413);
   assert.equal(queue.sent.length, 0);
 });
 

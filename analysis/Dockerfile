@@ -80,8 +80,16 @@ CMD ["skolia-ingest"]
 # --- the Cloudflare container -------------------------------------------------------
 FROM ingest AS cloudflare
 
-# Loading the parser downloads every model it uses; the image is then the pin
-RUN python -c "from skolia_analysis import pl; pl.parser(pl.DEFAULT_MODEL)"
+# The models the default parser (COMBO) loads, at fixed revisions, one layer each:
+# Cloudflare's registry times out committing a single 3 GB layer
+COPY analysis/scripts/fetch_model.py /tmp/
+RUN python /tmp/fetch_model.py FacebookAI/xlm-roberta-base e73636d4f797dec63c3081bb6ed5c7b0bb3f2089 \
+      config.json model.safetensors sentencepiece.bpe.model tokenizer.json tokenizer_config.json
+RUN python /tmp/fetch_model.py clarin-pl/combo-nlp-xlm-roberta-base-polish-pdb-ud2.18 f88e8ac3f57ea0e44e843f9ce85356963825ecae
+RUN python /tmp/fetch_model.py clarin-pl/combo-seg-xlm-roberta-base-polish-pdb-ud2.18 dc9865fad8aa7978f96fa69bc4e30a1943535f8e
+RUN python /tmp/fetch_model.py clarin-pl/combo-nlp-models 668b5a5d5f1afb5b57b0d9b04062c5ed3f812005
+# Fails the build if the parser needs anything not fetched above
+RUN HF_HUB_OFFLINE=1 python -c "from skolia_analysis import pl; pl.parser(pl.DEFAULT_MODEL)"
 COPY data/lexicon/pl.sqlite data/lexicon/pl-valency.json /lexicon/
 
 ENV HF_HUB_OFFLINE=1 \

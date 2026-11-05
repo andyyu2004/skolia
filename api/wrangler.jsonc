@@ -16,12 +16,14 @@
     {
       "binding": "DB",
       "database_name": "skolia",
-      // Set when the database is created (wrangler d1 create skolia)
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // terraform -chdir=infra output -raw d1_database_id
+      "database_id": "e9c02964-6266-463f-9d7a-ce71a33f3b98",
       "migrations_dir": "migrations"
     }
   ],
   "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "skolia" }],
+  // In production Terraform sets it (var.max_imports_per_day)
+  "vars": { "MAX_IMPORTS_PER_DAY": "50" },
   "queues": {
     "producers": [{ "binding": "INGEST", "queue": "skolia-ingest" }]
   }

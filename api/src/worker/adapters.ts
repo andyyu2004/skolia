@@ -1,6 +1,6 @@
 // The ports on Cloudflare: D1 for document metadata, R2 for blobs, Queues for jobs.
 import type { IngestJob } from "@skolia/shared/schema";
-import { ADD, GET, LIST, addParams, toRecord } from "../documents.ts";
+import { ADD, COUNT_SINCE, GET, LIST, addParams, toCount, toRecord } from "../documents.ts";
 import type { BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob } from "../ports.ts";
 
 export class D1Documents implements DocumentStore {
@@ -22,6 +22,10 @@ export class D1Documents implements DocumentStore {
 
   async add(record: DocumentRecord): Promise<void> {
     await this.db.prepare(ADD).bind(...addParams(record)).run();
+  }
+
+  async countImportedSince(since: string): Promise<number> {
+    return toCount(await this.db.prepare(COUNT_SINCE).bind(since).first<Record<string, unknown>>());
   }
 }
 

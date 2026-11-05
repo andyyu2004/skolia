@@ -42,11 +42,12 @@ class Versions(TypedDict):
 
 SHORT_HASH = 12
 
-MAX_TEXT_LENGTH = 200_000
-"""Longest text ingest analyses, in characters; must match MAX_TEXT_LENGTH in
-shared/api.ts. (JavaScript counts UTF-16 units, so the API's check is the stricter one
-for text outside the BMP, such as emoji.) At about 46 words a second on an M-series
-Mac, a text at the limit (about 30,000 words) takes roughly 10 minutes."""
+MAX_TEXT_LENGTH = 20_000
+"""Longest text ingest analyses, in characters; generated into shared/schema.gen.ts for
+the API and reader. (JavaScript counts UTF-16 units, so the API's check is the stricter
+one for text outside the BMP, such as emoji.) Kept small because analysis time is what
+costs money: at about 46 words a second on an M-series Mac, a text at the limit (about
+3,000 words) takes roughly a minute."""
 
 
 def doc_id(text: str) -> str:

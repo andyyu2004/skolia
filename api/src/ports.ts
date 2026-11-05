@@ -17,6 +17,8 @@ export interface DocumentStore {
   get(id: string): Promise<DocumentRecord | null>;
   /** Insert, or keep the existing record if the id is already there. */
   add(record: DocumentRecord): Promise<void>;
+  /** How many documents were imported at or after this ISO time. */
+  countImportedSince(since: string): Promise<number>;
 }
 
 export interface StoredBlob {

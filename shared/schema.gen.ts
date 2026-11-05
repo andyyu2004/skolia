@@ -471,4 +471,4 @@ export interface Versions {
 
 export const SCHEMA = 2;
 export const BUNDLE_SCHEMA = 1;
-export const MAX_TEXT_LENGTH = 200000;
+export const MAX_TEXT_LENGTH = 20000;

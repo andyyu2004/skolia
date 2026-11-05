@@ -13,6 +13,7 @@
 !analysis/.python-version
 !analysis/src
 !analysis/typings
+!analysis/scripts/fetch_model.py
 !data/lexicon/pl.sqlite
 !data/lexicon/pl-valency.json
 **/node_modules

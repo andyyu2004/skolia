@@ -1,43 +1,61 @@
 # infra
 
-Terraform for skolia's Cloudflare resources: R2 bucket, D1 database, queue, the `skolia` Worker on skolia.io, and an R2 token for the ingest container.
+Terraform for skolia on Cloudflare: R2 bucket, D1 database, queue, the `skolia` Worker (reader + API) on workers.dev and skolia.io, an R2 token for the ingest container, and billing usage alerts. The ingest Worker and its container are deployed with wrangler (the provider has no container resource).
 
-## One-time setup
+Account `1d3ca537bca3f2918d2778118d23f0a8`. Secrets in `pass` under `cloudflare/andyyu2004@gmail.com/1d3ca537bca3f2918d2778118d23f0a8/`. Terraform comes from `mise.toml`.
 
-1. Create the R2 bucket `skolia-tfstate` in the dashboard, and an R2 API token with Object Read & Write on that bucket only. It gives an access key id and secret for the state backend.
-2. Create a Cloudflare API token for Terraform with these permissions:
-   - Account: Workers Scripts Write, Workers R2 Storage Write, D1 Write, Queues Write, Account API Tokens Write, Notifications Write
-   - Zone skolia.io: Zone Read, Workers Routes Write
-3. In the dashboard (Notifications), add a Billing Budget alert in dollars. `alerts.tf` covers per-product usage, but no usage alert exists for Containers, and the provider has no budget alert type.
+## One-time setup (done 2026-11-05)
+
+1. Dashboard: enable R2 and subscribe to Workers Paid (Containers need it).
+2. Dashboard: an account API token for Terraform, in `pass` as `skolia-terraform`:
+   - Account: Workers Scripts Edit, Workers R2 Storage Edit, D1 Edit, Queues Edit, Account API Tokens Edit, Notifications Edit
+   - Zone skolia.io: Zone Read, Workers Routes Edit
+3. Dashboard: an R2 token for the state bucket, in `pass` as `skolia-tfstate-access-id` and `skolia-tfstate-secret-access-key`.
+4. The state bucket `skolia-tfstate`, created once through the API with the Terraform token (Terraform can't create its own state bucket).
+5. skolia.io bought through Cloudflare Registrar, so its zone is on the account.
+6. Dashboard (Notifications): a Billing Budget alert in dollars. `alerts.tf` covers per-product usage, but Containers have no usage alert and the provider has no budget alert type.
+
+## Environment
 
 ```fish
-set -x CLOUDFLARE_ACCOUNT_ID <account id>
-set -x CLOUDFLARE_API_TOKEN <terraform token>
+set -l p cloudflare/andyyu2004@gmail.com/1d3ca537bca3f2918d2778118d23f0a8
+set -x CLOUDFLARE_ACCOUNT_ID 1d3ca537bca3f2918d2778118d23f0a8
+set -x CLOUDFLARE_API_TOKEN (pass show $p/skolia-terraform)
 set -x TF_VAR_account_id $CLOUDFLARE_ACCOUNT_ID
-set -x TF_VAR_alert_email <address for billing alerts>
-set -x AWS_ACCESS_KEY_ID <state bucket access key id>
-set -x AWS_SECRET_ACCESS_KEY <state bucket secret>
-cd infra
-terraform init -backend-config="endpoints={s3=\"https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com\"}"
+set -x TF_VAR_alert_email andyyu2004@gmail.com
+set -x AWS_ACCESS_KEY_ID (pass show $p/skolia-tfstate-access-id)
+set -x AWS_SECRET_ACCESS_KEY (pass show $p/skolia-tfstate-secret-access-key)
+terraform -chdir=infra init -backend-config="endpoints={s3=\"https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com\"}"
 ```
 
 ## Deploy
 
-From the repo root, with the variables above set:
+From the repo root, with the environment above:
 
 ```fish
 pnpm --filter @skolia/reader build
-pnpm --dir api exec wrangler deploy --dry-run --outdir dist
-terraform -chdir=infra apply
-terraform -chdir=infra output -raw d1_database_id  # put it in api/wrangler.jsonc as database_id
+pnpm --dir api exec wrangler deploy --dry-run --outdir dist   # the bundle Terraform uploads
+terraform -chdir=infra plan -out=skolia.tfplan
+terraform -chdir=infra apply skolia.tfplan
 pnpm --dir api exec wrangler d1 migrations apply skolia --remote
 ```
 
-Then the skolia-ingest Worker and its container (wrangler builds the image from `analysis/Dockerfile`, so `data/lexicon/pl.sqlite` and `pl-valency.json` must exist; needs Workers Paid):
+`api/wrangler.jsonc` holds the D1 id (`terraform -chdir=infra output -raw d1_database_id`); update it if the database is ever recreated.
+
+Then the ingest Worker and container, when `analysis/` or `api/src/worker/ingest.ts` changed. Wrangler builds `analysis/Dockerfile` for amd64 (so `data/lexicon/pl.sqlite` and `pl-valency.json` must exist) and pushes about 2.8 GB. It runs with your `wrangler login`, not the Terraform token:
 
 ```fish
 function tf_out; terraform -chdir=infra output -raw $argv[1]; end
-pnpm --dir api exec wrangler deploy -c wrangler.ingest.jsonc \
-    --var S3_ENDPOINT:(tf_out r2_s3_endpoint) \
-    --secrets-file (printf 'S3_ACCESS_KEY_ID=%s\nS3_SECRET_ACCESS_KEY=%s\n' (tf_out ingest_s3_access_key_id) (tf_out ingest_s3_secret_access_key) | psub -f)
+set -l endpoint (tf_out r2_s3_endpoint)
+set -l secrets (mktemp); chmod 600 $secrets
+printf 'S3_ACCESS_KEY_ID=%s\nS3_SECRET_ACCESS_KEY=%s\n' (tf_out ingest_s3_access_key_id) (tf_out ingest_s3_secret_access_key) > $secrets
+set -e CLOUDFLARE_API_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+pnpm --dir api exec wrangler deploy -c wrangler.ingest.jsonc --var S3_ENDPOINT:$endpoint --secrets-file $secrets
+rm $secrets
+```
+
+## Check
+
+```fish
+curl -s https://skolia.io/api/documents
 ```

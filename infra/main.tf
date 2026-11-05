@@ -3,8 +3,9 @@ locals {
 }
 
 data "cloudflare_zone" "skolia" {
+  count = var.domain == null ? 0 : 1
   filter = {
-    name = "skolia.io"
+    name = var.domain
   }
 }
 
@@ -57,20 +58,31 @@ resource "cloudflare_workers_script" "skolia" {
       type       = "queue"
       queue_name = cloudflare_queue.ingest.queue_name
     },
+    {
+      name = "MAX_IMPORTS_PER_DAY"
+      type = "plain_text"
+      text = tostring(var.max_imports_per_day)
+    },
   ]
 }
 
+resource "cloudflare_workers_script_subdomain" "skolia" {
+  account_id  = var.account_id
+  script_name = cloudflare_workers_script.skolia.script_name
+  enabled     = true
+}
+
 resource "cloudflare_workers_custom_domain" "apex" {
+  count      = var.domain == null ? 0 : 1
   account_id = var.account_id
-  zone_id    = data.cloudflare_zone.skolia.id
-  hostname   = "skolia.io"
+  zone_id    = data.cloudflare_zone.skolia[0].id
+  hostname   = var.domain
   service    = cloudflare_workers_script.skolia.script_name
 }
 
-# The name filter must be URL-encoded; the exact match guards against a partial match.
-data "cloudflare_account_api_token_permission_groups" "r2_bucket_item_write" {
+# All groups, picked by exact name below (the singular data source returns null here)
+data "cloudflare_account_api_token_permission_groups_list" "all" {
   account_id = var.account_id
-  name       = "Workers%20R2%20Storage%20Bucket%20Item%20Write"
 }
 
 resource "cloudflare_account_token" "ingest_r2" {
@@ -80,7 +92,7 @@ resource "cloudflare_account_token" "ingest_r2" {
     effect = "allow"
     permission_groups = [{
       id = one([
-        for g in data.cloudflare_account_api_token_permission_groups.r2_bucket_item_write.permission_groups :
+        for g in data.cloudflare_account_api_token_permission_groups_list.all.result :
         g.id if g.name == "Workers R2 Storage Bucket Item Write"
       ])
     }]

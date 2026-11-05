@@ -1,7 +1,7 @@
 // Document metadata in a local SQLite file, with the same SQL and migrations as D1.
 import { readdirSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { ADD, GET, LIST, addParams, toRecord } from "../documents.ts";
+import { ADD, COUNT_SINCE, GET, LIST, addParams, toCount, toRecord } from "../documents.ts";
 import type { DocumentRecord, DocumentStore } from "../ports.ts";
 
 const MIGRATIONS = new URL("../../migrations/", import.meta.url);
@@ -25,6 +25,10 @@ export class SqliteDocuments implements DocumentStore {
 
   async add(record: DocumentRecord): Promise<void> {
     this.db.prepare(ADD).run(...addParams(record));
+  }
+
+  async countImportedSince(since: string): Promise<number> {
+    return toCount(this.db.prepare(COUNT_SINCE).get(since));
   }
 }
 

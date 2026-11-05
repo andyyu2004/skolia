@@ -7,6 +7,14 @@ import type { DocumentRecord } from "./ports.ts";
 export const LIST = "SELECT * FROM document ORDER BY imported DESC";
 export const GET = "SELECT * FROM document WHERE id = ?";
 export const ADD = "INSERT OR IGNORE INTO document VALUES (?, ?, ?, ?, ?)";
+// ISO 8601 UTC strings sort in time order
+export const COUNT_SINCE = "SELECT COUNT(*) AS n FROM document WHERE imported >= ?";
+
+export function toCount(row: Record<string, unknown> | null | undefined): number {
+  const n = row?.["n"];
+  if (typeof n !== "number") throw new Error(`malformed count row: ${JSON.stringify(row)}`);
+  return n;
+}
 
 export function addParams(record: DocumentRecord): [string, string, string, string, number] {
   return [record.id, record.title, record.lang, record.imported, record.words];

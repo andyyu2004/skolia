@@ -19,15 +19,18 @@ export interface Deps {
   blobs: BlobStore;
   queue: JobQueue;
   decode: Decode;
+  /** New texts accepted per UTC day, across everyone: analysis time is what costs
+   * money. Importing a text that's already here doesn't count. */
+  maxImportsPerDay: number;
   now?: () => Date;
 }
 
 const STATES: readonly State[] = ["queued", "analysing", "ready", "failed"];
 const ID = /^[0-9a-f]{64}$/;
 const MAX_TITLE_LENGTH = 200;
-// A character is at most 4 UTF-8 bytes; JSON escaping (\n, \") can double a few more.
-// The exact character limit is checked after parsing.
-const MAX_BODY_BYTES = MAX_TEXT_LENGTH * 4 + 64 * 1024;
+// A character is at most 6 bytes in JSON (\uXXXX), plus room for the title. The exact
+// character limit is checked after parsing.
+const MAX_BODY_BYTES = MAX_TEXT_LENGTH * 6 + 4 * 1024;
 const JSON_TYPE = "application/json";
 
 export function createApp(deps: Deps): Hono {
@@ -72,6 +75,10 @@ export function createApp(deps: Deps): Hono {
       // A failed import is retried by importing the same text again
       if (summary.state !== "failed") return c.json<DocumentSummary>(summary, 200);
     } else {
+      const today = now().toISOString().slice(0, 10);
+      if ((await deps.documents.countImportedSince(today)) >= deps.maxImportsPerDay) {
+        return c.json<ApiError>({ error: "Today's imports are used up. Try again tomorrow." }, 429);
+      }
       await deps.blobs.put(textKey(id), request.text, "text/plain; charset=utf-8");
       await deps.documents.add({
         id,
@@ -175,7 +182,14 @@ export function isOutdated(status: Status, latest: Versions | null): boolean {
   return nameOf(status.analysis) !== latest.analysis || nameOf(status.bundle) !== latest.bundle;
 }
 
-/** Longer than any job takes (a text at the limit takes about 10 minutes on a laptop),
+/** A daily import cap from configuration: a whole number, at least 0. Null if it isn't
+ * one, so the caller can refuse to start rather than run uncapped. */
+export function parseImportCap(raw: string | undefined): number | null {
+  if (raw === undefined || !/^\d+$/.test(raw.trim())) return null;
+  return Number(raw.trim());
+}
+
+/** Longer than any job takes (a text at the limit takes about a minute on a laptop),
  * so a document queued or analysing for this long has lost its job. Queueing it again is
  * safe: ingest reuses blobs that already exist. */
 export const STUCK_AFTER_MS = 30 * 60 * 1000;
