@@ -3,11 +3,12 @@ import { existsSync } from "node:fs";
 import { after, before, test } from "node:test";
 import { createTestHarness, type TestHarness } from "wrangler";
 import type { KnownLemma, LemmaStatus } from "@skolia/shared/api";
-import { MIGRATIONS } from "./user-data.ts";
+import { MIGRATIONS } from "./user/migrations/index.ts";
 
 const dist = new URL("../dist/", import.meta.url);
 
 interface UserStub {
+  migrate(version: number): Promise<void>;
   lemmas(): Promise<KnownLemma[]>;
   setLemma(lemmaId: string, status: LemmaStatus, updated: string): Promise<void>;
 }
@@ -40,13 +41,24 @@ test("each user's Durable Object keeps its own lemmas", async () => {
   assert.deepEqual(await env.USER.getByName("bob").lemmas(), []);
 });
 
-test("the migrations made the tables and recorded how many ran", async () => {
+test("a new object is migrated to the latest version, and migrates down to empty and back up", async () => {
   const env = await server.getWorker<Env>().getEnv();
-  await env.USER.getByName("carol").lemmas();
+  const carol = env.USER.getByName("carol");
+  await carol.lemmas();
   const storage = await server.getWorker().getDurableObjectStorage("User", { name: "carol" });
-  const tables = await storage.exec<{ name: string }>("select name from sqlite_master where type = 'table' order by name");
-  assert.ok(tables.some((t) => t.name === "known_lemma"));
-  assert.deepEqual(await storage.exec("select count(*) as n from migration"), [{ n: MIGRATIONS.length }]);
+  const tables = async () => (await storage.exec<{ name: string }>("select name from sqlite_master where type = 'table'")).map((t) => t.name);
+  const versions = async () => (await storage.exec<{ version: number }>("select version from migration order by version")).map((r) => r.version);
+  const all = MIGRATIONS.map((_, i) => i + 1);
+
+  assert.ok((await tables()).includes("known_lemma"));
+  assert.deepEqual(await versions(), all);
+  await carol.migrate(0);
+  assert.ok(!(await tables()).includes("known_lemma"));
+  assert.deepEqual(await versions(), []);
+  await carol.migrate(MIGRATIONS.length);
+  assert.ok((await tables()).includes("known_lemma"));
+  assert.deepEqual(await versions(), all);
+  await assert.rejects(carol.migrate(MIGRATIONS.length + 1));
 });
 
 test("known_lemma is WITHOUT ROWID", async () => {

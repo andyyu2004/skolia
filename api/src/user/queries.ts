@@ -1,13 +1,5 @@
 import { LEMMA_STATUSES, parseLemmaId, type KnownLemma } from "@skolia/shared/api";
 
-export const MIGRATIONS: readonly string[] = [
-  `CREATE TABLE known_lemma (
-    lemma_id TEXT PRIMARY KEY NOT NULL,
-    status TEXT NOT NULL,
-    updated TEXT NOT NULL
-  ) WITHOUT ROWID`,
-];
-
 export const LEMMAS = "SELECT lemma_id, status, updated FROM known_lemma";
 export const SET_LEMMA = `INSERT INTO known_lemma (lemma_id, status, updated) VALUES (?, ?, ?)
   ON CONFLICT (lemma_id) DO UPDATE SET status = excluded.status, updated = excluded.updated`;
