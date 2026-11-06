@@ -9,7 +9,7 @@ from .. import ud
 from ..parsed import ParsedSentence, ParsedToken, ParsedWord
 
 if TYPE_CHECKING:
-    from stanza.models.common.doc import Document, Word
+    from stanza.models.common.doc import Document, Token, Word
 
 # tokenize: split into sentences and tokens; mwt: split fused words (zrobiłem -> zrobił + em);
 # pos: UPOS + XPOS + features; lemma: dictionary form; depparse: head + deprel
@@ -17,6 +17,8 @@ PROCESSORS = "tokenize,mwt,pos,lemma,depparse"
 
 # Stanza numbers words in a sentence from 1 and uses head 0 for the root
 ROOT_HEAD = 0
+# What Stanza puts for the text and lemma of a token it won't read, e.g. a long URL
+UNKNOWN = "<UNK>"
 
 
 class StanzaParser:
@@ -39,10 +41,12 @@ class StanzaParser:
         return convert(self._nlp(text))
 
 
-def convert_word(word: Word) -> ParsedWord:
+def convert_word(word: Word, surface: str | None = None) -> ParsedWord:
+    """surface: the source text of a one-word token, which Stanza's word text can lack
+    (UNKNOWN for a very long token, such as a URL)."""
     return ParsedWord(
-        text=word.text,
-        lemma=word.lemma,
+        text=surface if surface is not None else word.text,
+        lemma=None if word.lemma == UNKNOWN else word.lemma,
         upos=ud.parse_upos(word.upos),
         xpos=word.xpos,
         feats=ud.parse_feats(word.feats),
@@ -53,16 +57,15 @@ def convert_word(word: Word) -> ParsedWord:
 
 def convert(doc: Document) -> list[ParsedSentence]:
     return [
-        ParsedSentence(
-            tuple(
-                ParsedToken(
-                    text=tok.text,
-                    start=tok.start_char,
-                    end=tok.end_char,
-                    words=tuple(convert_word(w) for w in tok.words),
-                )
-                for tok in sent.tokens
-            )
-        )
+        ParsedSentence(tuple(convert_token(doc.text, tok) for tok in sent.tokens))
         for sent in doc.sentences
     ]
+
+
+def convert_token(text: str, tok: Token) -> ParsedToken:
+    surface = text[tok.start_char : tok.end_char]
+    if len(tok.words) == 1:
+        words = (convert_word(tok.words[0], surface),)
+    else:
+        words = tuple(convert_word(w) for w in tok.words)
+    return ParsedToken(text=surface, start=tok.start_char, end=tok.end_char, words=words)
