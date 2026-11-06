@@ -1,15 +1,46 @@
-"""What a language plugin must provide. A plugin is a module, e.g. skolia_analysis.pl.
+"""What a language plugin provides. Each language is a package under lang/ (lang/pl), and
+lang/__init__.py lists them. Code outside lang/ reaches a language only through this.
 
-This is the subset of the LanguagePlugin interface in ARCHITECTURE.md that the analyser uses so far.
+A language's built data (lexicon and anything else its plugin needs) sits in one directory:
+{lang}.sqlite from skolia-build-lexicon, plus the plugin's own files.
 """
 
 from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
-from .blob import CandidateLookup
-from .parsed import Parser
-from .schema import Blob, ExpressionDef, Reading, Token, Upos
-from .valency import Valency
+from .lexicon.schema import Bundle
+from .lexicon.source import LexiconSource
+from .lexicon.store import Lexicon
+from .parsed import ParsedSentence, Parser
+from .schema import Blob, ExpressionDef
+
+
+@dataclass(frozen=True, slots=True)
+class Options:
+    snap: str | None
+    """A reconcile.POLICIES name, or None to keep the parser's readings as they are."""
+    candidates: bool = True
+    """List every dictionary reading of each word; snapping needs them."""
+    expressions: tuple[ExpressionDef, ...] = ()
+
+
+class Analyzer(Protocol):
+    @property
+    def name(self) -> str:
+        """The version of everything that shapes an analysis; goes into the blob. A
+        document analysed under another name is out of date."""
+        ...
+
+    def __call__(self, text: str) -> Blob: ...
+
+    def assemble(self, text: str, parsed: Iterable[ParsedSentence]) -> Blob:
+        """The blob for text already parsed, so one slow parse can be reused."""
+        ...
+
+
+type Bundler = Callable[[Blob], Bundle]
 
 
 class LanguagePlugin(Protocol):
@@ -31,29 +62,17 @@ class LanguagePlugin(Protocol):
         """Default reconcile policy, or None to keep the parser's readings."""
         ...
 
-    def parser(self, model: str = ...) -> Parser: ...
+    def parser(self, model: str) -> Parser: ...
 
-    def candidate_lookup(self) -> CandidateLookup:
-        """Load the lookup that lists every possible reading of each word."""
+    def analyzer(self, parser: Parser, options: Options, data: Path | None) -> Analyzer:
+        """data: the language's data directory, for the files the plugin uses besides the
+        lexicon; None to analyse without them."""
         ...
 
-    def entry_upos(self, reading: Reading) -> Upos:
-        """Part of speech of the lexicon entry a reading belongs to (its lemma_id)."""
-        ...
+    def lexicon_source(self) -> LexiconSource: ...
 
-    def expression_gap(self, token: Token) -> bool:
-        """True for tokens multi-word expression matching should step over."""
-        ...
+    def bundler(self, lexicon: Lexicon, data: Path | None) -> Bundler: ...
 
-    def analyze(
-        self,
-        text: str,
-        model: Parser,
-        candidates: CandidateLookup | None = None,
-        expressions: Iterable[ExpressionDef] = (),
-        snap: str | None = ...,
-        valency: Valency | None = None,
-    ) -> Blob:
-        """valency: verb frames for explaining cases. Only Polish has them so far (Walenty);
-        generalise the type when a second language does."""
-        ...
+
+def lexicon_path(data: Path, lang: str) -> Path:
+    return data / f"{lang}.sqlite"

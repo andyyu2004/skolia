@@ -114,11 +114,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 HF_HUB_OFFLINE=1
 # Fails the build if the parser needs a model file not fetched above
-RUN python -c "from skolia_analysis import pl; pl.parser(pl.DEFAULT_MODEL)"
+RUN python -c "from skolia_analysis.lang.pl import plugin as pl; pl.parser(pl.DEFAULT_MODEL)"
 COPY data/lexicon/pl.sqlite data/lexicon/pl-valency.json /lexicon/
 
 ENV SKOLIA_HTTP_PORT=8080 \
-    SKOLIA_LEXICON=/lexicon/pl.sqlite \
-    SKOLIA_VALENCY=/lexicon/pl-valency.json
+    SKOLIA_LANGS=pl \
+    SKOLIA_DATA=/lexicon
 EXPOSE 8080
 CMD ["skolia-ingest"]

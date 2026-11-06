@@ -1,5 +1,5 @@
-from skolia_analysis.valency import Valency
-from skolia_analysis.walenty.parse import empty_expansions, parse_schema
+from skolia_analysis.lang.pl.valency import Valency
+from skolia_analysis.lang.pl.walenty.parse import empty_expansions, parse_schema
 
 SZUKAC = "szukać: pewny: _: : imperf: subj{np(str)} + obj{np(gen)} + {prepnp(w,loc)}"
 MIEC = "mieć: pewny: _: : imperf: subj{np(str)} + {np(str)} + {xp(locat)}"

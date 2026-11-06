@@ -3,13 +3,9 @@ import json
 import sys
 from pathlib import Path
 
-from . import conllu, pl, reconcile
-from .blob import CandidateLookup
-from .plugin import LanguagePlugin
+from . import conllu, lang, reconcile
+from .plugin import Options
 from .schema import ExpressionDef
-from .valency import Valency
-
-PLUGINS: dict[str, LanguagePlugin] = {pl.LANG: pl}
 
 EPILOG = """\
 models:
@@ -30,8 +26,8 @@ NO_SNAP = "none"
 
 def main() -> None:
     models = "\n".join(
-        f"  {lang}: {', '.join(p.MODELS)} (default {p.DEFAULT_MODEL})"
-        for lang, p in PLUGINS.items()
+        f"  {code}: {', '.join(p.MODELS)} (default {p.DEFAULT_MODEL})"
+        for code, p in ((code, lang.plugin(code)) for code in lang.LANGS)
     )
     parser = argparse.ArgumentParser(
         prog="skolia-analyze",
@@ -40,7 +36,7 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--lang", choices=sorted(PLUGINS), default=pl.LANG, help="language of the input text"
+        "--lang", choices=lang.LANGS, required=True, help="language of the input text"
     )
     parser.add_argument("--model", help="parser model; see the list below")
     parser.add_argument(
@@ -62,13 +58,14 @@ def main() -> None:
     )
     parser.add_argument("--indent", type=int, help="pretty-print the JSON with this indent")
     parser.add_argument(
-        "--valency",
+        "--data",
         type=Path,
-        help="verb frames file (skolia-build-valency), to explain cases by what verbs require",
+        help="the language's data directory, for what the plugin uses besides the parser "
+        "(Polish: verb frames, to explain cases)",
     )
     args = parser.parse_args()
 
-    plugin = PLUGINS[args.lang]
+    plugin = lang.plugin(args.lang)
     model_name: str = args.model or plugin.DEFAULT_MODEL
     if model_name not in plugin.MODELS:
         parser.error(f"unknown model {model_name!r} for {args.lang}; see --help")
@@ -78,13 +75,11 @@ def main() -> None:
     expressions: list[ExpressionDef] = (
         json.loads(args.expressions.read_text()) if args.expressions else []
     )
-    candidates: CandidateLookup | None = None if args.no_candidates else plugin.candidate_lookup()
-
-    valency = Valency.load(args.valency) if args.valency else None
+    options = Options(snap, candidates=not args.no_candidates, expressions=tuple(expressions))
 
     text = sys.stdin.read()
-    model = plugin.parser(model_name)
-    blob = plugin.analyze(text, model, candidates, expressions, snap, valency)
+    analyzer = plugin.analyzer(plugin.parser(model_name), options, args.data)
+    blob = analyzer(text)
     if args.format == "conllu":
         sys.stdout.write(conllu.write(blob, text))
     else:

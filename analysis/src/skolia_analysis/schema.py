@@ -338,7 +338,7 @@ class Token(TypedDict):
     """Stable key "{lang}:{lemma}:{upos}", e.g. "pl:pies:NOUN". None for punctuation."""
     upos: Upos
     xpos: str | None
-    """Language-specific tag. For Polish an NKJP tag like "subst:sg:gen:m2"; see nkjp.py."""
+    """Language-specific tag. For Polish an NKJP tag like "subst:sg:gen:m2"; see lang/pl/nkjp.py."""
     feats: Feats
     head: int | None
     """Index in the sentence's token list of the word this one depends on. None for the root."""
@@ -351,11 +351,11 @@ class Token(TypedDict):
     parser: NotRequired[Reading]
     """What the parser said, when it was replaced by the closest dictionary reading because
     the dictionary doesn't allow it (see reconcile.py), or by the case the governing verb
-    requires (pl_cases.py). Worth showing: one of them is wrong."""
+    requires (lang/pl/cases.py). Worth showing: one of them is wrong."""
     case_reason: NotRequired[CaseReason]
     """Why the word has its case, for words with a Case feature, when a rule explains it."""
     case_correction: NotRequired[CaseCorrection]
-    """Set when the case was corrected by the governing verb's valency (pl_cases.py)."""
+    """Set when the case was corrected by the governing verb's valency (lang/pl/cases.py)."""
 
 
 class ExpressionDef(TypedDict):

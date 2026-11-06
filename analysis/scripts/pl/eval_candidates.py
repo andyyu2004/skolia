@@ -4,7 +4,7 @@ Runs MorfeuszCandidates over a UD treebank (CoNLL-U) and compares every word's g
 (lemma, upos, feats) with the candidate list. Punctuation and symbols are skipped because
 the blob never lists candidates for them.
 
-usage: uv run python scripts/eval_candidates.py treebank.conllu [...] [--show N]
+usage: uv run python scripts/pl/eval_candidates.py treebank.conllu [...] [--show N]
 """
 
 import argparse
@@ -13,7 +13,7 @@ from collections.abc import Iterator, Mapping
 from pathlib import Path
 
 from skolia_analysis.conllu import GoldWord, read
-from skolia_analysis.pl import MorfeuszCandidates
+from skolia_analysis.lang.pl.morfeusz import MorfeuszCandidates
 from skolia_analysis.schema import Reading
 
 SKIPPED_UPOS = {"PUNCT", "SYM"}

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict, cast
 
-from .schema import Case, Upos
+from ...schema import Case, Upos
 from .walenty.model import Expansions, Phrase, Schema
 from .walenty.parse import parse_expansions, parse_schema, schema_lines
 from .walenty.vocabulary import CaseSpec, Lemma, PartOfSpeech

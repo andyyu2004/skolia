@@ -3,18 +3,18 @@ from pathlib import Path
 
 import pytest
 
-from skolia_analysis.walenty.model import Phrase, Position
-from skolia_analysis.walenty.parse import (
+from skolia_analysis.lang.pl.walenty.model import Phrase, Position
+from skolia_analysis.lang.pl.walenty.parse import (
     WalentyError,
     parse_expansions,
     parse_positions,
     parse_schema,
     schema_lines,
 )
-from skolia_analysis.walenty.render import render_schema
-from skolia_analysis.walenty.vocabulary import PartOfSpeech
+from skolia_analysis.lang.pl.walenty.render import render_schema
+from skolia_analysis.lang.pl.walenty.vocabulary import PartOfSpeech
 
-WALENTY = Path(__file__).resolve().parents[2] / "data/walenty/text/walenty_20180630-text"
+WALENTY = Path(__file__).resolve().parents[3] / "data/walenty/text/walenty_20180630-text"
 
 
 def phrase(text: str) -> Phrase:

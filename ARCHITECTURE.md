@@ -49,19 +49,23 @@ Mark/review:  phone first, synced later
 
 ## Language plugin
 
+Everything language-specific lives in `analysis/src/skolia_analysis/lang/<lang>/`. Code outside it reaches a language only through `plugin.py`, and `lang/__init__.py` lists the languages:
+
 ```python
 class LanguagePlugin:
-    code: str
-    def segment(text) -> list[Sentence]
-    def analyze(sentence) -> list[Token]        # lemma, upos, feats, head, deprel, candidates
-    def paradigm_layout(upos) -> Layout         # e.g. noun: rows=Case, cols=Number
-    def government(lemma, upos) -> list[Frame]  # optional: "do + Gen", "pomagać + Dat"
-    def aspect_partner(lemma) -> str | None     # optional, language-specific
+    LANG: str                                    # "pl"
+    MODELS, DEFAULT_MODEL, DEFAULT_SNAP          # parsers by name, reconcile policy
+    def parser(model) -> Parser
+    def analyzer(parser, options, data) -> Analyzer   # text -> blob; its name versions the blob
+    def lexicon_source() -> LexiconSource        # Kaikki entries in the analyser's terms
+    def bundler(lexicon, data) -> Bundler        # blob -> bundle: senses, paradigms, frames
 ```
+
+`data` is the language's data directory: the lexicon (`{lang}.sqlite`) and whatever else the plugin builds (Polish: `pl-valency.json`).
 
 Polish: COMBO (XLM-RoBERTa, trained on UD Polish PDB) picks the reading that fits the context and gives the dependency parse; Stanza models are available as alternatives. Morfeusz 2 supplies the list of candidate readings and generates missing paradigms. When the parser's reading isn't one Morfeusz allows, the closest Morfeusz reading replaces it and the parser's is kept alongside. Measured choices and scores: `analysis/EVALUATION.md`.
 
-Why a word has its case is worked out at import (`pl_cases.py`) from the dependency tree and the verb's valency in Walenty (IPI PAN's valency dictionary, CC BY-SA 4.0): each token with a case gets a `case_reason` (the rule, the word that causes it, and the verb or preposition). Rules: preposition, agreement, coordination, governing numeral, verb's lexical case (`szukać` + gen), negation (`nie mam czasu`), structural object, partitive, subject, predicate after `być`, possessive and noun complement, verbal noun's object, instrumental, vocative. The reader turns the reason into a sentence and underlines the triggering word.
+Why a word has its case is worked out at import (`analysis/src/skolia_analysis/lang/pl/cases.py`) from the dependency tree and the verb's valency in Walenty (IPI PAN's valency dictionary, CC BY-SA 4.0): each token with a case gets a `case_reason` (the rule, the word that causes it, and the verb or preposition). Rules: preposition, agreement, coordination, governing numeral, verb's lexical case (`szukać` + gen), negation (`nie mam czasu`), structural object, partitive, subject, predicate after `być`, possessive and noun complement, verbal noun's object, instrumental, vocative. The reader turns the reason into a sentence and underlines the triggering word.
 
 ## Lexicon (static, per language)
 

@@ -7,10 +7,9 @@ wrangler dev and on Cloudflare.
   SKOLIA_S3_HOST       Host header for the endpoint; optional, for wrangler dev
                        (see S3Blobs)
   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION   S3 credentials
-  SKOLIA_LEXICON       Polish lexicon .sqlite (skolia-build-lexicon)
-  SKOLIA_VALENCY       Polish verb frames .json (skolia-build-valency); optional, for
-                       explaining cases by what verbs require
-  SKOLIA_MODEL         Polish parser model (default: the plugin's default)
+  SKOLIA_LANGS         languages to ingest, comma-separated: pl
+  SKOLIA_DATA          the languages' data directory: {lang}.sqlite (skolia-build-lexicon)
+                       and each plugin's own files (pl: pl-valency.json)
 """
 
 import logging
@@ -20,11 +19,9 @@ import sys
 from pathlib import Path
 from types import FrameType
 
-from .. import pl
-from ..lexicon import bundle
-from ..lexicon import pl as lexicon_pl
+from .. import lang
 from ..lexicon.store import Lexicon
-from ..valency import Valency
+from ..plugin import Options, lexicon_path
 from .blobs import S3Blobs
 from .http import HttpJobs, serve
 from .worker import Ingester, Pipeline
@@ -39,19 +36,17 @@ def env(name: str) -> str:
     return value
 
 
-def polish(lexicon_path: Path, valency_path: Path | None, model: str) -> Pipeline:
-    parser = pl.parser(model)
-    candidates = pl.candidate_lookup()
-    lexicon = Lexicon(lexicon_path)
-    converter = lexicon_pl.Converter()
-    valency = Valency.load(valency_path) if valency_path else None
+def pipeline(code: str, data: Path) -> Pipeline:
+    plugin = lang.plugin(code)
+    log.info("loading %s pipeline (model %s)", code, plugin.DEFAULT_MODEL)
+    parser = plugin.parser(plugin.DEFAULT_MODEL)
+    analyzer = plugin.analyzer(parser, Options(plugin.DEFAULT_SNAP), data)
+    lexicon = Lexicon(lexicon_path(data, code))
     return Pipeline(
-        lang=pl.LANG,
-        analyze=lambda text: pl.analyze(text, parser, candidates, valency=valency),
-        bundle=lambda blob: bundle.make(
-            blob, lexicon, converter.paradigms, valency.frames if valency else bundle.no_frames
-        ),
-        analyzer=pl.analyzer_name(parser.name, valency=valency),
+        lang=code,
+        analyze=analyzer,
+        bundle=plugin.bundler(lexicon, data),
+        analyzer=analyzer.name,
         lexicon_version=lexicon.version(),
     )
 
@@ -85,13 +80,12 @@ def main() -> None:
         os.environ.get("SKOLIA_S3_ENDPOINT") or None,
         os.environ.get("SKOLIA_S3_HOST") or None,
     )
-    lexicon_path = Path(env("SKOLIA_LEXICON"))
-    model = os.environ.get("SKOLIA_MODEL") or pl.DEFAULT_MODEL
-    log.info("loading %s pipeline (model %s)", pl.LANG, model)
-    valency = os.environ.get("SKOLIA_VALENCY")
-    if not valency:
-        log.warning("SKOLIA_VALENCY not set: case reasons won't use verb frames")
-    pipelines = {pl.LANG: polish(lexicon_path, Path(valency) if valency else None, model)}
+    data = Path(env("SKOLIA_DATA"))
+    codes = env("SKOLIA_LANGS").split(",")
+    unknown = set(codes) - set(lang.LANGS)
+    if unknown:
+        sys.exit(f"skolia-ingest: unknown languages in SKOLIA_LANGS: {', '.join(sorted(unknown))}")
+    pipelines = {code: pipeline(code, data) for code in codes}
     ingester = Ingester(blobs, pipelines)
     ingester.publish_versions()
     log.info("waiting for jobs")

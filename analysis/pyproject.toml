@@ -29,7 +29,7 @@ skolia-analyze = "skolia_analysis.cli:main"
 skolia-build-lexicon = "skolia_analysis.lexicon.cli:build_main"
 skolia-bundle = "skolia_analysis.lexicon.cli:bundle_main"
 skolia-ingest = "skolia_analysis.ingest.cli:main"
-skolia-build-valency = "skolia_analysis.valency:build_main"
+skolia-build-valency = "skolia_analysis.lang.pl.valency:build_main"
 
 [dependency-groups]
 dev = [

@@ -1,9 +1,9 @@
 """One test per case rule, on hand-built trees (PDB relation names), so no parser runs."""
 
-from skolia_analysis.pl_cases import correct_cases, explain_cases
+from skolia_analysis.lang.pl.cases import correct_cases, explain_cases
+from skolia_analysis.lang.pl.valency import Valency
+from skolia_analysis.lang.pl.walenty.parse import empty_expansions, parse_schema
 from skolia_analysis.schema import Case, Deprel, Feats, Reading, Token, Upos
-from skolia_analysis.valency import Valency
-from skolia_analysis.walenty.parse import empty_expansions, parse_schema
 
 SCHEMATA = [
     "szukać: pewny: _: : imperf: subj{np(str)} + obj{np(gen)}",

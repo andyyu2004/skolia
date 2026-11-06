@@ -26,5 +26,5 @@ rm -rf "$inputs/walenty"
 unzip -q "$inputs/walenty_20180630-text.zip" -d "$inputs/walenty"
 
 cd "$root/analysis"
-uv run --frozen skolia-build-lexicon "$inputs/kaikki.org-dictionary-Polish.jsonl" "$out/pl.sqlite"
+uv run --frozen skolia-build-lexicon pl "$inputs/kaikki.org-dictionary-Polish.jsonl" "$out/pl.sqlite"
 uv run --frozen skolia-build-valency "$inputs/walenty/walenty_20180630-text" "$out/pl-valency.json"

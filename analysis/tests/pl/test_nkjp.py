@@ -1,4 +1,4 @@
-from skolia_analysis.nkjp import UdReading, to_ud
+from skolia_analysis.lang.pl.nkjp import UdReading, to_ud
 from skolia_analysis.schema import Feats, Upos
 
 

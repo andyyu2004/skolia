@@ -7,18 +7,18 @@ A "." inside a slot lists alternatives, so one tag can stand for several reading
 
 The output follows the conventions of the UD Polish PDB treebank (what Stanza is trained
 on), so a dictionary reading can be compared directly with the parser's reading.
-scripts/eval_candidates.py measures how often it matches.
+scripts/pl/eval_candidates.py measures how often it matches.
 
 The tag alone can't say whether "ten" is a determiner or "co" a pronoun; those
-lemma-specific rules live in pl_function_words.py.
+lemma-specific rules live in function_words.py.
 """
 
 import itertools
 from collections.abc import Iterator
 from typing import NamedTuple
 
-from . import pl_function_words
-from .schema import Feats, Upos
+from ...schema import Feats, Upos
+from . import function_words
 
 TAG_SEP = ":"
 ALT_SEP = "."
@@ -140,6 +140,10 @@ VALUE_FEATS: dict[str, Feats] = {
     "col": {"NumType": "Sets"},  # collective: dwoje
 }
 
+# Participles (robiący, robiony) and gerunds (robienie) are tagged ADJ and NOUN but have the
+# verb as lemma (the PDB convention), and for a learner they are forms of the verb
+VERB_FORM_CLASSES = {"pact", "ppas", "ger"}
+
 
 def expand(tag: str) -> Iterator[tuple[str, ...]]:
     slots = (slot.split(ALT_SEP) for slot in tag.split(TAG_SEP))
@@ -178,7 +182,5 @@ def to_ud(tag: str, lemma: str, proper_name: bool = False) -> Iterator[UdReading
         if upos == "NOUN" and proper_name:
             upos = "PROPN"
         xpos = TAG_SEP.join(slots)
-        for final_upos, final_feats in pl_function_words.adjust(
-            grammatical_class, lemma, upos, feats
-        ):
+        for final_upos, final_feats in function_words.adjust(grammatical_class, lemma, upos, feats):
             yield UdReading(final_upos, final_feats, xpos)

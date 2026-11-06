@@ -2,8 +2,8 @@
 
 from typing import Literal, NotRequired, TypedDict
 
+from ..lang.pl.walenty.model import Schema
 from ..schema import Feats, Upos
-from ..walenty.model import Schema
 
 
 class Example(TypedDict):

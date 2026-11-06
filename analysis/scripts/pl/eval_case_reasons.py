@@ -1,6 +1,6 @@
 """How many words with a case get a case reason, by rule, plus a sample to read.
 
-usage: uv run python scripts/eval_case_reasons.py gold.conllu --cache DIR --valency FILE
+usage: uv run python scripts/pl/eval_case_reasons.py gold.conllu --cache DIR --valency FILE
 
 Runs the analyser (default model, snap) on the treebank's text, reusing eval_ud.py's
 parse cache. Only says which rule fired, not whether it is right: read the sample.
@@ -11,11 +11,10 @@ import random
 from collections import Counter
 from pathlib import Path
 
-from eval_ud import CachedParser, gold_text
-
-from skolia_analysis import pl
+from skolia_analysis.lang.pl import plugin as pl
+from skolia_analysis.lang.pl.valency import Valency
 from skolia_analysis.schema import Token
-from skolia_analysis.valency import Valency
+from skolia_analysis.treebank import CachedParser, gold_text
 
 SAMPLE = 40
 SEED = 1
@@ -40,7 +39,7 @@ def main() -> None:
     args = parser.parse_args()
 
     text = gold_text(args.gold)
-    model = CachedParser(pl.DEFAULT_MODEL, args.cache)
+    model = CachedParser(pl.LANG, pl.DEFAULT_MODEL, lambda: pl.parser(pl.DEFAULT_MODEL), args.cache)
     valency = Valency.load(args.valency) if args.valency else None
     blob = pl.assemble(text, model(text), model.name, pl.candidate_lookup(), valency=valency)
 

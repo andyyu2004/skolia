@@ -3,8 +3,8 @@
 from collections.abc import Callable
 
 from .. import ud
+from ..lang.pl.walenty.model import Schema
 from ..schema import Blob, Feats, Upos
-from ..walenty.model import Schema
 from .schema import BUNDLE_SCHEMA, Bundle, BundleParadigm, Entry, Match, Paradigm
 from .store import Lexicon, Row
 

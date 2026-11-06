@@ -8,19 +8,24 @@ and converted with the same code the analyser uses.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from importlib.metadata import version
 from typing import TYPE_CHECKING
 
-from .. import pl
-from ..nkjp import tag_class
-from ..schema import Feats, Upos
-from .kaikki import KaikkiEntry, KaikkiSense
-from .schema import Example, Form, Paradigm, Relation, Sense
+from ...lexicon.kaikki import KaikkiEntry, KaikkiSense
+from ...lexicon.schema import Example, Form, Paradigm, Relation, Sense
+from ...lexicon.source import Converted
+from ...schema import Feats, Upos
+from .morfeusz import MorfeuszCandidates, interpretation_readings, split_homonym
+from .nkjp import VERB_FORM_CLASSES, tag_class
 
 if TYPE_CHECKING:
     from morfeusz2 import Morfeusz
 
-LANG = pl.LANG
+ATTRIBUTION = (
+    "Meanings from Wiktionary (https://en.wiktionary.org) via kaikki.org, CC BY-SA 4.0; "
+    "forms from Morfeusz 2 / SGJP (http://morfeusz.sgjp.pl), BSD 2-clause; "
+    "verb valency from Walenty, IPI PAN (http://zil.ipipan.waw.pl/Walenty), CC BY-SA 4.0"
+)
 
 # Kaikki part of speech -> the UPOS the analyser may give the same word. The first is the
 # fallback when Morfeusz doesn't know the headword.
@@ -117,25 +122,23 @@ HAND_SENSES: dict[tuple[str, Upos], list[str]] = {
 }
 
 
-@dataclass
-class Converted:
-    """One Kaikki entry as the analyser would see it."""
+class Source:
+    """Kaikki's Polish entries, each headword filed under the UPOS Morfeusz gives it."""
 
-    lemma: str
-    upos: tuple[Upos, ...]
-    senses: list[Sense] = field(default_factory=lambda: list[Sense]())
-    relations: list[Relation] = field(default_factory=lambda: list[Relation]())
+    attribution = ATTRIBUTION
 
-
-class Converter:
     def __init__(self) -> None:
-        import morfeusz2
+        self._candidates = MorfeuszCandidates()
 
-        self._morf: Morfeusz = morfeusz2.Morfeusz()
-        self._candidates = pl.MorfeuszCandidates()
+    @property
+    def version(self) -> str:
+        return f"morfeusz-{version('morfeusz2')}"
 
-    def __call__(self, entry: KaikkiEntry) -> Converted | None:
-        """None for entries the analyser never looks up: affixes, phrases, inflected forms."""
+    def hand_entries(self) -> Iterator[Converted]:
+        for (lemma, upos), glosses in HAND_SENSES.items():
+            yield Converted(lemma, (upos,), [{"gloss": g, "tags": []} for g in glosses])
+
+    def convert(self, entry: KaikkiEntry) -> Converted | None:
         word, pos = entry.get("word", ""), entry.get("pos", "")
         if pos not in KAIKKI_POS or not word:
             return None
@@ -164,17 +167,24 @@ class Converter:
         found = {r["upos"] for r in readings if r["lemma"] == word and r["upos"] in allowed}
         return tuple(u for u in allowed if u in found) or allowed[:1]
 
-    def paradigms(self, lemma: str, upos: Upos) -> list[Paradigm]:
+
+class Paradigms:
+    def __init__(self) -> None:
+        import morfeusz2
+
+        self._morf: Morfeusz = morfeusz2.Morfeusz()
+
+    def __call__(self, lemma: str, upos: Upos) -> list[Paradigm]:
         """Every form of the lemma Morfeusz can generate, one paradigm per homonym. A verb's
         paradigm includes its participles and gerunds."""
         by_homonym: dict[str, list[Form]] = {}
         seen: set[tuple[str, str]] = set()
         for interpretation in self._morf.generate(lemma):
             orth, base, _tag, _names, _qualifiers = interpretation
-            base_lemma, homonym = pl.split_homonym(base)
+            base_lemma, homonym = split_homonym(base)
             if base_lemma != lemma:
                 continue
-            for reading in pl.interpretation_readings(interpretation):
+            for reading in interpretation_readings(interpretation):
                 if not _in_paradigm(upos, reading["upos"], reading["xpos"]):
                     continue
                 key = (orth, reading["xpos"])
@@ -191,7 +201,7 @@ class Converter:
 
 def _in_paradigm(entry_upos: Upos, form_upos: Upos, xpos: str) -> bool:
     if entry_upos == "VERB":
-        return form_upos in ("VERB", "AUX") or tag_class(xpos) in pl.VERB_FORM_CLASSES
+        return form_upos in ("VERB", "AUX") or tag_class(xpos) in VERB_FORM_CLASSES
     nominal = {"NOUN", "PROPN"}
     if entry_upos in nominal:
         return form_upos in nominal
@@ -275,8 +285,3 @@ def _aspect_partners(entry: KaikkiEntry, word: str) -> Iterator[Relation]:
         tags = set(form.get("tags", []))
         if partner and partner != word and tags and tags <= ASPECT_TAGS:
             yield {"type": "aspect-partner", "lemma": partner, "note": tags.pop()}
-
-
-def hand_entries() -> Iterator[tuple[str, Upos, list[Sense]]]:
-    for (lemma, upos), glosses in HAND_SENSES.items():
-        yield lemma, upos, [{"gloss": g, "tags": []} for g in glosses]

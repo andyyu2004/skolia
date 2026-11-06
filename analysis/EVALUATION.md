@@ -48,11 +48,11 @@ Of the Kraków misses, 280 of 581 are numbers in digits or Roman numerals (tagge
 
 ## Case reasons
 
-`scripts/eval_case_reasons.py` on PDB dev (combo, snap upos, Walenty 2018-07-26): 14,090 of 15,589 words with a case (90.4%) get a reason. By rule: agreement 24.5%, preposition 24.4%, subject 12.8%, structural object 7.6%, possessive 4.9%, coordination 4.6%, noun complement 4.2%, verb's lexical case 3.0%, verbal noun 1.7%, negation, numeral, predicate, instrumental, vocative and partitive under 1% each. The most common words without one: sentence roots in the nominative (headlines, list items) and numerals' own case. This counts coverage, not correctness; the 40-word samples the script prints read right, with one misleading reason found and fixed (multi-word prepositions now name the whole preposition: *w stosunku do*).
+`scripts/pl/eval_case_reasons.py` on PDB dev (combo, snap upos, Walenty 2018-07-26): 14,090 of 15,589 words with a case (90.4%) get a reason. By rule: agreement 24.5%, preposition 24.4%, subject 12.8%, structural object 7.6%, possessive 4.9%, coordination 4.6%, noun complement 4.2%, verb's lexical case 3.0%, verbal noun 1.7%, negation, numeral, predicate, instrumental, vocative and partitive under 1% each. The most common words without one: sentence roots in the nominative (headlines, list items) and numerals' own case. This counts coverage, not correctness; the 40-word samples the script prints read right, with one misleading reason found and fixed (multi-word prepositions now name the whole preposition: *w stosunku do*).
 
 ### Case correction from valency
 
-When the governing verb rules the parser's case out and the form also has the required case, the case is switched (`Szukam psa`: COMBO says accusative, `szukać` takes only the genitive, and `psa` is both). It's on, in its narrow form; the parser's reading is kept and the reader says what changed. Words changed, counted against the gold case (`scripts/eval_ud.py --valency`):
+When the governing verb rules the parser's case out and the form also has the required case, the case is switched (`Szukam psa`: COMBO says accusative, `szukać` takes only the genitive, and `psa` is both). It's on, in its narrow form; the parser's reading is kept and the reader says what changed. Words changed, counted against the gold case (`scripts/pl/eval_case_correction.py`):
 
 | Version | Dev | Test | Train |
 |---|---|---|---|
