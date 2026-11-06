@@ -35,6 +35,17 @@ Times are CPU on an Apple M-series laptop for the whole test set.
 - All models here are trained on PDB train, so PDB test is in-domain. Expect lower scores on other genres.
 - Real text arrives without sentence boundaries marked by paragraphs; segmentation errors will cost a little more than here.
 
+## English
+
+UD English EWT (master, downloaded 2026-11-06), test: 2077 sentences, 25k words, scored the same way. English has no candidate readings, so no snapping.
+
+| Model | UPOS | UFeats | AllTags | Lemmas | UAS | LAS | Parse time |
+|---|---|---|---|---|---|---|---|
+| stanza-accurate (default) | 97.08 | 96.59 | 95.09 | 96.75 | 94.01 | 92.22 | 137 s |
+| stanza | 96.01 | 95.85 | 93.69 | 96.39 | 90.92 | 88.88 | 23 s |
+
+stanza-accurate is ahead on every column, most on the tree (LAS error 11.1% → 7.8%), at about 6 times the parse time. Stanza's English models are trained on EWT train among other treebanks, so this is in-domain too.
+
 ## Lexicon coverage
 
 Share of word tokens (not punctuation, symbols or X) whose entry has at least one meaning, via `scripts/eval_lexicon.py`, lexicon from Kaikki's extract of 2026-10-30. Two texts analysed with the default model:

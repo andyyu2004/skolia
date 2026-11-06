@@ -67,18 +67,23 @@ Polish: COMBO (XLM-RoBERTa, trained on UD Polish PDB) picks the reading that fit
 
 Why a word has its case is worked out at import (`analysis/src/skolia_analysis/lang/pl/cases.py`) from the dependency tree and the verb's valency in Walenty (IPI PAN's valency dictionary, CC BY-SA 4.0): each token with a case gets a `case_reason` (the rule, the word that causes it, and the verb or preposition). Rules: preposition, agreement, coordination, governing numeral, verb's lexical case (`szukać` + gen), negation (`nie mam czasu`), structural object, partitive, subject, predicate after `być`, possessive and noun complement, verbal noun's object, instrumental, vocative. The reader turns the reason into a sentence and underlines the triggering word.
 
+English: Stanza (`default_accurate`, trained on UD English treebanks including EWT) gives the reading and parse on its own. There's no candidate list, case reasons or valency.
+
 ## Lexicon (static, per language)
 
 Built offline (`analysis/src/skolia_analysis/lexicon/`) into one SQLite file per language on the server, keyed by the analyser's `lemma_id`. The lexicon follows the analyser's conventions: each Kaikki (Wiktionary) headword is looked up in Morfeusz and converted with the analyser's own code, so `który` is filed as DET just as the analyser tags it.
 
+English has no Morfeusz: headwords are filed under Kaikki's part of speech mapped to UPOS, and Wiktionary's inflection table gives the paradigm.
+
 ```
-entry(lemma_id, lemma, upos, senses_json, relations_json)
+entry(lemma_id, lemma, upos, senses_json, relations_json, paradigms_json)
   senses:    gloss, tags (slang, dated...), examples, and `when`: the features that select
              the sense (pies the dog: Animacy=Nhum; the cop: Animacy=Hum)
   relations: aspect partner (robić <-> zrobić), derived-from (pani <- pan, rubelek <- rubel)
+  paradigms: forms with UD features, for languages without a generator (English); empty for Polish
 ```
 
-Paradigms aren't stored: Morfeusz generates them, in the analyser's feature conventions, when a document's bundle is made. A verb's paradigm includes its participles and gerunds.
+Polish paradigms aren't stored: Morfeusz generates them, in the analyser's feature conventions, when a document's bundle is made. A verb's paradigm includes its participles and gerunds. English paradigms are stored in UD EWT's conventions: a form lists every feature set it serves (`walk` is the infinitive, the imperative and the present for every person but the third singular), since the reader matches a token to the forms whose features include the token's.
 
 Each imported document gets a bundle with only the lemmas it uses (meanings, relations, paradigms), so taps stay offline. Lookup falls back from the exact `lemma_id` to the same lemma under another part of speech, then to the lemma lowercased. A full-dictionary download for search is a possible later addition (meanings only, without paradigms).
 
@@ -97,7 +102,7 @@ versions/{lang}.json                                    -- what ingest produces 
 - Analyses and bundles are JSON compressed with Brotli (quality 11), stored with `Content-Encoding: br` and sent as stored to clients that accept it (the API decompresses for those that don't). On *Kamizelka*, Brotli was 41% (analysis) and 59% (bundle) the size of gzip, and smaller than zstd at level 22; MessagePack was no smaller than JSON once compressed.
 - Texts are limited to 20,000 characters per import (about 3,000 words, roughly a minute of analysis), checked by the API and again by ingest. The API also accepts at most `max_imports_per_day` new texts per UTC day across all users (Terraform, default 50; a text already imported doesn't count), so container time is bounded whoever is importing.
 - Everything about a document is under one prefix, so it can be inspected or deleted in one place. `{analyzer}` and `{lexicon}` are short hashes of the version strings. Stale analyses and bundles are the ones `status.json` doesn't point at; clean them up by that rule, not by age (an old document's current analysis is old too).
-- Documents are deduped by content hash: if many users import the same text, it's analyzed once. A user only sees texts they imported themselves or texts in the shared library.
+- Documents are deduped by a hash of language and text (`sha256("{lang}\n{text}")`): if many users import the same text, it's analyzed once. A user only sees texts they imported themselves or texts in the shared library.
 - An analysis or bundle is named by everything it depends on: the blob shape (`SCHEMA`, `BUNDLE_SCHEMA`), the analyser (plugin version, models, Morfeusz, snap policy, Walenty) and, for the bundle, the lexicon. Bump `PLUGIN_VERSION` whenever the analysis output changes, and the shape numbers whenever the JSON shape does. The generated `schema.gen.ts` carries the shape numbers, and the reader refuses a shape it doesn't know.
 - The reader fetches the analysis and bundle by those names (`/api/documents/{id}/analysis/{name}`), so what's at a URL never changes and is cached forever, and an analysis and bundle always belong together.
 - Migration: when the API lists or opens a ready document whose analysis or bundle name isn't the one in `versions/{lang}.json`, it queues the document again. Until the new analysis is ready, the status keeps the old keys, so the reader shows the old analysis and says it's updating. Ingest reuses an analysis and bundle whose keys already exist, so a document queued twice costs nothing. A document queued or analysing for over 30 minutes has lost its job and is queued again. A storage failure puts the job back on the queue; an analysis that fails is recorded and not retried. Ingest fails a job whose analysis names another analyser than it published, so a mismatch can't loop. Not done yet: backfilling the shared library ahead of time, and several ingest versions running at once during a deploy (each publishes its own versions). Add read-time upgrade functions only if re-analysis gets expensive.
