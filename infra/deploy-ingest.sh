@@ -131,7 +131,8 @@ deploy() {
   # images, each in place of the Dockerfile under its class_name
   config=wrangler.ingest.deploy.jsonc
   secrets=$(mktemp)
-  trap 'rm -f "$secrets" "$root/api/$config"' EXIT
+  # Expanded now: the trap runs at exit, after deploy's locals are gone
+  trap "rm -f '$secrets' '$root/api/$config'" EXIT
   awk -v images="$(IFS=,; echo "${images[*]}")" '
     BEGIN { n = split(images, pairs, ","); for (i = 1; i <= n; i++) { split(pairs[i], kv, "="); image[kv[1]] = kv[2] } }
     match($0, /"class_name": "[^"]+"/) { class = substr($0, RSTART + 15, RLENGTH - 16) }
