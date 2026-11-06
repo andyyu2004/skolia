@@ -47,6 +47,8 @@ Each user's data lives in their own Durable Object (`api/src/worker/user.ts`), a
 pnpm --dir api user-migrations   # drizzle-kit generate, then inline the SQL into migrations.gen.ts
 ```
 
+Tables keyed by text are `WITHOUT ROWID` (one B-tree instead of a rowid table plus its primary-key index). drizzle-kit can't express that, so add it to the generated `CREATE TABLE` by hand, and check the SQL of any migration that rebuilds such a table.
+
 drizzle-kit's own `migrations.js` imports each migration as a `.sql` module, which wrangler would upload beside `main.js`; Terraform uploads only `main.js`, so the script inlines them and deletes `migrations.js`.
 
 Both are strict TypeScript (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`). The API uses TypeScript 7; the reader stays on 6 because svelte-check, which type-checks the `.svelte` components, supports TypeScript 5 and 6 only (move it to 7 when svelte-check does). The tests run the `.ts` files directly with Node's type stripping (wrangler bundles them for Workers); that also means TypeScript-only syntax (enums, parameter properties) isn't allowed (`erasableSyntaxOnly`).

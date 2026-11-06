@@ -11,6 +11,6 @@ export default {
     ]
   },
   "migrations": {
-    "m0000": "CREATE TABLE `known_lemma` (\n\t`lemma_id` text PRIMARY KEY NOT NULL,\n\t`status` text NOT NULL,\n\t`updated` text NOT NULL\n);\n"
+    "m0000": "CREATE TABLE `known_lemma` (\n\t`lemma_id` text PRIMARY KEY NOT NULL,\n\t`status` text NOT NULL,\n\t`updated` text NOT NULL\n) WITHOUT ROWID;\n"
   }
 };
