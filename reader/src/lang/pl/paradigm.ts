@@ -6,6 +6,8 @@ import {
   degreeLabels,
   numberColumn,
   numberLabels,
+  ONE_ROW,
+  oneRow,
   PERSON_ORDER,
   personLabels,
   personRow,
@@ -184,7 +186,7 @@ function verbTables(builder: Builder, forms: Form[], token: Token): Table[] {
 function comparison(builder: Builder, forms: Form[]): Table | null {
   const citation = forms.filter((f) => f.feats.Polarity !== "Neg" && isCitationForm(f, "Masc"));
   if (!citation.some((f) => f.feats.Degree === "Cmp")) return null;
-  return builder.table("Comparison", citation, () => "", [["", ""]], (f) => f.Degree, degreeLabels());
+  return builder.table("Comparison", citation, oneRow, ONE_ROW, (f) => f.Degree, degreeLabels());
 }
 
 /** The dictionary form of a declining word: nominative singular of the given gender

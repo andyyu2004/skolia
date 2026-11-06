@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Lang } from "@skolia/shared/api";
   import type { Bundle, Token } from "@skolia/shared/schema";
-  import type { Language } from "./lang/types.ts";
+  import { LANGUAGES } from "./lang/index.ts";
   import type { Piece } from "./lib/doc.ts";
   import { entryFor, rankSenses } from "./lib/lexicon.ts";
   import { paradigmTables } from "./lib/paradigm.ts";
@@ -12,22 +12,21 @@
 
   let {
     lang,
-    language,
     bundle,
     piece,
     headText,
     sentenceTokens,
     onclose,
   }: {
-    /** For the lang attribute of text in the document's language */
+    /** The document's language, also for the lang attribute of its text */
     lang: Lang;
-    language: Language;
     bundle: Bundle;
     piece: WordPiece;
     headText: (sentence: number, index: number) => string | null;
     sentenceTokens: (sentence: number) => Token[];
     onclose: () => void;
   } = $props();
+  const language = $derived(LANGUAGES[lang]);
 
   const SHOWN_SENSES = 3;
 
@@ -142,7 +141,7 @@
           <ul class="relations">
             {#each word.entry.relations as relation (relation.type + relation.lemma)}
               <li>
-                {language.relationLabel(relation)}:
+                {language.relationLabel?.(relation) ?? `from (${relation.note ?? "derived"})`}:
                 <span {lang}>{relation.lemma}</span>
               </li>
             {/each}

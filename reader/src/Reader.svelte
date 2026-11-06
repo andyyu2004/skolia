@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { DocumentSummary, ReadingNames } from "@skolia/shared/api";
   import type { Token } from "@skolia/shared/schema";
-  import { LANGUAGES } from "./lang/index.ts";
   import { getDocument, loadReading, type Reading } from "./lib/api.ts";
   import { layout, tokenKey, type Layout } from "./lib/doc.ts";
   import { afterPoll, notice as noticeFor, retryAfter } from "./lib/reading.ts";
@@ -159,7 +158,6 @@
     {#key selected}
       <WordSheet
         lang={reading.lang}
-        language={LANGUAGES[reading.lang]}
         bundle={reading.bundle}
         {piece}
         {headText}

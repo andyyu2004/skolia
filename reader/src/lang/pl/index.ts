@@ -33,7 +33,5 @@ export const polish: Language = {
     "imperfective",
   ]),
   relationLabel: (relation) =>
-    relation.type === "aspect-partner"
-      ? `${relation.note ?? "aspect"} partner`
-      : `from (${relation.note ?? "derived"})`,
+    relation.type === "aspect-partner" ? `${relation.note ?? "aspect"} partner` : null,
 };

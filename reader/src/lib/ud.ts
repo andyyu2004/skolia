@@ -21,6 +21,17 @@ export const UPOS_LABEL: Record<Upos, string> = {
   X: "other",
 };
 
+/** For "Why genitive?" */
+export const CASE_NAME: Record<Case, string> = {
+  Nom: "nominative",
+  Gen: "genitive",
+  Dat: "dative",
+  Acc: "accusative",
+  Ins: "instrumental",
+  Loc: "locative",
+  Voc: "vocative",
+};
+
 // Feature values shown on the sheet, in reading order. Features not listed (AdpType,
 // Variant, PrepCase, ...) are shown only in the raw view.
 const SHOWN: { [K in keyof Feats]?: Partial<Record<NonNullable<Feats[K]>, string>> } = {
@@ -34,15 +45,7 @@ const SHOWN: { [K in keyof Feats]?: Partial<Record<NonNullable<Feats[K]>, string
   Mood: { Imp: "imperative" },
   Tense: { Pres: "present", Past: "past", Fut: "future" },
   Person: { "0": "impersonal", "1": "1st person", "2": "2nd person", "3": "3rd person" },
-  Case: {
-    Nom: "nominative",
-    Gen: "genitive",
-    Dat: "dative",
-    Acc: "accusative",
-    Ins: "instrumental",
-    Loc: "locative",
-    Voc: "vocative",
-  },
+  Case: CASE_NAME,
   Number: { Sing: "singular", Plur: "plural", Ptan: "plural only" },
   Gender: { Masc: "masculine", Fem: "feminine", Neut: "neuter" },
   Animacy: { Hum: "personal", Nhum: "animate", Inan: "inanimate" },
@@ -70,17 +73,6 @@ export function featureWords(feats: Feats): string[] {
   }
   return words;
 }
-
-/** For "Why genitive?" */
-export const CASE_NAME: Record<Case, string> = {
-  Nom: "nominative",
-  Gen: "genitive",
-  Dat: "dative",
-  Acc: "accusative",
-  Ins: "instrumental",
-  Loc: "locative",
-  Voc: "vocative",
-};
 
 // Dependency relations as "the word is the ___ of its head"
 const DEPREL_LABEL: Partial<Record<string, string>> = {

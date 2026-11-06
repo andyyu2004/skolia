@@ -33,6 +33,10 @@ export type Layout = (builder: Builder, forms: Form[], entry: Entry, token: Toke
 /** One label for merged rows or columns: "sg m. pers." + "sg m. anim." -> a shorter one. */
 export type MergeLabels = (labels: string[]) => string;
 
+/** The rows of a table with a single unlabelled row, for builder.table. */
+export const ONE_ROW: Labels = [["", ""]];
+export const oneRow: Key = () => "";
+
 const NUMBER_LABEL: Record<string, string> = { Sing: "sg", Plur: "pl", Ptan: "pl. only" };
 export const PERSON_ORDER = ["1", "2", "3"];
 const PERSON_LABEL: Record<string, string> = { "1": "1st", "2": "2nd", "3": "3rd" };

@@ -85,6 +85,6 @@ export async function loadReading(id: string, names: ReadingNames): Promise<Read
   for (const response of [text, analysis, bundle]) if (!response.ok) throw await failure(response);
   const [a, b] = [(await analysis.json()) as Blob, (await bundle.json()) as Bundle];
   const lang = a.lang;
-  if (a.schema !== SCHEMA || b.schema !== BUNDLE_SCHEMA || !isLang(lang)) return "unsupported";
+  if (a.schema !== SCHEMA || b.schema !== BUNDLE_SCHEMA || !isLang(lang) || b.lang !== lang) return "unsupported";
   return { lang, text: await text.text(), analysis: a, bundle: b };
 }

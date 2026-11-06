@@ -38,5 +38,7 @@ export interface Language {
   partOfWord(token: Token): string | null;
   /** Wiktionary tags the grammar line already shows (gender, aspect), left off senses. */
   grammarTags: ReadonlySet<string>;
-  relationLabel(relation: Relation): string;
+  /** A label for relations the language names itself (Polish aspect partners); others
+   * read "from (note)". */
+  relationLabel?(relation: Relation): string | null;
 }

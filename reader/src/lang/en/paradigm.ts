@@ -6,18 +6,14 @@ import {
   degreeLabels,
   numberColumn,
   numberLabels,
+  ONE_ROW,
+  oneRow,
   personLabels,
   personRow,
   type Builder,
   type Form,
   type Table,
 } from "../../lib/paradigm.ts";
-
-const ONE_ROW = [["", ""]] as const;
-
-function oneRow(): string {
-  return "";
-}
 
 function degreeColumn(f: Feats): string | undefined {
   return f.Degree;

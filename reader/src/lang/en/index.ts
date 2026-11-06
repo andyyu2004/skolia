@@ -9,5 +9,4 @@ export const english: Language = {
   uses: () => [],
   partOfWord: () => null,
   grammarTags: new Set(),
-  relationLabel: (relation) => `from (${relation.note ?? "derived"})`,
 };

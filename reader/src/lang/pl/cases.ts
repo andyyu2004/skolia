@@ -19,7 +19,6 @@ const TWO_CASE: Partial<Record<string, Partial<Record<Case, string>>>> = {
 /** Agreement and coordination point at another word; follow that far, no further. */
 const MAX_CHAIN = 1;
 
-
 export function explainCase(tokens: Token[], index: number, depth = 0): CaseExplanation | null {
   const token = tokens[index];
   const reason = token?.case_reason;
