@@ -3,15 +3,20 @@ import { readdirSync } from "node:fs";
 import { test } from "node:test";
 import { MIGRATIONS } from "./index.ts";
 
-test("MIGRATIONS lists every migration file, numbered from 1 in order", async () => {
+test("MIGRATIONS lists every migration file in order, versioned from 1 and named after its file", async () => {
   const files = readdirSync(new URL(".", import.meta.url))
     .filter((f) => /^\d{4}_.+\.ts$/u.test(f))
     .sort();
   assert.deepEqual(
-    files.map((f) => Number(f.slice(0, 4))),
-    files.map((_, i) => i + 1),
+    MIGRATIONS.map((m) => `${String(m.version).padStart(4, "0")}_${m.name}.ts`),
+    files,
   );
-  const loaded: unknown[] = await Promise.all(files.map((f) => import(`./${f}`)));
-  assert.equal(MIGRATIONS.length, loaded.length);
-  MIGRATIONS.forEach((m, i) => assert.equal(m, loaded[i]));
+  assert.deepEqual(
+    MIGRATIONS.map((m) => m.version),
+    MIGRATIONS.map((_, i) => i + 1),
+  );
+  for (const [i, file] of files.entries()) {
+    const { up, down } = (await import(`./${file}`)) as { up: string; down: string };
+    assert.deepEqual({ up: MIGRATIONS[i]?.up, down: MIGRATIONS[i]?.down }, { up, down });
+  }
 });
