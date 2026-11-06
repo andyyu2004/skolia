@@ -39,7 +39,7 @@ else
   if [ -n "${HF_TOKEN:-}" ]; then
     options+=(--secret id=hf_token,env=HF_TOKEN)
   fi
-  docker buildx build --platform linux/amd64 -f "$root/analysis/Dockerfile" --target cloudflare \
+  docker buildx build --platform linux/amd64 -f "$root/analysis/Dockerfile" \
     --load -t "$tag" ${options[@]+"${options[@]}"} "$root"
 
   # Cloudflare's registry sometimes times out committing a large layer (on 2026-11-06 a
