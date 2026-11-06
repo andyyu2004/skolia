@@ -110,3 +110,8 @@ case $usage_env in
 esac
 node api/src/smoke.ts "$url" "$VERSION"
 '''
+
+[tasks.teardown]
+description = "Delete a preview (pr-<N>): its Workers, container applications, storage, queue and Terraform state"
+usage = 'arg "<env>" help="pr-<N>"'
+run = "infra/teardown.sh $usage_env"
