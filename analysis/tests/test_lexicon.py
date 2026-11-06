@@ -31,8 +31,10 @@ def test_parse_lemma_id_with_separator_in_lemma() -> None:
 def test_resolve_falls_back(tmp_path: Path) -> None:
     path = tmp_path / "pl.sqlite"
     rows = [
-        store.Row("pl:by:PART", "by", "PART", [{"gloss": "would", "tags": []}], []),
-        store.Row("pl:krakowski:ADJ", "krakowski", "ADJ", [{"gloss": "of Kraków", "tags": []}], []),
+        store.Row("pl:by:PART", "by", "PART", [{"gloss": "would", "tags": []}], [], []),
+        store.Row(
+            "pl:krakowski:ADJ", "krakowski", "ADJ", [{"gloss": "of Kraków", "tags": []}], [], []
+        ),
     ]
     store.write(path, rows, {})
     lexicon = store.Lexicon(path)
@@ -45,7 +47,9 @@ def test_resolve_falls_back(tmp_path: Path) -> None:
 
 def test_bundle_shares_feature_sets_and_groups_forms(tmp_path: Path) -> None:
     path = tmp_path / "pl.sqlite"
-    store.write(path, [store.Row("pl:pies:NOUN", "pies", "NOUN", [DOG], [])], {"version": "test/1"})
+    store.write(
+        path, [store.Row("pl:pies:NOUN", "pies", "NOUN", [DOG], [], [])], {"version": "test/1"}
+    )
     gen: Feats = {"Case": "Gen", "Number": "Sing"}
     acc: Feats = {"Case": "Acc", "Number": "Sing"}
 

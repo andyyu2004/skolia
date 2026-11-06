@@ -1,7 +1,8 @@
 """The lexicon on the server: one SQLite file per language, one row per lemma_id.
 
-Senses and relations are stored as JSON in the row: the lexicon is only ever read a whole
-entry at a time. Paradigms aren't stored; Morfeusz generates them when a bundle is made.
+Senses, relations and paradigms are stored as JSON in the row: the lexicon is only ever
+read a whole entry at a time. A language whose paradigms are generated when a bundle is
+made (Polish, by Morfeusz) stores none.
 """
 
 import json
@@ -11,7 +12,7 @@ from pathlib import Path
 from typing import NamedTuple, cast
 
 from ..schema import Upos
-from .schema import Relation, Sense
+from .schema import Paradigm, Relation, Sense
 
 SCHEMA = """
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -21,7 +22,8 @@ CREATE TABLE entry (
     lemma_lower TEXT NOT NULL,
     upos TEXT NOT NULL,
     senses TEXT NOT NULL,
-    relations TEXT NOT NULL
+    relations TEXT NOT NULL,
+    paradigms TEXT NOT NULL
 );
 CREATE INDEX entry_lemma ON entry (lemma);
 CREATE INDEX entry_lemma_lower ON entry (lemma_lower);
@@ -34,6 +36,7 @@ class Row(NamedTuple):
     upos: Upos
     senses: list[Sense]
     relations: list[Relation]
+    paradigms: list[Paradigm]
 
 
 def write(path: Path, rows: Iterable[Row], meta: dict[str, str]) -> int:
@@ -44,7 +47,7 @@ def write(path: Path, rows: Iterable[Row], meta: dict[str, str]) -> int:
         count = 0
         for row in rows:
             db.execute(
-                "INSERT INTO entry VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO entry VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     row.lemma_id,
                     row.lemma,
@@ -52,6 +55,7 @@ def write(path: Path, rows: Iterable[Row], meta: dict[str, str]) -> int:
                     row.upos,
                     json.dumps(row.senses, ensure_ascii=False),
                     json.dumps(row.relations, ensure_ascii=False),
+                    json.dumps(row.paradigms, ensure_ascii=False),
                 ),
             )
             count += 1
@@ -86,12 +90,15 @@ class Lexicon:
         return sorted(rows, key=lambda r: -len(r.senses))
 
     def _select(self, where: str, value: str) -> Iterator[Row]:
-        query = f"SELECT lemma_id, lemma, upos, senses, relations FROM entry {where}"
-        for lemma_id, lemma, upos, senses, relations in self._db.execute(query, (value,)):
+        query = f"SELECT lemma_id, lemma, upos, senses, relations, paradigms FROM entry {where}"
+        for lemma_id, lemma, upos, senses, relations, paradigms in self._db.execute(
+            query, (value,)
+        ):
             yield Row(
                 lemma_id,
                 lemma,
                 cast(Upos, upos),
                 cast(list[Sense], json.loads(senses)),
                 cast(list[Relation], json.loads(relations)),
+                cast(list[Paradigm], json.loads(paradigms)),
             )

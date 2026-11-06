@@ -8,7 +8,7 @@ from pathlib import Path
 from ..blob import lemma_id
 from ..schema import Upos
 from . import kaikki, store
-from .schema import Relation, Sense
+from .schema import Paradigm, Relation, Sense
 from .source import Converted, LexiconSource
 
 LEXICON_VERSION = "1"
@@ -20,6 +20,7 @@ class Merged:
     upos: Upos
     senses: list[Sense] = field(default_factory=lambda: list[Sense]())
     relations: list[Relation] = field(default_factory=lambda: list[Relation]())
+    paradigms: list[Paradigm] = field(default_factory=lambda: list[Paradigm]())
 
 
 @dataclass
@@ -38,6 +39,7 @@ def merge(converted: Iterable[Converted]) -> dict[tuple[str, Upos], Merged]:
             target = merged.setdefault((entry.lemma, upos), Merged(entry.lemma, upos))
             target.senses += entry.senses
             target.relations += [r for r in entry.relations if r not in target.relations]
+            target.paradigms += [p for p in entry.paradigms if p not in target.paradigms]
     for target in merged.values():
         _drop_uninformative_when(target.senses)
     return merged
@@ -68,7 +70,7 @@ def rows(lang: str, source: LexiconSource, path: Path, stats: Stats) -> Iterator
     for (lemma, upos), entry in sorted(merged.items()):
         entry_id = lemma_id(lang, lemma, upos)
         if entry_id is not None:
-            yield store.Row(entry_id, lemma, upos, entry.senses, entry.relations)
+            yield store.Row(entry_id, lemma, upos, entry.senses, entry.relations, entry.paradigms)
 
 
 def build(lang: str, source: LexiconSource, kaikki_path: Path, out: Path) -> tuple[int, Stats]:

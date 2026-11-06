@@ -11,8 +11,9 @@ from collections.abc import Iterator
 from importlib.metadata import version
 from typing import TYPE_CHECKING
 
-from ...lexicon.kaikki import KaikkiEntry, KaikkiSense
-from ...lexicon.schema import Example, Form, Paradigm, Relation, Sense
+from ...lexicon import senses as kaikki_senses
+from ...lexicon.kaikki import KaikkiEntry
+from ...lexicon.schema import Form, Paradigm, Relation
 from ...lexicon.source import Converted
 from ...schema import Feats, Upos
 from .morfeusz import MorfeuszCandidates, interpretation_readings, split_homonym
@@ -94,7 +95,6 @@ ASPECT_TAGS = {"perfective", "imperfective"}
 # Paradigms leave out PronType and ExtPos: the sentence decides them, not the form (jakie
 # is interrogative, PronType=Int, or relative, Rel, depending on use), so the token's
 # form still matches whichever the parser chose.
-MAX_EXAMPLES = 3
 
 # Wiktionary noun gender codes (pl-noun etc.) -> the analyser's features. Codes are
 # gender-animacy with an optional -p for plural-only nouns: m-pr is a masculine person
@@ -152,11 +152,13 @@ class Source:
         senses = [
             s
             for kaikki_sense in entry.get("senses", [])
-            if (s := _sense(kaikki_sense, gender, extra_tags)) is not None
+            if (s := kaikki_senses.sense(kaikki_sense, INFLECTION_TAGS, gender, extra_tags))
+            is not None
         ]
         if not senses:
             return None
-        relations = list(_derived_from(entry)) + list(_aspect_partners(entry, word))
+        derived = kaikki_senses.derived_from(entry, INFLECTION_TAGS, DERIVATION_TAGS)
+        relations = list(derived) + list(_aspect_partners(entry, word))
         return Converted(word, self._upos(word, pos), senses, relations)
 
     def _upos(self, word: str, pos: str) -> tuple[Upos, ...]:
@@ -224,56 +226,6 @@ def _gender(entry: KaikkiEntry) -> list[Feats]:
         if feats is not None and feats not in found:
             found.append(feats)
     return found
-
-
-def _sense(sense: KaikkiSense, gender: list[Feats], extra_tags: list[str]) -> Sense | None:
-    glosses = sense.get("glosses", [])
-    tags = sense.get("tags", [])
-    if not glosses:
-        return None
-    is_pointer = bool(sense.get("form_of") or sense.get("alt_of"))
-    if is_pointer and INFLECTION_TAGS.intersection(tags):
-        return None
-    result: Sense = {
-        "gloss": ": ".join(glosses),
-        "tags": [t for t in tags if t != "form-of"] + extra_tags,
-    }
-    if gender:
-        result["when"] = gender
-    examples = list(_examples(sense))
-    if examples:
-        result["examples"] = examples
-    return result
-
-
-def _examples(sense: KaikkiSense) -> Iterator[Example]:
-    for example in sense.get("examples", [])[:MAX_EXAMPLES]:
-        text = example.get("text")
-        if not text:
-            continue
-        result: Example = {"text": text}
-        translation = example.get("translation") or example.get("english")
-        if translation:
-            result["translation"] = translation
-        yield result
-
-
-def _derived_from(entry: KaikkiEntry) -> Iterator[Relation]:
-    seen: set[str] = set()
-    for sense in entry.get("senses", []):
-        tags = sense.get("tags", [])
-        if INFLECTION_TAGS.intersection(tags):
-            continue
-        for target in sense.get("form_of", []):
-            lemma = target.get("word")
-            if not lemma or lemma in seen:
-                continue
-            seen.add(lemma)
-            relation: Relation = {"type": "derived-from", "lemma": lemma}
-            note = next((t for t in DERIVATION_TAGS if t in tags), None)
-            if note:
-                relation["note"] = note
-            yield relation
 
 
 def _aspect_partners(entry: KaikkiEntry, word: str) -> Iterator[Relation]:

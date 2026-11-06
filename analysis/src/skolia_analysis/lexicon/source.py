@@ -6,7 +6,7 @@ from typing import Protocol
 
 from ..schema import Upos
 from .kaikki import KaikkiEntry
-from .schema import Relation, Sense
+from .schema import Paradigm, Relation, Sense
 
 
 @dataclass
@@ -18,6 +18,8 @@ class Converted:
     """Every UPOS the analyser may give the headword; the entry is filed under each."""
     senses: list[Sense] = field(default_factory=lambda: list[Sense]())
     relations: list[Relation] = field(default_factory=lambda: list[Relation]())
+    paradigms: list[Paradigm] = field(default_factory=lambda: list[Paradigm]())
+    """Forms from Wiktionary, for a language without a generator (Polish has Morfeusz)."""
 
 
 class LexiconSource(Protocol):
