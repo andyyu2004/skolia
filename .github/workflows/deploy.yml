@@ -4,7 +4,8 @@ name: Deploy
 # built in parallel; then the ingest Worker with those images; then the skolia Worker
 # (reader and API) and a smoke test. The ingest Worker consumes the queue the skolia
 # Worker feeds, so it goes first. Called by ci.yml. deploy-ingest only builds and pushes
-# an image whose inputs changed, and wrangler leaves an unchanged one as it is.
+# an image whose inputs changed, and wrangler leaves an unchanged one as it is. Previews
+# (pr-<N>) share one GitHub environment, preview.
 
 on:
   workflow_call:
@@ -24,7 +25,7 @@ env:
 jobs:
   infra:
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.env }}
+    environment: ${{ startsWith(inputs.env, 'pr-') && 'preview' || inputs.env }}
     concurrency:
       group: deploy-${{ inputs.env }}
       cancel-in-progress: false
@@ -61,7 +62,7 @@ jobs:
   ingest:
     needs: [infra, ingest-image]
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.env }}
+    environment: ${{ startsWith(inputs.env, 'pr-') && 'preview' || inputs.env }}
     concurrency:
       group: deploy-ingest-${{ inputs.env }}
       cancel-in-progress: false
@@ -77,10 +78,16 @@ jobs:
   web:
     needs: ingest
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.env }}
+    environment: ${{ startsWith(inputs.env, 'pr-') && 'preview' || inputs.env }}
     concurrency:
       group: deploy-web-${{ inputs.env }}
       cancel-in-progress: false
+    # A preview's wrangler config is made in each job that needs it, with its D1 id from
+    # Terraform (infra/wrangler.sh)
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_ACCESS_KEY }}
+      TF_IN_AUTOMATION: "1"
     steps:
       # The tags, for git describe (mise.toml deploy-web and smoke)
       - uses: actions/checkout@v7
