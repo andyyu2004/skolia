@@ -10,7 +10,7 @@ import {
   type ImportRequest,
   type Lang,
 } from "@skolia/shared/api";
-import { docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
+import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { State, Status, Versions } from "@skolia/shared/schema";
 import type { BlobStore, Decode, DocumentRecord, DocumentStore, JobQueue, StoredBlob } from "./ports.ts";
 
@@ -106,7 +106,7 @@ export function createApp(deps: Deps): Hono {
     // The id is the text's hash, so the text at this URL never changes
     const blob = await deps.blobs.get(textKey(record.id));
     if (!blob) return c.json<ApiError>({ error: "missing text" }, 500);
-    return sendBlob(c, deps.decode, blob);
+    return sendBlob(c, deps.decode, blob, undefined);
   });
 
   // By name (DocumentSummary.reading): a name is a version, so what's at the URL never
@@ -118,7 +118,7 @@ export function createApp(deps: Deps): Hono {
       if (!record || !NAME.test(name)) return notFound(c);
       const blob = await deps.blobs.get(partKey(record.id, part, name));
       if (!blob) return c.json<ApiError>({ error: `no ${part} ${name}` }, 404);
-      return sendBlob(c, deps.decode, blob);
+      return sendBlob(c, deps.decode, blob, PART_ENCODING);
     });
   }
 
@@ -133,13 +133,18 @@ function notFound(c: Context): Response {
   return c.json<ApiError>({ error: "no such document" }, 404);
 }
 
-/** A blob whose URL names its version, so it can be cached forever. */
-async function sendBlob(c: Context, decode: Decode, blob: StoredBlob): Promise<Response> {
+/** A blob whose URL names its version, so it can be cached forever. encoding: how the
+ * blob is stored (PART_ENCODING for an analysis or bundle). */
+async function sendBlob(
+  c: Context,
+  decode: Decode,
+  blob: StoredBlob,
+  encoding: typeof PART_ENCODING | undefined,
+): Promise<Response> {
   const headers: Record<string, string> = {
     "content-type": blob.contentType ?? "application/octet-stream",
     "cache-control": "private, max-age=31536000, immutable",
   };
-  const encoding = blob.contentEncoding;
   if (encoding === undefined) return new Response(blob.body, { headers });
   headers["vary"] = "accept-encoding";
   if (acceptsEncoding(c.req.header("accept-encoding"), encoding)) {

@@ -21,7 +21,6 @@ export class S3Blobs implements BlobStore {
       return {
         body: await response.Body.transformToByteArray(),
         contentType: response.ContentType,
-        contentEncoding: response.ContentEncoding,
       };
     } catch (error: unknown) {
       if (error instanceof NoSuchKey) return null;

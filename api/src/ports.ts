@@ -24,8 +24,6 @@ export interface DocumentStore {
 export interface StoredBlob {
   body: Uint8Array;
   contentType: string | undefined;
-  /** "br" for the analysis and bundle: sent as stored to clients that accept it. */
-  contentEncoding: string | undefined;
 }
 
 /** Undo a Content-Encoding, for clients that don't accept it. Async so a large blob

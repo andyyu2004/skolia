@@ -42,7 +42,6 @@ export class R2Blobs implements BlobStore {
     return {
       body: new Uint8Array(await object.arrayBuffer()),
       contentType: object.httpMetadata?.contentType,
-      contentEncoding: object.httpMetadata?.contentEncoding,
     };
   }
 

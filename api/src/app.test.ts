@@ -42,7 +42,7 @@ class MemoryBlobs implements BlobStore {
   }
   async put(key: string, body: Uint8Array | string, contentType: string): Promise<void> {
     const bytes = typeof body === "string" ? new TextEncoder().encode(body) : body;
-    this.objects.set(key, { body: bytes, contentType, contentEncoding: undefined });
+    this.objects.set(key, { body: bytes, contentType });
   }
 }
 
@@ -113,7 +113,6 @@ async function readyAt(blobs: MemoryBlobs, id: string, v: string, state = "ready
     blobs.objects.set(partKey(id, part, name), {
       body: brotliCompressSync(`{"${part}":"${v}"}`),
       contentType: "application/json",
-      contentEncoding: "br",
     });
   }
   const status = {

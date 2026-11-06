@@ -22,6 +22,11 @@ export function partKey(doc: string, part: "analysis" | "bundle", name: string):
   return `${docPrefix(doc)}${part}/${name}.json.br`;
 }
 
+/** How every analysis and bundle is stored, as its key says. Readers rely on this rather
+ * than the object's Content-Encoding, which not every store keeps (wrangler dev's local
+ * S3 endpoint drops it). */
+export const PART_ENCODING = "br";
+
 /** What ingest currently produces for a language (Versions), written when it starts. */
 export function versionsKey(lang: Lang): string {
   return `versions/${lang}.json`;
