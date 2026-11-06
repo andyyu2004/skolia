@@ -12,7 +12,7 @@ import { isLang, type Lang } from "@skolia/shared/api";
 import type { IngestJob } from "@skolia/shared/schema";
 
 interface Env {
-  INGEST: DurableObjectNamespace<Ingest>;
+  INGEST_PL: DurableObjectNamespace<IngestPl>;
   INGEST_EN: DurableObjectNamespace<IngestEn>;
   S3_ENDPOINT: string;
   S3_BUCKET: string;
@@ -65,9 +65,7 @@ class IngestContainer extends Container<Env> {
   }
 }
 
-/** Polish. Named before there were other languages: renaming the class would make
- * wrangler create a new container application beside the old one. */
-export class Ingest extends IngestContainer {}
+export class IngestPl extends IngestContainer {}
 
 export class IngestEn extends IngestContainer {}
 
@@ -76,7 +74,7 @@ function namespace(env: Env, lang: Lang): DurableObjectNamespace<IngestContainer
     case "en":
       return env.INGEST_EN;
     case "pl":
-      return env.INGEST;
+      return env.INGEST_PL;
   }
 }
 

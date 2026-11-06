@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Builds the ingest image, pushes it to Cloudflare's registry and deploys the ingest
-# Worker with it: deploy-ingest.sh <staging|production>. Run after tf.sh apply (it reads
+# Builds each language's ingest image, pushes it to Cloudflare's registry and deploys the
+# ingest Worker with them: deploy-ingest.sh <staging|production>. Run after tf.sh apply (it reads
 # the R2 credentials from Terraform). With INGEST_CACHE set to a buildx cache backend
 # (CI: type=gha,scope=ingest), buildx keeps its layer cache there, so unchanged layers
 # keep their digests and Cloudflare's registry skips them.
@@ -15,14 +15,9 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 tf() { "$root/infra/tf.sh" "$env" "$@"; }
 wrangler() { "$root/infra/wrangler.sh" "$env" "$@"; }
 
-# One image per language, each for its container class in wrangler.ingest.jsonc
+# One image per language, each for its container class in wrangler.ingest.jsonc,
+# Ingest{Lang}: IngestPl
 langs=(pl en)
-class_of() {
-  case $1 in
-    pl) echo Ingest ;;
-    en) echo IngestEn ;;
-  esac
-}
 
 # The images are named by the git trees they're built from (analysis/ and .dockerignore;
 # the lexicons are pinned in analysis/inputs.sha256), so an unchanged image is neither
@@ -40,7 +35,8 @@ images=()
 for lang in "${langs[@]}"; do
   name=skolia-ingest-$lang
   tag=$name:$version
-  images+=("$(class_of "$lang")=registry.cloudflare.com/$CLOUDFLARE_ACCOUNT_ID/$tag")
+  class=Ingest$(tr '[:lower:]' '[:upper:]' <<<"${lang:0:1}")${lang:1}
+  images+=("$class=registry.cloudflare.com/$CLOUDFLARE_ACCOUNT_ID/$tag")
   if jq -e --arg n "$name" --arg v "$version" '.[] | select(.name == $n) | .tags | index($v)' \
     <<<"$registry" >/dev/null; then
     echo "$tag is already in the registry"

@@ -16,12 +16,11 @@
   "observability": { "enabled": true },
   "containers": [
     {
-      // Polish
-      "class_name": "Ingest",
+      "class_name": "IngestPl",
       "image": "../analysis/Dockerfile",
       "image_build_context": "..",
       "image_vars": { "SKOLIA_LANG": "pl" },
-      // 1 vCPU, 6 GiB: Polish ingest peaked at 4.3 GiB on the same text (in Docker)
+      // 1 vCPU, 6 GiB: Polish ingest peaked at 4.3 GiB on a 2,800-word text (in Docker)
       "instance_type": "standard-2",
       "max_instances": 1
     },
@@ -30,7 +29,7 @@
       "image": "../analysis/Dockerfile",
       "image_build_context": "..",
       "image_vars": { "SKOLIA_LANG": "en" },
-      // English ingest peaked at 4.7 GiB on a 2,800-word text (in Docker); the two
+      // English ingest peaked at 4.7 GiB on the same text; the two
       // languages in one container peaked at 6.7 GiB
       "instance_type": "standard-2",
       "max_instances": 1
@@ -38,13 +37,15 @@
   ],
   "durable_objects": {
     "bindings": [
-      { "name": "INGEST", "class_name": "Ingest" },
+      { "name": "INGEST_PL", "class_name": "IngestPl" },
       { "name": "INGEST_EN", "class_name": "IngestEn" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Ingest"] },
-    { "tag": "v2", "new_sqlite_classes": ["IngestEn"] }
+    // Ingest was Polish's before there were other languages; its container application
+    // isn't deleted with it (wrangler containers delete)
+    { "tag": "v2", "deleted_classes": ["Ingest"], "new_sqlite_classes": ["IngestPl", "IngestEn"] }
   ],
   "queues": {
     "consumers": [{ "queue": "skolia-ingest", "max_batch_size": 10, "max_retries": 10 }]
@@ -57,7 +58,7 @@
     "staging": {
       "containers": [
         {
-          "class_name": "Ingest",
+          "class_name": "IngestPl",
           "image": "../analysis/Dockerfile",
           "image_build_context": "..",
           "image_vars": { "SKOLIA_LANG": "pl" },
@@ -75,7 +76,7 @@
       ],
       "durable_objects": {
         "bindings": [
-          { "name": "INGEST", "class_name": "Ingest" },
+          { "name": "INGEST_PL", "class_name": "IngestPl" },
           { "name": "INGEST_EN", "class_name": "IngestEn" }
         ]
       },
