@@ -26,6 +26,27 @@ run = [
   "pnpm --dir api exec wrangler deploy --dry-run --outdir dist --env=''",
 ]
 
+[tasks.dev]
+description = "wrangler dev (both Workers, the ingest container, local D1/R2/queue) and the reader's Vite server"
+depends = ["dev:api", "dev:reader"]
+
+[tasks."dev:api"]
+description = "wrangler dev on :8787 with local state in api/.wrangler/state"
+dir = "api"
+run = [
+  "pnpm exec wrangler d1 migrations apply DB --local --env=''",
+  "pnpm exec wrangler dev -c wrangler.jsonc -c wrangler.ingest.jsonc --port 8787",
+]
+
+[tasks."dev:reader"]
+description = "Vite on :5173, proxying /api to :8787"
+run = "pnpm --filter @skolia/reader dev --port 5173 --strictPort"
+
+[tasks.e2e]
+description = "Import a text through wrangler dev with fresh local state and wait until it's ready"
+depends = ["build"]
+run = "api/scripts/e2e.sh"
+
 [tasks.data]
 description = "The lexicon and valency files, from the inputs pinned in analysis/inputs.sha256"
 run = "analysis/scripts/build_data.sh"

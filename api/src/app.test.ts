@@ -64,7 +64,6 @@ function setup(maxImportsPerDay = 100) {
     documents,
     blobs,
     queue,
-    decode: async (body) => brotliDecompressSync(body),
     now: () => new Date("2026-11-04T00:00:00Z"),
   });
   return { app, documents, blobs, queue };
@@ -135,7 +134,7 @@ async function summaryOf(app: ReturnType<typeof setup>["app"], id: string): Prom
   return (await (await app.request(`/api/documents/${id}`)).json()) as DocumentSummary;
 }
 
-test("brotli blobs are sent as stored when accepted, decoded otherwise, cached forever", async () => {
+test("brotli blobs are sent as stored when accepted, refused otherwise, cached forever", async () => {
   const { app, blobs } = setup();
   await importText(app);
   const id = await docId(TEXT);
@@ -147,8 +146,7 @@ test("brotli blobs are sent as stored when accepted, decoded otherwise, cached f
   assert.equal(accepted.headers.get("cache-control"), "private, max-age=31536000, immutable");
   assert.equal(brotliDecompressSync(new Uint8Array(await accepted.arrayBuffer())).toString(), json);
   const plain = await app.request(url, { headers: { "accept-encoding": "gzip" } });
-  assert.equal(plain.headers.get("content-encoding"), null);
-  assert.equal(await plain.text(), json);
+  assert.equal(plain.status, 406);
 });
 
 test("new texts past the daily cap are refused; texts already here still open", async () => {
@@ -193,9 +191,14 @@ test("the summary names the reading once there is one, and it's served by name",
   await readyAt(blobs, id, "1");
   const summary = await summaryOf(app, id);
   assert.deepEqual(summary.reading, { analysis: "s2-a1", bundle: "b1-a1-l1" });
-  const analysis = await app.request(`/api/documents/${id}/analysis/s2-a1`);
+  const analysis = await app.request(`/api/documents/${id}/analysis/s2-a1`, {
+    headers: { "accept-encoding": "br" },
+  });
   assert.equal(analysis.status, 200);
-  assert.equal(await analysis.text(), '{"analysis":"1"}');
+  assert.equal(
+    brotliDecompressSync(Buffer.from(await analysis.arrayBuffer())).toString(),
+    '{"analysis":"1"}',
+  );
   assert.equal((await app.request(`/api/documents/${id}/analysis/s2-a9`)).status, 404);
   assert.equal((await app.request(`/api/documents/${id}/analysis/..%2Fstatus`)).status, 404);
   const list = (await (await app.request("/api/documents")).json()) as DocumentList;

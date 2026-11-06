@@ -22,8 +22,6 @@ export default {
       documents: new D1Documents(env.DB),
       blobs: new R2Blobs(env.BLOBS),
       queue: new CloudflareQueue(env.INGEST),
-      // Workers can't decompress Brotli, so a client that doesn't accept it is refused
-      decode: null,
     });
     return app.fetch(request, env, ctx);
   },

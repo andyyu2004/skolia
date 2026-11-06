@@ -31,7 +31,7 @@
     "consumers": [{ "queue": "skolia-ingest", "max_batch_size": 10, "max_retries": 10 }]
   },
   // S3_ENDPOINT is passed at deploy (--var, terraform output r2_s3_endpoint) and
-  // locally in .dev.vars, which a value here would override
+  // locally in .env
   "vars": { "S3_BUCKET": "skolia" },
   // Deployed as skolia-ingest-staging. Bindings and containers aren't inherited.
   "env": {

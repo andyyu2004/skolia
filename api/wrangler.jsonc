@@ -21,7 +21,17 @@
       "migrations_dir": "migrations"
     }
   ],
-  "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "skolia" }],
+  "r2_buckets": [
+    {
+      "binding": "BLOBS",
+      "bucket_name": "skolia",
+      // wrangler dev serves the local bucket over S3 for the ingest container, at
+      // /cdn-cgi/local/r2/s3/skolia, with these credentials (api/.env)
+      "local_dev": {
+        "experimental_s3_credentials": { "accessKeyId": "skolia-dev", "secretAccessKey": "skolia-dev" }
+      }
+    }
+  ],
   // In production Terraform sets it (var.max_imports_per_day)
   "vars": { "MAX_IMPORTS_PER_DAY": "50" },
   "queues": {

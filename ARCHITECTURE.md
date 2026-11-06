@@ -22,7 +22,7 @@ Phone or desktop (responsive PWA) ──► skolia (Worker: reader assets + API)
   └─ IndexedDB: cached document bundles
 ```
 
-Locally (`compose.yaml`): the API runs on Node, Redis replaces the Queue, RustFS (S3 API) replaces R2 and a SQLite file replaces D1. The API reaches them through small interfaces (`api/src/ports.ts`); ingest reaches storage over the S3 API, which R2 also speaks. Ingest writes `doc/{doc}/status.json` as it goes (queued, analysing, ready, failed), and the API reads it to tell the reader.
+Locally, `wrangler dev` runs both Workers and the ingest container, with local D1, R2 and Queue. The API reaches them through small interfaces (`api/src/ports.ts`, faked in the tests); ingest reaches R2 over its S3 API, which wrangler dev also serves for the local bucket. Ingest writes `doc/{doc}/status.json` as it goes (queued, analysing, ready, failed), and the API reads it to tell the reader.
 
 On Cloudflare: Terraform (`infra/`) manages R2, D1, the queue, the `skolia` Worker with the reader as static assets, the skolia.io domain and ingest's R2 token. The `skolia-ingest` Worker and its container are deployed with wrangler (`api/wrangler.ingest.jsonc`), as the provider has no container resource. The consumer hands each job to the container over HTTP and acks it once accepted: a consumer may run 15 minutes and an analysis can take longer. The container keeps jobs in memory, sleeps when idle (the Durable Object asks ingest whether it's busy before stopping it), and has the models and lexicon in its image. A job lost with its container is re-queued by the stuck rule below.
 

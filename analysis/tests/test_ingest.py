@@ -198,7 +198,7 @@ def test_an_analyser_unlike_the_published_one_fails(tmp_path: Path) -> None:
 
 
 class FlakyQueue(MemoryQueue):
-    """Fails the first receive, like Redis restarting."""
+    """Fails the first receive, like a queue that's briefly unreachable."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -207,7 +207,7 @@ class FlakyQueue(MemoryQueue):
     def receive(self, timeout: float) -> Received | None:
         if not self.failed:
             self.failed = True
-            raise ConnectionError("redis went away")
+            raise ConnectionError("queue went away")
         return super().receive(timeout)
 
 

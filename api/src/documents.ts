@@ -1,6 +1,5 @@
-// Document metadata in SQL, shared by SQLite (Node) and D1 (Workers). The tables are
-// made by the files in api/migrations: wrangler applies them to D1, src/node/sqlite.ts
-// to the local file.
+// Document metadata in D1 (src/worker/adapters.ts). The tables are made by the files in
+// api/migrations, which wrangler applies.
 import { LANGS, type Lang } from "@skolia/shared/api";
 import type { DocumentRecord } from "./ports.ts";
 

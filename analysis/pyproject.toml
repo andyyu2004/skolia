@@ -9,7 +9,6 @@ dependencies = [
     "transformers>=5.22.1",
     "combo-nlp==4.0.14",
     "boto3>=1.43.123",
-    "redis>=8.1.0",
     # Listed only to pick its source below; COMBO and Stanza are what need it
     "torch==2.15.0",
     "brotli>=1.2.1",

@@ -4,6 +4,7 @@ The API stores the text at doc/{doc}/text.txt, writes doc/{doc}/status.json as q
 enqueues {"doc": ..., "lang": ...}. Ingest writes the analysis and bundle (Brotli-compressed
 JSON) and updates the status, which the API reads to tell the reader when it's ready.
 
-Locally the queue is Redis and the blobs are in MinIO; in production they are
-Cloudflare Queues and R2 (both reached the same way: R2 speaks the S3 API).
+Jobs arrive over HTTP from the queue consumer Worker (api/src/worker/ingest.ts), and blobs
+are read and written over R2's S3 API: on Cloudflare, and under wrangler dev through its
+local R2's S3 endpoint.
 """

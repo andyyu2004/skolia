@@ -15,6 +15,8 @@ interface Env {
   S3_BUCKET: string;
   S3_ACCESS_KEY_ID: string;
   S3_SECRET_ACCESS_KEY: string;
+  /** The Host header for S3_ENDPOINT; wrangler dev only (api/.env) */
+  S3_HOST?: string;
   /** How long the container stays up after its last request, e.g. "30s" to test */
   SLEEP_AFTER?: string;
 }
@@ -32,6 +34,8 @@ export class Ingest extends Container<Env> {
     AWS_ACCESS_KEY_ID: this.env.S3_ACCESS_KEY_ID,
     AWS_SECRET_ACCESS_KEY: this.env.S3_SECRET_ACCESS_KEY,
     AWS_DEFAULT_REGION: "auto",
+    // An undefined value would reach the container as the string "undefined"
+    ...(this.env.S3_HOST === undefined ? {} : { SKOLIA_S3_HOST: this.env.S3_HOST }),
   };
 
   /** Only requests count as activity, and an analysis makes none, so ask before

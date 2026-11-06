@@ -12,13 +12,12 @@ import {
 } from "@skolia/shared/api";
 import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { State, Status, Versions } from "@skolia/shared/schema";
-import type { BlobStore, Decode, DocumentRecord, DocumentStore, JobQueue, StoredBlob } from "./ports.ts";
+import type { BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob } from "./ports.ts";
 
 export interface Deps {
   documents: DocumentStore;
   blobs: BlobStore;
   queue: JobQueue;
-  decode: Decode;
   /** New texts accepted per UTC day, across everyone: analysis time is what costs
    * money. Importing a text that's already here doesn't count. */
   maxImportsPerDay: number;
@@ -106,7 +105,7 @@ export function createApp(deps: Deps): Hono {
     // The id is the text's hash, so the text at this URL never changes
     const blob = await deps.blobs.get(textKey(record.id));
     if (!blob) return c.json<ApiError>({ error: "missing text" }, 500);
-    return sendBlob(c, deps.decode, blob, undefined);
+    return sendBlob(c, blob, undefined);
   });
 
   // By name (DocumentSummary.reading): a name is a version, so what's at the URL never
@@ -118,7 +117,7 @@ export function createApp(deps: Deps): Hono {
       if (!record || !NAME.test(name)) return notFound(c);
       const blob = await deps.blobs.get(partKey(record.id, part, name));
       if (!blob) return c.json<ApiError>({ error: `no ${part} ${name}` }, 404);
-      return sendBlob(c, deps.decode, blob, PART_ENCODING);
+      return sendBlob(c, blob, PART_ENCODING);
     });
   }
 
@@ -134,13 +133,9 @@ function notFound(c: Context): Response {
 }
 
 /** A blob whose URL names its version, so it can be cached forever. encoding: how the
- * blob is stored (PART_ENCODING for an analysis or bundle). */
-async function sendBlob(
-  c: Context,
-  decode: Decode,
-  blob: StoredBlob,
-  encoding: typeof PART_ENCODING | undefined,
-): Promise<Response> {
+ * blob is stored (PART_ENCODING for an analysis or bundle). Workers can't decompress
+ * Brotli, so a client that doesn't accept the encoding gets 406 (browsers all accept br). */
+function sendBlob(c: Context, blob: StoredBlob, encoding: typeof PART_ENCODING | undefined): Response {
   const headers: Record<string, string> = {
     "content-type": blob.contentType ?? "application/octet-stream",
     "cache-control": "private, max-age=31536000, immutable",
@@ -153,8 +148,7 @@ async function sendBlob(
     const init: ResponseInit & { encodeBody: "manual" } = { headers, encodeBody: "manual" };
     return new Response(blob.body, init);
   }
-  if (decode === null) return c.json<ApiError>({ error: `needs Accept-Encoding: ${encoding}` }, 406);
-  return new Response(await decode(blob.body, encoding), { headers });
+  return c.json<ApiError>({ error: `needs Accept-Encoding: ${encoding}` }, 406);
 }
 
 /** Whether an Accept-Encoding header ("gzip, deflate, br;q=0.8") allows the encoding. */

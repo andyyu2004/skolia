@@ -1,4 +1,4 @@
-"""Blob storage: S3-compatible (RustFS locally, R2 in production) or a folder (tests)."""
+"""Blob storage: S3-compatible (R2, or wrangler dev's local bucket) or a folder (tests)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from botocore.awsrequest import AWSRequest
     from types_boto3_s3 import S3Client
 
 BROTLI = "br"
@@ -33,13 +34,24 @@ class Blobs(Protocol):
 
 
 class S3Blobs:
-    def __init__(self, bucket: str, endpoint: str | None = None) -> None:
+    def __init__(self, bucket: str, endpoint: str | None = None, host: str | None = None) -> None:
         """Credentials come from the usual AWS environment variables
-        (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY); R2 and MinIO need endpoint."""
+        (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY); R2 needs endpoint. Path-style
+        addressing, since wrangler dev's local R2 is under a path
+        (http://host:port/cdn-cgi/local/r2/s3/{bucket}); R2 accepts it too.
+
+        host replaces the Host header the endpoint implies: wrangler dev answers
+        /cdn-cgi/ requests only for localhost, which a container reaches by another
+        name (host.docker.internal)."""
         import boto3
+        from botocore.config import Config
 
         self._bucket = bucket
-        self._s3: S3Client = boto3.client("s3", endpoint_url=endpoint)
+        self._s3: S3Client = boto3.client(
+            "s3", endpoint_url=endpoint, config=Config(s3={"addressing_style": "path"})
+        )
+        if host is not None:
+            self._s3.meta.events.register("before-sign.s3", _HostHeader(host))
 
     def get(self, key: str) -> bytes | None:
         from botocore.exceptions import BotoCoreError, ClientError
@@ -84,6 +96,17 @@ class S3Blobs:
                 )
         except (BotoCoreError, ClientError) as error:
             raise BlobError(f"put {key}: {error}") from error
+
+
+class _HostHeader:
+    """A botocore before-sign handler: the request goes out, and is signed, with this
+    Host header."""
+
+    def __init__(self, host: str) -> None:
+        self._host = host
+
+    def __call__(self, request: AWSRequest, **_: object) -> None:
+        request.headers["Host"] = self._host
 
 
 class DirBlobs:
