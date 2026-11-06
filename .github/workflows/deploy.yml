@@ -1,9 +1,10 @@
 name: Deploy
 
-# One environment: migrations, Terraform and the skolia Worker; each language's ingest
-# image, built in parallel; then the ingest Worker with those images, and a smoke test.
-# Called by ci.yml. deploy-ingest only builds and pushes an image whose inputs changed,
-# and wrangler leaves an unchanged one as it is.
+# One environment: Terraform and migrations, alongside each language's ingest image,
+# built in parallel; then the ingest Worker with those images; then the skolia Worker
+# (reader and API) and a smoke test. The ingest Worker consumes the queue the skolia
+# Worker feeds, so it goes first. Called by ci.yml. deploy-ingest only builds and pushes
+# an image whose inputs changed, and wrangler leaves an unchanged one as it is.
 
 on:
   workflow_call:
@@ -21,7 +22,7 @@ env:
   MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
 
 jobs:
-  deploy:
+  infra:
     runs-on: ubuntu-24.04
     environment: ${{ inputs.env }}
     concurrency:
@@ -34,12 +35,9 @@ jobs:
       TF_IN_AUTOMATION: "1"
       TF_CLI_ARGS_apply: -auto-approve
     steps:
-      # The tags, for git describe (mise.toml deploy)
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
       - uses: ./.github/actions/setup
-      - run: mise run deploy ${{ inputs.env }}
+      - run: mise run deploy-infra ${{ inputs.env }}
 
   # The images are named by their inputs, not the environment, so a build for one
   # environment is reused by the other
@@ -59,8 +57,9 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: infra/deploy-ingest.sh ${{ inputs.env }} build ${{ matrix.lang }}
 
+  # Reads the R2 credentials from Terraform, so after infra
   ingest:
-    needs: [deploy, ingest-image]
+    needs: [infra, ingest-image]
     runs-on: ubuntu-24.04
     environment: ${{ inputs.env }}
     concurrency:
@@ -71,12 +70,23 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_ACCESS_KEY }}
       TF_IN_AUTOMATION: "1"
     steps:
-      # The tags, for git describe (mise.toml smoke)
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - run: infra/deploy-ingest.sh ${{ inputs.env }} deploy
+
+  web:
+    needs: ingest
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.env }}
+    concurrency:
+      group: deploy-web-${{ inputs.env }}
+      cancel-in-progress: false
+    steps:
+      # The tags, for git describe (mise.toml deploy-web and smoke)
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
-      - name: Deploy ingest
-        run: infra/deploy-ingest.sh ${{ inputs.env }} deploy
+      - run: mise run deploy-web ${{ inputs.env }}
       - name: Smoke test
         run: mise run smoke ${{ inputs.env }}
