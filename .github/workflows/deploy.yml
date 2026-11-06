@@ -16,7 +16,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
   deploy:
@@ -44,17 +43,14 @@ jobs:
         run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
       - uses: docker/setup-buildx-action@v4
         if: inputs.ingest
-      - uses: docker/login-action@v4
+      # Lets buildx in a script reach the Actions cache
+      - uses: crazy-max/ghaction-github-runtime@v4
         if: inputs.ingest
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Deploy ingest
         if: inputs.ingest
-        run: |
-          export INGEST_CACHE=ghcr.io/${GITHUB_REPOSITORY,,}/ingest-cache
-          mise run deploy-ingest ${{ inputs.env }}
+        env:
+          INGEST_CACHE: type=gha,scope=ingest
+        run: mise run deploy-ingest ${{ inputs.env }}
 
       - name: Smoke test
         if: inputs.env == 'staging'

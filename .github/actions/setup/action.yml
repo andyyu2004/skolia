@@ -10,7 +10,8 @@ runs:
         cache: pnpm
     - run: pnpm install --frozen-lockfile
       shell: bash
-    - uses: astral-sh/setup-uv@v10
+    # setup-uv publishes no moving major tag
+    - uses: astral-sh/setup-uv@v10.3.3
       with:
         working-directory: analysis
         enable-cache: true

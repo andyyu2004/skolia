@@ -56,4 +56,4 @@ mise run deploy-ingest staging   # build, push and deploy the container
 mise run smoke staging
 ```
 
-`deploy-ingest` builds the lexicon (`mise run data`), builds the image with buildx for amd64, pushes it with `wrangler containers push` (retrying: the registry sometimes times out on large layers) and deploys the ingest Worker with that image. In CI, `INGEST_CACHE` keeps buildx's layer cache in GHCR (`ingest-cache`), so unchanged layers keep their digests and the registry skips them.
+`deploy-ingest` builds the lexicon (`mise run data`), builds the image with buildx for amd64, pushes it with `wrangler containers push` (retrying: the registry sometimes times out on large layers) and deploys the ingest Worker with that image. In CI, `INGEST_CACHE` keeps buildx's layer cache in the Actions cache (10 GB per repo; GHCR's free allowance for a private repo is 500 MB), so unchanged layers keep their digests and the registry skips them.

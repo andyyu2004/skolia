@@ -71,9 +71,6 @@ jobs:
 
   staging:
     needs: [check, changes]
-    permissions:
-      contents: read
-      packages: write
     uses: ./.github/workflows/deploy.yml
     with:
       env: staging
@@ -82,9 +79,6 @@ jobs:
 
   production:
     needs: [changes, staging]
-    permissions:
-      contents: read
-      packages: write
     uses: ./.github/workflows/deploy.yml
     with:
       env: production

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Builds the ingest image, pushes it to Cloudflare's registry and deploys the ingest
 # Worker with it: deploy-ingest.sh <staging|production>. Run after tf.sh apply (it reads
-# the R2 credentials from Terraform). With INGEST_CACHE set to a registry ref (CI uses
-# GHCR), buildx keeps its layer cache there, so unchanged layers keep their digests and
-# the registry skips them.
+# the R2 credentials from Terraform). With INGEST_CACHE set to a buildx cache backend
+# (CI: type=gha,scope=ingest), buildx keeps its layer cache there, so unchanged layers
+# keep their digests and Cloudflare's registry skips them.
 set -euo pipefail
 
 env=${1:-}
@@ -20,7 +20,7 @@ wrangler() { "$root/infra/wrangler.sh" "$env" "$@"; }
 tag=skolia-ingest:$(git -C "$root" rev-parse --short=12 HEAD)
 cache=()
 if [ -n "${INGEST_CACHE:-}" ]; then
-  cache=(--cache-from "type=registry,ref=$INGEST_CACHE" --cache-to "type=registry,ref=$INGEST_CACHE,mode=max")
+  cache=(--cache-from "$INGEST_CACHE" --cache-to "$INGEST_CACHE,mode=max")
 fi
 docker buildx build --platform linux/amd64 -f "$root/analysis/Dockerfile" --target cloudflare \
   --load -t "$tag" ${cache[@]+"${cache[@]}"} "$root"
