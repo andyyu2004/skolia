@@ -14,7 +14,7 @@ from ...lexicon.store import Lexicon
 from ...parsed import ParsedSentence, Parser
 from ...parsers.combo_parser import ComboParser
 from ...parsers.stanza_parser import StanzaParser
-from ...plugin import Bundler, Options
+from ...plugin import Bundler, Options, ParsingAnalyzer
 from ...schema import Blob, ExpressionDef, Reading, Token, Upos
 from . import cases
 from .lexicon import Paradigms, Source
@@ -120,33 +120,17 @@ def assemble(
     return blob
 
 
-class Analyzer:
-    def __init__(self, parser: Parser, options: Options, valency: Valency | None) -> None:
-        self._parser = parser
-        self._options = options
-        self._candidates = candidate_lookup() if options.candidates else None
-        self._valency = valency
-        self.name = analyzer_name(parser.name, options.snap, valency)
-
-    def __call__(self, text: str) -> Blob:
-        return self.assemble(text, self._parser(text))
-
-    def assemble(self, text: str, parsed: Iterable[ParsedSentence]) -> Blob:
-        options = self._options
-        return assemble(
-            text,
-            parsed,
-            self._parser.name,
-            self._candidates,
-            options.expressions,
-            options.snap,
-            self._valency,
-        )
-
-
-def analyzer(parser: Parser, options: Options, data: Path | None) -> Analyzer:
+def analyzer(parser: Parser, options: Options, data: Path | None) -> ParsingAnalyzer:
     """With data, case reasons and corrections use Walenty (VALENCY_FILE)."""
-    return Analyzer(parser, options, valency(data))
+    candidates = candidate_lookup() if options.candidates else None
+    walenty = valency(data)
+    return ParsingAnalyzer(
+        analyzer_name(parser.name, options.snap, walenty),
+        parser,
+        lambda text, parsed: assemble(
+            text, parsed, parser.name, candidates, options.expressions, options.snap, walenty
+        ),
+    )
 
 
 def lexicon_source() -> Source:

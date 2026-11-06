@@ -14,7 +14,7 @@ from ...lexicon import bundle
 from ...lexicon.store import Lexicon
 from ...parsed import ParsedSentence, Parser
 from ...parsers.stanza_parser import StanzaParser
-from ...plugin import Bundler, Options
+from ...plugin import Bundler, Options, ParsingAnalyzer
 from ...schema import Blob
 from .lexicon import Source
 
@@ -55,26 +55,16 @@ def assemble(
     )
 
 
-class Analyzer:
-    """Options.candidates has no effect: English has no candidate lookup."""
-
-    def __init__(self, parser: Parser, options: Options) -> None:
-        self._parser = parser
-        self._options = options
-        self.name = analyzer_name(parser.name)
-
-    def __call__(self, text: str) -> Blob:
-        return self.assemble(text, self._parser(text))
-
-    def assemble(self, text: str, parsed: Iterable[ParsedSentence]) -> Blob:
-        return assemble(text, parsed, self._parser.name, self._options)
-
-
-def analyzer(parser: Parser, options: Options, data: Path | None) -> Analyzer:
-    """English uses nothing from data besides the lexicon."""
+def analyzer(parser: Parser, options: Options, data: Path | None) -> ParsingAnalyzer:
+    """English uses nothing from data besides the lexicon, and has no candidate lookup:
+    Options.candidates has no effect."""
     if options.snap is not None:
         raise ValueError(f"English has no candidates to snap to (snap {options.snap!r})")
-    return Analyzer(parser, options)
+    return ParsingAnalyzer(
+        analyzer_name(parser.name),
+        parser,
+        lambda text, parsed: assemble(text, parsed, parser.name, options),
+    )
 
 
 def lexicon_source() -> Source:

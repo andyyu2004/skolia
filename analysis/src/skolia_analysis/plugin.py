@@ -40,6 +40,21 @@ class Analyzer(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class ParsingAnalyzer:
+    """An Analyzer that parses the text, then assembles the blob from the parse."""
+
+    name: str
+    parser: Parser
+    assembler: Callable[[str, Iterable[ParsedSentence]], Blob]
+
+    def __call__(self, text: str) -> Blob:
+        return self.assemble(text, self.parser(text))
+
+    def assemble(self, text: str, parsed: Iterable[ParsedSentence]) -> Blob:
+        return self.assembler(text, parsed)
+
+
 type Bundler = Callable[[Blob], Bundle]
 
 
