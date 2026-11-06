@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Builds each language's ingest image, pushes it to Cloudflare's registry and deploys the
 # ingest Worker with them: deploy-ingest.sh <staging|production>. Run after tf.sh apply (it reads
-# the R2 credentials from Terraform). With INGEST_CACHE set to a buildx cache backend
-# (CI: type=gha,scope=ingest), buildx keeps its layer cache there, so unchanged layers
-# keep their digests and Cloudflare's registry skips them.
+# the R2 credentials from Terraform). Each image is built on a base (models and
+# dependencies, analysis/Dockerfile) kept in the registry under a tag of its own, so a
+# code change builds and pushes only the code and lexicon layers on top of it.
 set -euo pipefail
 
 env=${1:-}
@@ -23,22 +23,58 @@ langs=(pl en)
 # the lexicons are pinned in analysis/inputs.sha256), so an unchanged image is neither
 # rebuilt nor redeployed, whichever commits came between
 built_from=(analysis .dockerignore)
+# The base is named by the files its stages read
+base_from=(analysis/Dockerfile analysis/pyproject.toml analysis/uv.lock analysis/.python-version
+  analysis/scripts/fetch_model.py analysis/scripts/fetch_stanza.py .dockerignore)
 if [ -n "$(git -C "$root" status --porcelain -- "${built_from[@]}")" ]; then
   echo "uncommitted changes under ${built_from[*]}: commit them first" >&2
   exit 1
 fi
-version=$(cd "$root" && git rev-parse "${built_from[@]/#/HEAD:}" | git hash-object --stdin | cut -c1-12)
+tree_hash() { (cd "$root" && git rev-parse "${@/#/HEAD:}" | git hash-object --stdin | cut -c1-12); }
+version=$(tree_hash "${built_from[@]}")
+base_version=base-$(tree_hash "${base_from[@]}")
 
 registry=$(wrangler containers images list --json)
+in_registry() {
+  jq -e --arg n "$1" --arg v "$2" '.[] | select(.name == $n) | .tags | index($v)' \
+    <<<"$registry" >/dev/null
+}
+repo=registry.cloudflare.com/$CLOUDFLARE_ACCOUNT_ID
+
+# buildx pushes straight to the registry, with the credentials wrangler containers push
+# would use (user v1), so nothing is loaded into Docker and the base's layers, already
+# in the registry, are neither pulled nor pushed again
+logged_in=
+login() {
+  [ -n "$logged_in" ] && return
+  wrangler containers registries credentials registry.cloudflare.com --push --pull \
+    --expiration-minutes 60 | tail -n1 |
+    docker login --username v1 --password-stdin registry.cloudflare.com
+  logged_in=1
+}
+
+# Cloudflare's registry sometimes times out committing a large layer (on 2026-11-06 a
+# 1 GB model layer failed 3 times, then went through); a retry rebuilds from the builder's
+# cache and pushes what's missing
+build() {
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    docker buildx build --platform linux/amd64 -f "$root/analysis/Dockerfile" \
+      --provenance=false --sbom=false "$@" "$root" && return
+    [ "$attempt" = 5 ] && exit 1
+    echo "build or push failed (attempt $attempt)" >&2
+  done
+}
+
 data_built=
 images=()
 for lang in "${langs[@]}"; do
   name=skolia-ingest-$lang
   tag=$name:$version
+  base=$repo/$name:$base_version
   class=Ingest$(tr '[:lower:]' '[:upper:]' <<<"${lang:0:1}")${lang:1}
-  images+=("$class=registry.cloudflare.com/$CLOUDFLARE_ACCOUNT_ID/$tag")
-  if jq -e --arg n "$name" --arg v "$version" '.[] | select(.name == $n) | .tags | index($v)' \
-    <<<"$registry" >/dev/null; then
+  images+=("$class=$repo/$tag")
+  if in_registry "$name" "$version"; then
     echo "$tag is already in the registry"
     continue
   fi
@@ -46,26 +82,29 @@ for lang in "${langs[@]}"; do
     "$root/analysis/scripts/build_data.sh"
     data_built=1
   fi
-  options=()
-  if [ -n "${INGEST_CACHE:-}" ]; then
-    # A cache scope per language (INGEST_CACHE ends in scope=...): each build's cache-to
-    # replaces its scope's cache
-    options+=(--cache-from "$INGEST_CACHE-$lang" --cache-to "$INGEST_CACHE-$lang,mode=max")
-  fi
-  # Higher Hugging Face rate limits for the model downloads; optional
-  if [ -n "${HF_TOKEN:-}" ]; then
-    options+=(--secret id=hf_token,env=HF_TOKEN)
-  fi
-  docker buildx build --platform linux/amd64 -f "$root/analysis/Dockerfile" \
-    --build-arg "SKOLIA_LANG=$lang" --load -t "$tag" ${options[@]+"${options[@]}"} "$root"
+  login
+  push=(--output type=image,push=true,oci-mediatypes=false)
 
-  # Cloudflare's registry sometimes times out committing a large layer (on 2026-11-06 a
-  # 1 GB model layer failed 3 times, then went through); layers already pushed are kept
-  for attempt in 1 2 3 4 5; do
-    wrangler containers push "$tag" && break
-    [ "$attempt" = 5 ] && exit 1
-    echo "push failed (attempt $attempt)" >&2
-  done
+  if in_registry "$name" "$base_version"; then
+    echo "$name:$base_version is already in the registry"
+  else
+    # Room for the models, on a GitHub runner
+    if [ -n "${GITHUB_ACTIONS:-}" ] && [ -z "${disk_freed:-}" ]; then
+      sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+      disk_freed=1
+    fi
+    options=()
+    # Higher Hugging Face rate limits for the model downloads; optional
+    if [ -n "${HF_TOKEN:-}" ]; then
+      options+=(--secret id=hf_token,env=HF_TOKEN)
+    fi
+    build --build-arg "SKOLIA_LANG=$lang" --target "base-$lang" -t "$base" "${push[@]}" \
+      ${options[@]+"${options[@]}"}
+    # With the base in the builder, check it has the files the parser loads
+    build --build-arg "SKOLIA_LANG=$lang" --target check
+  fi
+
+  build --build-arg "SKOLIA_LANG=$lang" --build-arg "BASE=$base" -t "$repo/$tag" "${push[@]}"
 done
 
 # The committed config builds the Dockerfile (for wrangler dev); deploy the pushed

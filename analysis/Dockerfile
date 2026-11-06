@@ -4,11 +4,18 @@
 # for wrangler dev; infra/deploy-ingest.sh for staging and production). For linux/amd64
 # and linux/arm64, from the repo root:
 #   docker build -f analysis/Dockerfile --build-arg SKOLIA_LANG=pl .
+# and to check the models are all there: --target check
 # Models and lexicon are in the image, so a container that wakes for a job needs nothing
 # from outside but R2. data/lexicon/ must be built first (mise run data).
+#
+# Two parts: base-{lang} (models, dependencies, everything but the code and lexicon) and
+# the image on top of it. deploy-ingest.sh pushes the base under its own tag and passes
+# it as BASE, so a code change builds and pushes only the code and lexicon layers.
 
 # The language the image is for: en or pl
 ARG SKOLIA_LANG
+# The image to put the code on: by default the base-{lang} stage below
+ARG BASE=base-${SKOLIA_LANG}
 
 # --- Morfeusz from source ---------------------------------------------------------
 # PyPI's morfeusz2 has a Linux wheel for x86-64 only, so the library and its Python
@@ -118,18 +125,21 @@ COPY analysis/pyproject.toml analysis/uv.lock analysis/.python-version ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project --no-install-package morfeusz2
 
-COPY analysis/src ./src
-# uv sync removes packages the lockfile doesn't install, so the wheel goes in last. The
-# project is installed editable, so a code change leaves .venv as it is.
+# The project is installed editable (a .pth pointing at /app/src, and the scripts in
+# pyproject.toml), so the code isn't needed here: an empty package stands in for it, and
+# the code goes in on top of the base. uv sync removes packages the lockfile doesn't
+# install, so the wheel goes in last.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-package morfeusz2 \
- && uv pip install --python .venv/bin/python --no-deps /wheels/morfeusz2-*.whl
+    mkdir -p src/skolia_analysis && touch src/skolia_analysis/__init__.py \
+ && uv sync --frozen --no-dev --no-install-package morfeusz2 \
+ && uv pip install --python .venv/bin/python --no-deps /wheels/morfeusz2-*.whl \
+ && rm -r src
 
-# --- one image per language ---------------------------------------------------------
-# Each starts with its models, then the shared .venv (the same layer in every image),
-# then the code and its own lexicon. The model caches merged into one, a layer each:
-# Cloudflare's registry times out committing a single 3 GB layer.
-FROM python:3.12.13-slim AS ingest-pl
+# --- one base per language ----------------------------------------------------------
+# Each starts with its models, then the shared .venv (the same layer in every image).
+# The model caches merged into one, a layer each: Cloudflare's registry times out
+# committing a single 3 GB layer.
+FROM python:3.12.13-slim AS base-pl
 ARG HUB=/root/.cache/huggingface/hub
 COPY --from=models-pl /models/xlm-roberta-base/ $HUB/
 COPY --from=models-pl /models/combo-nlp/ $HUB/
@@ -137,27 +147,35 @@ COPY --from=models-pl /models/combo-seg/ $HUB/
 COPY --from=models-pl /models/combo-nlp-models/ $HUB/
 COPY --from=morfeusz /build/dictionaries/ /usr/local/share/morfeusz2/dictionaries/
 COPY --from=app /app/.venv /app/.venv
-COPY --from=app /app/src /app/src
-COPY data/lexicon/pl.sqlite data/lexicon/pl-valency.json /lexicon/
+WORKDIR /app
 
-FROM python:3.12.13-slim AS ingest-en
+FROM python:3.12.13-slim AS base-en
 ARG HUB=/root/.cache/huggingface/hub
 COPY --from=models-en /models/electra-large/ $HUB/
 COPY --from=models-en /models/stanza/ /models/stanza/
 COPY --from=app /app/.venv /app/.venv
-COPY --from=app /app/src /app/src
-COPY data/lexicon/en.sqlite /lexicon/
+WORKDIR /app
 ENV STANZA_RESOURCES_DIR=/models/stanza
 
-# --- the image for SKOLIA_LANG ------------------------------------------------------
-FROM ingest-${SKOLIA_LANG}
+# --- the image for SKOLIA_LANG: the base, the code and its lexicon -------------------
+# Only metadata and COPY --link on top of the base, which buildx can then push without
+# pulling the base
+FROM ${BASE} AS ingest
 ARG SKOLIA_LANG
-WORKDIR /app
 ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 HF_HUB_OFFLINE=1 \
     SKOLIA_HTTP_PORT=8080 \
     SKOLIA_LANGS=$SKOLIA_LANG \
     SKOLIA_DATA=/lexicon
-# Fails the build if the parser needs a model file not copied above
-RUN python -c "from skolia_analysis import lang; p = lang.plugin('$SKOLIA_LANG'); p.parser(p.DEFAULT_MODEL)"
+COPY --link analysis/src /app/src
+COPY --link data/lexicon/${SKOLIA_LANG}.sqlite data/lexicon/${SKOLIA_LANG}-*.json /lexicon/
 EXPOSE 8080
 CMD ["skolia-ingest"]
+
+# Fails the build if the parser needs a model file the base doesn't have. Its own
+# target, run by deploy-ingest.sh when it builds a base: running it on an image built
+# on a pushed base would mean pulling the base.
+FROM ingest AS check
+ARG SKOLIA_LANG
+RUN python -c "from skolia_analysis import lang; p = lang.plugin('$SKOLIA_LANG'); p.parser(p.DEFAULT_MODEL)"
+
+FROM ingest
