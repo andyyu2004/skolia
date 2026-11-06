@@ -11,9 +11,11 @@
   },
   "dependencies": {
     "@skolia/shared": "workspace:*",
+    "hono": "4.13.13",
     "svelte": "5.57.2"
   },
   "devDependencies": {
+    "@skolia/api": "workspace:*",
     "@sveltejs/vite-plugin-svelte": "7.3.1",
     "@types/node": "26.6.5",
     "svelte-check": "4.7.7",

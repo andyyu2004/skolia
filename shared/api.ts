@@ -26,8 +26,8 @@ export interface DocumentSummary {
   /** The analysis and bundle to show, by name (GET .../analysis/{name}): the current
    * ones, or while newer ones are queued or analysing (or failed), the previous ones.
    * Absent until a first analysis is ready. */
-  reading?: ReadingNames;
-  error?: string;
+  reading?: ReadingNames | undefined;
+  error?: string | undefined;
 }
 
 export interface ReadingNames {
