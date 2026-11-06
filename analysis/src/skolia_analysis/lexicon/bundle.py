@@ -25,6 +25,8 @@ CLOSEST_UPOS: dict[Upos, tuple[Upos, ...]] = {
 }
 
 type Paradigms = Callable[[str, Upos], list[Paradigm]]
+"""Generates a word's paradigms, by lemma and part of speech, for a language whose
+lexicon doesn't store them."""
 type Frames = Callable[[str, Upos], list[Schema]]
 """A word's valency schemata, by lemma and part of speech."""
 
@@ -70,7 +72,9 @@ def resolve(lexicon: Lexicon, lemma_id: str) -> tuple[Row | None, Match]:
     return None, "none"
 
 
-def make(blob: Blob, lexicon: Lexicon, paradigms: Paradigms, frames: Frames = no_frames) -> Bundle:
+def make(
+    blob: Blob, lexicon: Lexicon, paradigms: Paradigms | None = None, frames: Frames = no_frames
+) -> Bundle:
     bundle: Bundle = {
         "schema": BUNDLE_SCHEMA,
         "lang": blob["lang"],
@@ -122,8 +126,16 @@ def _compact(paradigm: Paradigm, feats: FeatsTable) -> BundleParadigm:
     return {"homonym": paradigm["homonym"], "forms": list(by_form.items())}
 
 
+def _paradigms(
+    row: Row | None, paradigms: Paradigms | None, lemma: str, upos: Upos
+) -> list[Paradigm]:
+    if paradigms is not None:
+        return paradigms(lemma, upos)
+    return row.paradigms if row else []
+
+
 def _entry(
-    entry_id: str, row: Row | None, paradigms: Paradigms, frames: Frames, feats: FeatsTable
+    entry_id: str, row: Row | None, paradigms: Paradigms | None, frames: Frames, feats: FeatsTable
 ) -> Entry:
     _lang, lemma, upos = parse_lemma_id(entry_id)
     return {
@@ -131,6 +143,6 @@ def _entry(
         "upos": upos,
         "senses": row.senses if row else [],
         "relations": row.relations if row else [],
-        "paradigms": [_compact(p, feats) for p in paradigms(lemma, upos)],
+        "paradigms": [_compact(p, feats) for p in _paradigms(row, paradigms, lemma, upos)],
         "frames": frames(lemma, upos),
     }

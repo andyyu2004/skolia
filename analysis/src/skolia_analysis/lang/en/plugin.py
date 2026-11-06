@@ -16,7 +16,7 @@ from ...parsed import ParsedSentence, Parser
 from ...parsers.stanza_parser import StanzaParser
 from ...plugin import Bundler, Options
 from ...schema import Blob
-from .lexicon import Source, stored_paradigms
+from .lexicon import Source
 
 LANG = "en"
 PLUGIN_VERSION = "0.1"
@@ -56,7 +56,7 @@ def assemble(
 
 
 class Analyzer:
-    """Options.snap and candidates have no effect: English has no candidate lookup."""
+    """Options.candidates has no effect: English has no candidate lookup."""
 
     def __init__(self, parser: Parser, options: Options) -> None:
         self._parser = parser
@@ -72,6 +72,8 @@ class Analyzer:
 
 def analyzer(parser: Parser, options: Options, data: Path | None) -> Analyzer:
     """English uses nothing from data besides the lexicon."""
+    if options.snap is not None:
+        raise ValueError(f"English has no candidates to snap to (snap {options.snap!r})")
     return Analyzer(parser, options)
 
 
@@ -80,5 +82,5 @@ def lexicon_source() -> Source:
 
 
 def bundler(lexicon: Lexicon, data: Path | None) -> Bundler:
-    paradigms = stored_paradigms(lexicon, LANG)
-    return lambda blob: bundle.make(blob, lexicon, paradigms)
+    """The paradigms are the lexicon's, from Wiktionary."""
+    return lambda blob: bundle.make(blob, lexicon)

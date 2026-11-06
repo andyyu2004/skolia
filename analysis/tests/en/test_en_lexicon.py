@@ -1,4 +1,5 @@
 from skolia_analysis.lang.en import lexicon as lexicon_en
+from skolia_analysis.lexicon import build
 from skolia_analysis.lexicon.kaikki import KaikkiEntry, KaikkiForm
 from skolia_analysis.schema import Feats
 
@@ -139,4 +140,22 @@ def test_inflected_form_entry_is_skipped() -> None:
     converted = lexicon_en.Source().convert(dog)
     assert converted is not None
     assert converted.upos == ("NOUN",)
-    assert converted.paradigms[0]["homonym"] == "1"
+
+
+def test_etymologies_share_their_fullest_table() -> None:
+    def acacia(etymology: int, plurals: list[str]) -> KaikkiEntry:
+        return {
+            "word": "acacia",
+            "pos": "noun",
+            "senses": [{"glosses": [f"sense {etymology}"]}],
+            "forms": [{"form": p, "tags": ["plural"]} for p in plurals],
+            "etymology_number": etymology,
+        }
+
+    entries = [acacia(1, ["acacias"]), acacia(2, ["acacias", "acaciae"]), acacia(3, ["acacias"])]
+    merged = build.merge(c for c in map(lexicon_en.Source().convert, entries) if c is not None)
+    entry = merged[("acacia", "NOUN")]
+    assert len(entry.senses) == 3
+    assert [sorted(f["form"] for f in p["forms"]) for p in entry.paradigms] == [
+        ["acacia", "acaciae", "acacias"]
+    ]

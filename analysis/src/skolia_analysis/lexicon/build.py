@@ -11,7 +11,7 @@ from . import kaikki, store
 from .schema import Paradigm, Relation, Sense
 from .source import Converted, LexiconSource
 
-LEXICON_VERSION = "1"
+LEXICON_VERSION = "2"
 
 
 @dataclass
@@ -39,10 +39,32 @@ def merge(converted: Iterable[Converted]) -> dict[tuple[str, Upos], Merged]:
             target = merged.setdefault((entry.lemma, upos), Merged(entry.lemma, upos))
             target.senses += entry.senses
             target.relations += [r for r in entry.relations if r not in target.relations]
-            target.paradigms += [p for p in entry.paradigms if p not in target.paradigms]
+            target.paradigms += entry.paradigms
     for target in merged.values():
         _drop_uninformative_when(target.senses)
+        target.paradigms = _drop_contained(target.paradigms)
     return merged
+
+
+def _drop_contained(paradigms: list[Paradigm]) -> list[Paradigm]:
+    """Etymologies often share a table, or one lists a few more forms (acacia: acaciae);
+    keep one table, the fullest, per homonym."""
+
+    def forms(p: Paradigm) -> frozenset[tuple[str, tuple[tuple[str, object], ...]]]:
+        return frozenset((f["form"], tuple(sorted(f["feats"].items()))) for f in p["forms"])
+
+    kept: list[Paradigm] = []
+    for i, paradigm in enumerate(paradigms):
+        mine = forms(paradigm)
+        covered = any(
+            other["homonym"] == paradigm["homonym"]
+            and (mine < forms(other) or (mine == forms(other) and j < i))
+            for j, other in enumerate(paradigms)
+            if j != i
+        )
+        if not covered:
+            kept.append(paradigm)
+    return kept
 
 
 def _drop_uninformative_when(senses: list[Sense]) -> None:
@@ -66,7 +88,10 @@ def rows(lang: str, source: LexiconSource, path: Path, stats: Stats) -> Iterator
     merged = merge(converted())
     for hand in source.hand_entries():
         for upos in hand.upos:
-            merged.setdefault((hand.lemma, upos), Merged(hand.lemma, upos, hand.senses))
+            merged.setdefault(
+                (hand.lemma, upos),
+                Merged(hand.lemma, upos, hand.senses, hand.relations, hand.paradigms),
+            )
     for (lemma, upos), entry in sorted(merged.items()):
         entry_id = lemma_id(lang, lemma, upos)
         if entry_id is not None:

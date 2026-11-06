@@ -42,7 +42,8 @@ class Form(TypedDict):
 
 class Paradigm(TypedDict):
     homonym: str
-    """Morfeusz's homonym label, e.g. Sm1 (pies: cop) vs Sm2 (pies: dog)."""
+    """Tells apart a lemma's tables with different forms, e.g. Morfeusz's Sm1 (pies: cop) vs
+    Sm2 (pies: dog). Empty when the lemma has one table."""
     forms: list[Form]
 
 

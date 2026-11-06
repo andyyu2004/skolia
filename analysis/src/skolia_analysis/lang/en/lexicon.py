@@ -9,13 +9,10 @@ form gets one feature set per person and number it serves.
 
 from collections.abc import Iterable, Iterator, Mapping
 
-from ...blob import lemma_id
 from ...lexicon import senses as kaikki_senses
-from ...lexicon.bundle import Paradigms
 from ...lexicon.kaikki import KaikkiEntry, KaikkiForm
 from ...lexicon.schema import Form, Paradigm
 from ...lexicon.source import Converted
-from ...lexicon.store import Lexicon
 from ...schema import Feats, Mood, Number, Person, Tense, Upos
 
 ATTRIBUTION = (
@@ -118,11 +115,9 @@ class Source:
             return None
         relations = list(kaikki_senses.derived_from(entry, INFLECTION_TAGS, DERIVATION_TAGS))
         forms = list(paradigm_forms(word, upos, entry.get("forms", [])))
-        paradigms: list[Paradigm] = (
-            [{"homonym": str(entry.get("etymology_number", "")), "forms": forms}]
-            if len(forms) > 1
-            else []
-        )
+        # Wiktionary splits a word by etymology, usually with the same forms (bank, the
+        # shore and the institution); merge keeps one copy of each table
+        paradigms: list[Paradigm] = [{"homonym": "", "forms": forms}] if len(forms) > 1 else []
         return Converted(word, (upos,), senses, relations, paradigms)
 
     def hand_entries(self) -> Iterable[Converted]:
@@ -250,14 +245,3 @@ def _is_inflection(form: str, tags: list[str]) -> bool:
 def _form(text: str, feats: Feats) -> Form:
     # English tags are UD's: there is no separate language-specific tag to keep
     return {"form": text, "xpos": "", "feats": feats}
-
-
-def stored_paradigms(lexicon: Lexicon, lang: str) -> Paradigms:
-    """The paradigms skolia-build-lexicon stored with each entry."""
-
-    def paradigms(lemma: str, upos: Upos) -> list[Paradigm]:
-        entry_id = lemma_id(lang, lemma, upos)
-        row = lexicon.get(entry_id) if entry_id is not None else None
-        return row.paradigms if row is not None else []
-
-    return paradigms

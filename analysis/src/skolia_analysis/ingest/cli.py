@@ -7,7 +7,7 @@ wrangler dev and on Cloudflare.
   SKOLIA_S3_HOST       Host header for the endpoint; optional, for wrangler dev
                        (see S3Blobs)
   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION   S3 credentials
-  SKOLIA_LANGS         languages to ingest, comma-separated: pl
+  SKOLIA_LANGS         languages to ingest, comma-separated, e.g. pl,en
   SKOLIA_DATA          the languages' data directory: {lang}.sqlite (skolia-build-lexicon)
                        and each plugin's own files (pl: pl-valency.json)
 """
@@ -81,7 +81,7 @@ def main() -> None:
         os.environ.get("SKOLIA_S3_HOST") or None,
     )
     data = Path(env("SKOLIA_DATA"))
-    codes = env("SKOLIA_LANGS").split(",")
+    codes = [c.strip() for c in env("SKOLIA_LANGS").split(",") if c.strip()]
     unknown = set(codes) - set(lang.LANGS)
     if unknown:
         sys.exit(f"skolia-ingest: unknown languages in SKOLIA_LANGS: {', '.join(sorted(unknown))}")
