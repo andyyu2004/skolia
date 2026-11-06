@@ -13,14 +13,21 @@ from .schema import Deprel, Feats, Upos
 
 @dataclass(frozen=True, slots=True)
 class ParsedWord:
+    """One syntactic word, with the Universal Dependencies (UD) annotation fields."""
+
     text: str
     lemma: str | None
+    """Dictionary form, e.g. być for był."""
     upos: Upos
+    """Universal part of speech: the UD tag set shared by all languages, e.g. VERB, ADV."""
     xpos: str | None
+    """Language-specific part-of-speech tag, in whatever tag set the parser's model uses."""
     feats: Feats
+    """Morphological features, e.g. {"Number": "Sing", "Tense": "Past"}."""
     head: int | None
     """0-based index of the head word in the sentence's word list; None for the root."""
     deprel: Deprel | None
+    """Dependency relation: this word's role for its head, e.g. nsubj (nominal subject)."""
 
 
 @dataclass(frozen=True, slots=True)

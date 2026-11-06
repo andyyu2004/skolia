@@ -15,131 +15,223 @@ type Upos = Literal[
     "CCONJ",  # coordinating conjunction
     "DET",  # determiner: ten, który, mój
     "INTJ",  # interjection
-    "NOUN",
+    "NOUN",  # noun
     "NUM",  # numeral
     "PART",  # particle
     "PRON",  # pronoun
     "PROPN",  # proper noun
-    "PUNCT",
+    "PUNCT",  # punctuation
     "SCONJ",  # subordinating conjunction
     "SYM",  # symbol
-    "VERB",
+    "VERB",  # verb
     "X",  # other
 ]
 
 type Deprel = Literal[
-    "acl",
-    "acl:cmp",
-    "acl:relcl",
-    "advcl",
-    "advcl:cmp",
-    "advcl:relcl",
-    "advmod",
-    "advmod:arg",
-    "advmod:cmp",
-    "advmod:emph",
-    "advmod:neg",
-    "amod",
-    "amod:cmp",
-    "amod:flat",
-    "appos",
-    "aux",
-    "aux:clitic",
-    "aux:cnd",
-    "aux:imp",
-    "aux:pass",
-    "case",
-    "cc",
-    "cc:preconj",
-    "ccomp",
-    "ccomp:cleft",
-    "ccomp:obj",
-    "conj",
-    "cop",
-    "csubj",
-    "csubj:pass",
-    "dep",
-    "det",
-    "det:numgov",
-    "det:nummod",
-    "det:poss",
-    "discourse",
-    "discourse:intj",
-    "expl:pv",
-    "fixed",
-    "flat",
-    "flat:foreign",
-    "iobj",
-    "list",
-    "mark",
-    "nmod",
-    "nmod:arg",
-    "nmod:cmp",
-    "nmod:flat",
-    "nmod:poss",
-    "nmod:pred",
-    "nsubj",
-    "nsubj:pass",
-    "nummod",
-    "nummod:flat",
-    "nummod:gov",
-    "obj",
-    "obl",
-    "obl:agent",
-    "obl:arg",
-    "obl:cmp",
-    "obl:orphan",
-    "orphan",
-    "parataxis",
-    "parataxis:insert",
-    "parataxis:obj",
-    "punct",
-    "reparandum",
-    "root",
-    "vocative",
-    "xcomp",
-    "xcomp:cleft",
-    "xcomp:pred",
-    "xcomp:subj",
+    "acl",  # adnominal clause: a clause modifying a noun
+    "acl:cmp",  # adnominal clause, comparative
+    "acl:relcl",  # adnominal clause, relative clause: dom, który kupiłem
+    "advcl",  # adverbial clause modifier: gdy przyszedł, ...
+    "advcl:cmp",  # adverbial clause modifier, comparative
+    "advcl:relcl",  # adverbial clause modifier, relative clause: ..., co mnie zdziwiło
+    "advmod",  # adverbial modifier: szybko biegać
+    "advmod:arg",  # adverbial modifier, argument: one the verb requires, czuć się dobrze
+    "advmod:cmp",  # adverbial modifier, comparative: with a comparative clause
+    "advmod:emph",  # adverbial modifier, emphasizing: nawet, właśnie
+    "advmod:neg",  # adverbial modifier, negation: nie
+    "amod",  # adjectival modifier: stary pies
+    "amod:cmp",  # adjectival modifier, comparative: with a comparative clause
+    "amod:flat",  # adjectival modifier, flat: inside a name, Morze Bałtyckie
+    "appos",  # appositional modifier: Warszawa, stolica Polski
+    "aux",  # auxiliary: będę robić
+    "aux:clitic",  # auxiliary, clitic: the person ending -em in zrobiłem, -eś in byłeś
+    "aux:cnd",  # auxiliary, conditional: by in zrobiłby
+    "aux:imp",  # auxiliary, imperative: niech
+    "aux:pass",  # auxiliary, passive: został zbudowany
+    "case",  # case marking: a preposition, do domu
+    "cc",  # coordinating conjunction: i, ale
+    "cc:preconj",  # coordinating conjunction, preconjunct: albo ... albo, zarówno ... jak i
+    "ccomp",  # clausal complement: wiem, że przyjdzie
+    "ccomp:cleft",  # clausal complement, cleft: required by the pronoun to
+    "ccomp:obj",  # clausal complement, object: a clausal object of a verb
+    "conj",  # conjunct: second and later items of a coordination, ryż i pszenica
+    "cop",  # copula: jest in jest lekarzem
+    "csubj",  # clausal subject: kto pyta, nie błądzi
+    "csubj:pass",  # clausal subject, passive: of a passive verb
+    "dep",  # unspecified dependency: when nothing else fits
+    "det",  # determiner: ten dom
+    "det:numgov",  # determiner, numeral governing?: governs the noun's case, wiele osób
+    "det:nummod",  # determiner, numeric modifier: a quantifier that agrees with the noun's case
+    "det:poss",  # determiner, possessive: mój dom
+    "discourse",  # discourse element: outside the sentence's structure
+    "discourse:intj",  # discourse element, interjection: och
+    "expl:pv",  # expletive, pronominal verb: się that belongs to the verb, bać się
+    "fixed",  # fixed multiword expression: w związku z
+    "flat",  # flat multiword expression: a name, Jan Kowalski
+    "flat:foreign",  # flat multiword expression, foreign: a foreign phrase
+    "iobj",  # indirect object: dać bratu książkę
+    "list",  # list: items without conjunctions
+    "mark",  # marker: a subordinating conjunction introducing a clause, że, gdy
+    "nmod",  # nominal modifier: a noun modifying another noun
+    "nmod:arg",  # nominal modifier, argument: a noun a noun requires
+    "nmod:cmp",  # nominal modifier, comparative
+    "nmod:flat",  # nominal modifier, flat: a noun inside a name
+    "nmod:poss",  # nominal modifier, possessive: jego dom
+    "nmod:pred",  # nominal modifier, predicative: after bycie, bycie lekarzem
+    "nsubj",  # nominal subject
+    "nsubj:pass",  # nominal subject, passive: dom został zbudowany
+    "nummod",  # numeric modifier: a numeral that agrees with the noun, dwa psy
+    "nummod:flat",  # numeric modifier, flat: a numeral inside a name
+    "nummod:gov",  # numeric modifier, governing: governs the noun's case, pięć psów
+    "obj",  # object: mam czas
+    "obl",  # oblique nominal: a noun phrase that isn't a core argument, do domu
+    "obl:agent",  # oblique nominal, agent: of a passive verb, przez brata
+    "obl:arg",  # oblique nominal, argument: one the verb requires, myśleć o tobie
+    "obl:cmp",  # oblique nominal, comparative: wyższy od brata
+    "obl:orphan",  # oblique nominal, orphan: its noun is left out
+    "orphan",  # orphan: dependent of a left-out head, ja piję kawę, a on herbatę
+    "parataxis",  # parataxis: a clause loosely placed next to another
+    "parataxis:insert",  # parataxis, insertion?: a parenthetical, moim zdaniem
+    "parataxis:obj",  # parataxis, object: direct speech
+    "punct",  # punctuation
+    "reparandum",  # reparandum: a word the speaker corrected later (spoken language)
+    "root",  # root: head of the sentence
+    "vocative",  # vocative: the person addressed, Kasiu!
+    "xcomp",  # open clausal complement: a clause without its own subject, chcę spać
+    "xcomp:cleft",  # open clausal complement, cleft: required by the pronoun to
+    "xcomp:pred",  # open clausal complement, predicative: wydaje się miły
+    "xcomp:subj",  # open clausal complement, subject: an infinitive or adverbial phrase as subject
 ]
 
 type Yes = Literal["Yes"]
-type Case = Literal["Nom", "Gen", "Dat", "Acc", "Ins", "Loc", "Voc"]
-type Number = Literal["Sing", "Plur", "Ptan"]
-"""Ptan: plurale tantum, a noun that only has plural forms (drzwi, nożyczki)."""
-type Gender = Literal["Masc", "Fem", "Neut"]
-type Animacy = Literal["Hum", "Nhum", "Inan"]
-"""Masculine only. Hum: human (student), Nhum: other animate (pies), Inan: inanimate (stół)."""
-type Person = Literal["0", "1", "2", "3"]
-"""0: the impersonal -no/-to form (zrobiono)."""
-type Aspect = Literal["Imp", "Perf"]
-type Tense = Literal["Past", "Pres", "Fut"]
-type Mood = Literal["Ind", "Imp"]
-type VerbForm = Literal["Fin", "Inf", "Part", "Conv", "Vnoun"]
-"""Conv: adverbial participle (robiąc). Vnoun: verbal noun (robienie)."""
-type Voice = Literal["Act", "Pass"]
-type Degree = Literal["Pos", "Cmp", "Sup"]
-type Polarity = Literal["Pos", "Neg"]
-type PronType = Literal["Prs", "Dem", "Rel", "Int", "Ind", "Tot", "Neg"]
-"""Prs: personal, Dem: demonstrative, Rel: relative, Int: interrogative, Ind: indefinite,
-Tot: total (wszystko, każdy), Neg: negative (nic, nikt)."""
-type Variant = Literal["Short", "Long"]
-"""Short/long form: w/we, go/jego, mi/mnie."""
-type PrepCase = Literal["Pre", "Npr"]
-"""Pronoun form used after a preposition (niego) or not (jego)."""
-type NumType = Literal["Card", "Ord", "Sets"]
-"""Sets: collective numeral (dwoje)."""
-type NumForm = Literal["Word", "Digit", "Roman"]
-type AdpType = Literal["Prep", "Post"]
-type ConjType = Literal["Comp", "Pred", "Oper"]
-type PartType = Literal["Int", "Mod"]
-type VerbType = Literal["Quasi", "Mod"]
-"""Quasi: predicative like trzeba, można. Mod: winien, powinien."""
-type PunctType = Literal[
-    "Peri", "Comm", "Dash", "Quot", "Brck", "Qest", "Colo", "Excl", "Semi", "Slsh", "Elip"
+type Case = Literal[
+    "Nom",  # nominative: kto? co?
+    "Gen",  # genitive: kogo? czego?
+    "Dat",  # dative: komu? czemu?
+    "Acc",  # accusative: kogo? co?
+    "Ins",  # instrumental: kim? czym?
+    "Loc",  # locative: o kim? o czym?
+    "Voc",  # vocative: Kasiu!
 ]
-type PunctSide = Literal["Ini", "Fin"]
-type Polite = Literal["Depr"]
+type Number = Literal[
+    "Sing",  # singular
+    "Plur",  # plural
+    "Ptan",  # plurale tantum: a noun that only has plural forms (drzwi, nożyczki)
+]
+type Gender = Literal[
+    "Masc",  # masculine
+    "Fem",  # feminine
+    "Neut",  # neuter
+]
+type Animacy = Literal[
+    "Hum",  # human: student
+    "Nhum",  # non-human: an animal, pies
+    "Inan",  # inanimate: stół
+]
+"""Masculine only."""
+type Person = Literal[
+    "0",  # zero person: the impersonal -no/-to form, zrobiono
+    "1",  # first person: robię
+    "2",  # second person: robisz
+    "3",  # third person: robi
+]
+type Aspect = Literal[
+    "Imp",  # imperfective: robić
+    "Perf",  # perfective: zrobić
+]
+type Tense = Literal[
+    "Past",  # past
+    "Pres",  # present
+    "Fut",  # future
+]
+type Mood = Literal[
+    "Ind",  # indicative: robisz
+    "Imp",  # imperative: rób
+]
+type VerbForm = Literal[
+    "Fin",  # finite: robię
+    "Inf",  # infinitive: robić
+    "Part",  # participle: robiony, robiący
+    "Conv",  # converb: the adverbial participle, robiąc
+    "Vnoun",  # verbal noun: robienie
+]
+type Voice = Literal[
+    "Act",  # active
+    "Pass",  # passive
+]
+type Degree = Literal[
+    "Pos",  # positive: dobry
+    "Cmp",  # comparative: lepszy
+    "Sup",  # superlative: najlepszy
+]
+type Polarity = Literal[
+    "Pos",  # positive
+    "Neg",  # negative
+]
+type PronType = Literal[
+    "Prs",  # personal: ja, ty
+    "Dem",  # demonstrative: ten, tamten
+    "Rel",  # relative: który
+    "Int",  # interrogative: kto, co
+    "Ind",  # indefinite: ktoś, coś
+    "Tot",  # total: wszystko, każdy
+    "Neg",  # negative: nic, nikt
+]
+type Variant = Literal[
+    "Short",  # short form: w, go, mi
+    "Long",  # long form: we, jego, mnie
+]
+type PrepCase = Literal[
+    "Pre",  # prepositional: the pronoun form used after a preposition, niego
+    "Npr",  # non-prepositional: the form used without one, jego
+]
+type NumType = Literal[
+    "Card",  # cardinal: pięć
+    "Ord",  # ordinal: piąty
+    "Sets",  # sets: the collective numeral, dwoje
+]
+type NumForm = Literal[
+    "Word",  # word: pięć
+    "Digit",  # digit: 5
+    "Roman",  # Roman: V
+]
+type AdpType = Literal[
+    "Prep",  # preposition: before its noun, do domu
+    "Post",  # postposition: after its noun, dwa lata temu
+]
+type ConjType = Literal[
+    "Comp",  # comparing: niż, jak
+    "Pred",  # predicative: jako
+    "Oper",  # operator: a mathematical one, plus
+]
+type PartType = Literal[
+    "Int",  # interrogative: czy
+    "Mod",  # modal?
+]
+type VerbType = Literal[
+    "Quasi",  # quasi-verb?: no person or aspect, trzeba, można
+    "Mod",  # modal?: winien, powinien
+]
+type PunctType = Literal[
+    "Peri",  # period: .
+    "Comm",  # comma: ,
+    "Dash",  # dash, en or em
+    "Quot",  # quotation mark: „
+    "Brck",  # bracket: (
+    "Qest",  # question mark: ?
+    "Colo",  # colon: :
+    "Excl",  # exclamation mark: !
+    "Semi",  # semicolon: ;
+    "Slsh",  # slash: /
+    "Elip",  # ellipsis: …
+]
+type PunctSide = Literal[
+    "Ini",  # initial: ( „
+    "Fin",  # final: ) ”
+]
+type Polite = Literal[
+    "Depr",  # depreciative: a derogatory form of a masculine human noun
+]
 type ExtPos = Upos
 """UPOS of a multi-word unit this word heads, e.g. ADP for "w związku z"."""
 
