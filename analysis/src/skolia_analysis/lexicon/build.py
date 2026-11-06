@@ -1,8 +1,8 @@
 """Kaikki extract -> lexicon SQLite file, keyed by the analyser's lemma_id."""
 
+import hashlib
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from importlib.metadata import version
 from pathlib import Path
 
@@ -80,11 +80,18 @@ def rows(path: Path, stats: Stats) -> Iterator[store.Row]:
 
 def build(kaikki_path: Path, out: Path) -> tuple[int, Stats]:
     stats = Stats()
-    modified = datetime.fromtimestamp(kaikki_path.stat().st_mtime, UTC).date().isoformat()
+    # Named by content: kaikki.org overwrites its extract in place, and a download's
+    # mtime is the day it was fetched, so a date would differ between machines
+    extract = _sha256(kaikki_path)[:12]
     meta = {
         "lang": lexicon_pl.LANG,
-        "version": f"{LEXICON_VERSION}+kaikki-{modified}+morfeusz-{version('morfeusz2')}",
+        "version": f"{LEXICON_VERSION}+kaikki-{extract}+morfeusz-{version('morfeusz2')}",
         "attribution": ATTRIBUTION,
     }
     count = store.write(out, rows(kaikki_path, stats), meta)
     return count, stats
+
+
+def _sha256(path: Path) -> str:
+    with path.open("rb") as f:
+        return hashlib.file_digest(f, "sha256").hexdigest()

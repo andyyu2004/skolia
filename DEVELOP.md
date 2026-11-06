@@ -148,11 +148,25 @@ PDB is licensed CC BY-NC-SA 4.0 (non-commercial). Use it for evaluation only; do
 
 ### Lexicon
 
-Large inputs and outputs live in `data/` at the repo root (git-ignored). Download Kaikki's Polish Wiktionary extract (about 900 MB) and build the lexicon (about 10 s):
+Large inputs and outputs live in `data/` at the repo root (git-ignored). The lexicon and valency files the image ships are built from the inputs pinned in `inputs.sha256`, kept in R2 (`skolia-tfstate/inputs/{sha256}-{name}.zst`) because kaikki.org overwrites its extract in place. This is what CI runs (needs `wrangler login`):
 
 ```fish
-mkdir -p ../data/kaikki ../data/lexicon
+scripts/build_data.sh   # → ../data/lexicon/pl.sqlite and pl-valency.json
+```
+
+The lexicon's version names the extract by its hash, so the same extract gives the same version on any machine. To move to a newer extract (this re-bundles every document once):
+
+```fish
+mkdir -p ../data/kaikki
 curl -fsSL -o ../data/kaikki/kaikki.org-dictionary-Polish.jsonl https://kaikki.org/dictionary/Polish/kaikki.org-dictionary-Polish.jsonl
+set -l sha (shasum -a 256 ../data/kaikki/kaikki.org-dictionary-Polish.jsonl | cut -d' ' -f1)
+zstd -19 -T0 -c ../data/kaikki/kaikki.org-dictionary-Polish.jsonl | pnpm --dir ../api exec wrangler r2 object put skolia-tfstate/inputs/$sha-kaikki.org-dictionary-Polish.jsonl.zst --pipe --remote
+# then put $sha on the kaikki line of inputs.sha256
+```
+
+Or build from a local extract (about 10 s):
+
+```fish
 uv run skolia-build-lexicon ../data/kaikki/kaikki.org-dictionary-Polish.jsonl ../data/lexicon/pl.sqlite
 ```
 
