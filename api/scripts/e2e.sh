@@ -24,4 +24,5 @@ until curl -fs -o /dev/null "http://localhost:$port/api/documents"; do
   sleep 2
 done
 
-node src/smoke.ts "http://localhost:$port" || { echo "smoke test failed; see api/$log" >&2; exit 1; }
+# wrangler dev serves version "dev" (define in wrangler.jsonc)
+node src/smoke.ts "http://localhost:$port" dev || { echo "smoke test failed; see api/$log" >&2; exit 1; }
