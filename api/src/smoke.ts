@@ -1,16 +1,33 @@
 // End-to-end check of a deployed environment: in each language, imports a text no one
 // has imported (so its ingest container really runs), waits until it's ready, then
-// fetches its analysis and bundle. Uses one of the day's imports per language.
-// usage: node src/smoke.ts https://staging.skolia.io
-import { LANGS, type DocumentSummary, type ImportRequest, type Lang } from "@skolia/shared/api";
+// fetches its analysis and bundle. Uses one of the day's imports per language. First
+// checks that the environment serves the expected version, i.e. the deploy took.
+// usage: node src/smoke.ts https://staging.skolia.io $(git describe --tags --always --dirty)
+import { LANGS, type DocumentSummary, type ImportRequest, type Lang, type Version } from "@skolia/shared/api";
 
 const TIMEOUT_MS = 15 * 60 * 1000;
 const POLL_MS = 10 * 1000;
+const VERSION_TIMEOUT_MS = 2 * 60 * 1000;
 
 const TEXTS: Record<Lang, string> = {
   en: "I'm looking for the dog that ran away last night.",
   pl: "Szukam psa, który uciekł wczoraj wieczorem.",
 };
+
+async function checkVersion(base: string, expected: string): Promise<void> {
+  const deadline = Date.now() + VERSION_TIMEOUT_MS;
+  for (;;) {
+    const response = await fetch(`${base}/api/version`);
+    if (!response.ok) throw new Error(`version: ${response.status} ${await response.text()}`);
+    const { version } = (await response.json()) as Version;
+    if (version === expected) {
+      console.log(`version ${version}`);
+      return;
+    }
+    if (Date.now() > deadline) throw new Error(`version: serving ${version}, expected ${expected}`);
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+  }
+}
 
 async function smoke(base: string, lang: Lang): Promise<void> {
   const at = new Date().toISOString();
@@ -45,10 +62,12 @@ async function smoke(base: string, lang: Lang): Promise<void> {
   }
 }
 
-const base = process.argv[2];
-if (!base) {
-  console.error("usage: node src/smoke.ts <base url>");
+const [, , url, expected] = process.argv;
+if (!url || !expected) {
+  console.error("usage: node src/smoke.ts <base url> <version>");
   process.exit(2);
 }
+const base = url.replace(/\/$/, "");
+await checkVersion(base, expected);
 // The containers are separate, so the languages run at the same time
-await Promise.all(LANGS.map((lang) => smoke(base.replace(/\/$/, ""), lang)));
+await Promise.all(LANGS.map((lang) => smoke(base, lang)));

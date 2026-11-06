@@ -31,7 +31,10 @@ jobs:
       TF_IN_AUTOMATION: "1"
       TF_CLI_ARGS_apply: -auto-approve
     steps:
+      # The tags, for git describe (mise.toml deploy)
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: ./.github/actions/setup
       - run: mise run deploy ${{ inputs.env }}
 

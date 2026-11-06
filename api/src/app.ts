@@ -13,6 +13,7 @@ import {
   type KnownLemma,
   type Lang,
   type User,
+  type Version,
 } from "@skolia/shared/api";
 import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { Status, Versions } from "@skolia/shared/schema";
@@ -28,6 +29,8 @@ export interface Deps {
   /** New texts accepted per UTC day, across everyone: analysis time is what costs
    * money. Importing a text that's already here doesn't count. */
   maxImportsPerDay: number;
+  /** git describe of the build */
+  version: string;
   now?: () => Date;
 }
 
@@ -78,6 +81,7 @@ export function createApp(deps: Deps) {
       console.error(error);
       return c.json({ error: "internal error" } satisfies ApiError, 500);
     })
+    .get("/api/version", (c) => c.json({ version: deps.version } satisfies Version, 200))
     .on(["GET", "POST"], "/api/auth/*", (c) => deps.auth.handle(c.req.raw))
     .get("/api/me", async (c) => {
       const user = await deps.auth.user(c.req.raw.headers);

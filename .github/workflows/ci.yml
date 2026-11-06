@@ -1,20 +1,16 @@
 name: CI
 
 # Every push and pull request: checks and tests. Pull requests: a plan per environment.
-# main: deploy staging and smoke-test it. Production: run the workflow by hand with
-# "production" ticked. The steps are mise tasks (mise.toml), so a deploy by hand runs
-# the same commands.
+# main: deploy staging and smoke-test it. A v* tag on a commit in main: staging, then
+# production. The steps are mise tasks (mise.toml), so a deploy by hand runs the same
+# commands.
 
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
-    inputs:
-      production:
-        description: After staging passes, deploy production
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -53,18 +49,25 @@ jobs:
       - run: mise run plan ${{ matrix.env }}
 
   staging:
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     needs: check
     uses: ./.github/workflows/deploy.yml
     with:
       env: staging
     secrets: inherit
 
-  # Only by hand while the repo is private: GitHub Free has no required reviewers on a
-  # private repo's environments
+  tag-on-main:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+
   production:
-    if: github.event_name == 'workflow_dispatch' && inputs.production
-    needs: staging
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [staging, tag-on-main]
     uses: ./.github/workflows/deploy.yml
     with:
       env: production

@@ -68,11 +68,13 @@ run = "infra/tf.sh $usage_env apply -input=false"
 [tasks.deploy]
 description = "Terraform, D1 migrations, then the skolia Worker (reader and API) with wrangler"
 usage = 'arg "<env>" { choices "staging" "production" }'
+# The version /api/version and the reader's footer show
+env = { VITE_VERSION = "{{exec(command='git describe --tags --always --dirty')}}" }
 run = [
   "mise run apply $usage_env",
   "mise run migrate $usage_env",
   "pnpm --filter @skolia/reader build",
-  "infra/wrangler.sh $usage_env deploy",
+  'infra/wrangler.sh $usage_env deploy --define "VERSION:\"$VITE_VERSION\""',
 ]
 
 [tasks.deploy-ingest]
@@ -81,6 +83,7 @@ usage = 'arg "<env>" { choices "staging" "production" }'
 run = "infra/deploy-ingest.sh $usage_env"
 
 [tasks.smoke]
-description = "Import a new text and wait until it's ready"
+description = "Check the environment serves this checkout's version, then import a new text and wait until it's ready"
 usage = 'arg "<env>" { choices "staging" "production" }'
-run = 'node api/src/smoke.ts "https://$([ "$usage_env" = production ] || echo "$usage_env.")skolia.io"'
+env = { VERSION = "{{exec(command='git describe --tags --always --dirty')}}" }
+run = 'node api/src/smoke.ts "https://$([ "$usage_env" = production ] || echo "$usage_env.")skolia.io" "$VERSION"'

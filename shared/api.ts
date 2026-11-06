@@ -82,6 +82,10 @@ export interface User {
   image: string | null;
 }
 
+export interface Version {
+  version: string;
+}
+
 export interface ApiError {
   error: string;
 }
