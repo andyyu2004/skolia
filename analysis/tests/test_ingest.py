@@ -50,7 +50,7 @@ def status(blobs: DirBlobs, doc: str) -> dict[str, str]:
 
 def test_job_writes_analysis_bundle_and_ready_status(tmp_path: Path) -> None:
     blobs = DirBlobs(tmp_path)
-    doc = doc_id(TEXT)
+    doc = doc_id("pl", TEXT)
     blobs.put(text_key(doc), TEXT.encode(), "text/plain")
     queue = MemoryQueue()
     queue.send({"doc": doc, "lang": "pl"})
@@ -66,7 +66,7 @@ def test_job_writes_analysis_bundle_and_ready_status(tmp_path: Path) -> None:
 
 def test_all_of_a_document_is_under_one_prefix(tmp_path: Path) -> None:
     blobs = DirBlobs(tmp_path)
-    doc = doc_id(TEXT)
+    doc = doc_id("pl", TEXT)
     blobs.put(text_key(doc), TEXT.encode(), "text/plain")
     ready = Ingester(blobs, pipelines()).process({"doc": doc, "lang": "pl"})
     keys = [text_key(doc), status_key(doc), ready.get("analysis", ""), ready.get("bundle", "")]
@@ -77,7 +77,7 @@ def test_missing_text_and_unknown_language_fail_without_retry(tmp_path: Path) ->
     blobs = DirBlobs(tmp_path)
     ingester = Ingester(blobs, pipelines())
     assert ingester.process({"doc": "abc", "lang": "pl"})["state"] == "failed"
-    doc = doc_id(TEXT)
+    doc = doc_id("pl", TEXT)
     blobs.put(text_key(doc), TEXT.encode(), "text/plain")
     failed = ingester.process({"doc": doc, "lang": "xx"})
     assert failed["state"] == "failed"
@@ -87,7 +87,7 @@ def test_missing_text_and_unknown_language_fail_without_retry(tmp_path: Path) ->
 def test_text_over_the_limit_fails_before_analysis(tmp_path: Path) -> None:
     blobs = DirBlobs(tmp_path)
     text = "a" * (MAX_TEXT_LENGTH + 1)
-    doc = doc_id(text)
+    doc = doc_id("pl", text)
     blobs.put(text_key(doc), text.encode(), "text/plain")
     analysed: list[str] = []
     pipeline = Pipeline(
@@ -119,7 +119,7 @@ def test_versions_are_published_for_the_api(tmp_path: Path) -> None:
 
 def test_the_status_points_at_the_published_names(tmp_path: Path) -> None:
     blobs = DirBlobs(tmp_path)
-    doc = doc_id(TEXT)
+    doc = doc_id("pl", TEXT)
     blobs.put(text_key(doc), TEXT.encode(), "text/plain")
     pipeline = pipelines()["pl"]
     ready = Ingester(blobs, {"pl": pipeline}).process({"doc": doc, "lang": "pl"})
@@ -138,7 +138,7 @@ class FailingBlobs(DirBlobs):
 
 def test_a_storage_failure_puts_the_job_back_instead_of_failing_it(tmp_path: Path) -> None:
     blobs = FailingBlobs(tmp_path)
-    doc = doc_id(TEXT)
+    doc = doc_id("pl", TEXT)
     blobs.put(text_key(doc), TEXT.encode(), "text/plain")
     queue = MemoryQueue()
     queue.send({"doc": doc, "lang": "pl"})
@@ -154,7 +154,7 @@ def test_re_analysis_serves_the_old_analysis_until_the_new_one_is_ready(
     tmp_path: Path,
 ) -> None:
     blobs = DirBlobs(tmp_path)
-    doc = doc_id(TEXT)
+    doc = doc_id("pl", TEXT)
     blobs.put(text_key(doc), TEXT.encode(), "text/plain")
     old = Ingester(blobs, pipelines()).process({"doc": doc, "lang": "pl"})
     seen: list[dict[str, str]] = []
@@ -175,7 +175,7 @@ def test_re_analysis_serves_the_old_analysis_until_the_new_one_is_ready(
 
 def test_a_job_already_done_is_not_analysed_again(tmp_path: Path) -> None:
     blobs = DirBlobs(tmp_path)
-    doc = doc_id(TEXT)
+    doc = doc_id("pl", TEXT)
     blobs.put(text_key(doc), TEXT.encode(), "text/plain")
     analysed: list[str] = []
     pipeline = Pipeline(
@@ -189,7 +189,7 @@ def test_a_job_already_done_is_not_analysed_again(tmp_path: Path) -> None:
 
 def test_an_analyser_unlike_the_published_one_fails(tmp_path: Path) -> None:
     blobs = DirBlobs(tmp_path)
-    doc = doc_id(TEXT)
+    doc = doc_id("pl", TEXT)
     blobs.put(text_key(doc), TEXT.encode(), "text/plain")
     pipeline = Pipeline("pl", fake_analysis, fake_bundle, "test/2", "lex/1")
     failed = Ingester(blobs, {"pl": pipeline}).process({"doc": doc, "lang": "pl"})
@@ -213,7 +213,7 @@ class FlakyQueue(MemoryQueue):
 
 def test_worker_survives_a_failing_queue(tmp_path: Path) -> None:
     blobs = DirBlobs(tmp_path)
-    doc = doc_id(TEXT)
+    doc = doc_id("pl", TEXT)
     blobs.put(text_key(doc), TEXT.encode(), "text/plain")
     queue = FlakyQueue()
     queue.send({"doc": doc, "lang": "pl"})
@@ -229,3 +229,10 @@ def test_parse_job_rejects_bad_messages() -> None:
         parse_job('{"doc": 1, "lang": "pl"}')
     with pytest.raises(InvalidJob):
         parse_job("[]")
+
+
+def test_doc_id_matches_the_api() -> None:
+    # The same value is asserted in api/src/app.test.ts against docId in shared/keys.ts
+    expected = "d8fc9f68cd4e27140cbfe3d63851f0d2af4026ce726f9e9cdcb8682a537c71a7"
+    assert doc_id("pl", "Idę do domu.") == expected
+    assert doc_id("en", "Idę do domu.") != expected

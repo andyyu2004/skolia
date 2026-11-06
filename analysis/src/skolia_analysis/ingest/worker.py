@@ -107,8 +107,8 @@ class Ingester:
         if raw is None:
             raise JobError(f"no text at {text_key(doc)}")
         text = raw.decode("utf-8")
-        if doc_id(text) != doc:
-            raise JobError("text doesn't match the document id (sha256 of the text)")
+        if doc_id(job["lang"], text) != doc:
+            raise JobError("text and language don't match the document id")
         if len(text) > MAX_TEXT_LENGTH:
             raise JobError(f"text is longer than {MAX_TEXT_LENGTH} characters")
         versions = pipeline.versions()

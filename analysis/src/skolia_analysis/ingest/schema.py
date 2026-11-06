@@ -50,8 +50,10 @@ costs money: at about 46 words a second on an M-series Mac, a text at the limit 
 3,000 words) takes roughly a minute."""
 
 
-def doc_id(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+def doc_id(lang: str, text: str) -> str:
+    """sha256 hex of the UTF-8 "{lang}\n{text}": the same text in two languages is two
+    documents. As docId in shared/keys.ts."""
+    return hashlib.sha256(f"{lang}\n{text}".encode()).hexdigest()
 
 
 def short_hash(value: str) -> str:

@@ -208,7 +208,7 @@ test("import stores the text, queues a job and reports queued", async () => {
   const response = await importText(app);
   assert.equal(response.status, 202);
   const summary = (await response.json()) as DocumentSummary;
-  const id = await docId(TEXT);
+  const id = await docId("pl", TEXT);
   assert.equal(summary.id, id);
   assert.equal(summary.state, "queued");
   assert.equal(summary.title, "Idę do starego psa.");
@@ -223,7 +223,7 @@ test("importing the same text again doesn't queue it twice, unless it failed", a
   const again = await importText(app);
   assert.equal(again.status, 200);
   assert.equal((await local.takeQueued()).length, 1);
-  await putJson(statusKey(await docId(TEXT)), { state: "failed", updated: "x", error: "boom" });
+  await putJson(statusKey(await docId("pl", TEXT)), { state: "failed", updated: "x", error: "boom" });
   const retry = await importText(app);
   assert.equal(retry.status, 202);
   assert.equal((await local.takeQueued()).length, 1);
@@ -232,7 +232,7 @@ test("importing the same text again doesn't queue it twice, unless it failed", a
 test("brotli blobs are sent as stored when accepted, refused otherwise, cached forever", async () => {
   const app = setup();
   await importText(app);
-  const id = await docId(TEXT);
+  const id = await docId("pl", TEXT);
   await readyAt(id, "1");
   const url = `/api/documents/${id}/bundle/b1-a1-l1`;
   const accepted = await app.request(url, { headers: { "accept-encoding": "gzip, br" } });
@@ -264,7 +264,7 @@ test("texts over the limit are refused, oversized bodies without being parsed", 
 test("the summary names the reading once there is one, and it's served by name", async () => {
   const app = setup();
   await importText(app);
-  const id = await docId(TEXT);
+  const id = await docId("pl", TEXT);
   assert.equal((await summaryOf(app, id)).reading, undefined);
   await readyAt(id, "1");
   assert.deepEqual((await summaryOf(app, id)).reading, { analysis: "s2-a1", bundle: "b1-a1-l1" });
@@ -280,7 +280,7 @@ test("the summary names the reading once there is one, and it's served by name",
 test("an outdated document is queued once, and its old reading is kept meanwhile", async () => {
   const app = setup();
   await importText(app);
-  const id = await docId(TEXT);
+  const id = await docId("pl", TEXT);
   await readyAt(id, "1");
   await publish("2");
   await local.takeQueued();
@@ -295,7 +295,7 @@ test("an outdated document is queued once, and its old reading is kept meanwhile
 test("a bundle of another shape is out of date even if the analyser is the same", async () => {
   const app = setup();
   await importText(app);
-  const id = await docId(TEXT);
+  const id = await docId("pl", TEXT);
   await readyAt(id, "1");
   await putJson(versionsKey("pl"), { analyzer: "pl/1", lexicon: "lex/1", analysis: "s2-a1", bundle: "b2-a1-l1" });
   await local.takeQueued();
@@ -306,7 +306,7 @@ test("a bundle of another shape is out of date even if the analyser is the same"
 test("a current document isn't queued, nor any before ingest publishes its versions", async () => {
   const app = setup();
   await importText(app);
-  const id = await docId(TEXT);
+  const id = await docId("pl", TEXT);
   await readyAt(id, "2");
   await local.takeQueued();
   await app.request("/api/documents");
@@ -319,7 +319,7 @@ test("a current document isn't queued, nor any before ingest publishes its versi
 test("a document queued or analysing for too long is queued again", async () => {
   const app = setup();
   await importText(app);
-  const id = await docId(TEXT);
+  const id = await docId("pl", TEXT);
   await local.takeQueued();
   assert.equal((await summaryOf(app, id)).state, "queued");
   assert.deepEqual(await local.takeQueued(), []);
