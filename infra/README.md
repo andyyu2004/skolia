@@ -41,7 +41,7 @@ set -x AWS_SECRET_ACCESS_KEY (pass show $p/skolia-tfstate-secret-access-key)
 
 ## Deploy
 
-A push to main deploys staging and smoke-tests it (imports a new text and waits until it's ready). Production deploys when the workflow is run by hand with `production` ticked (`gh workflow run ci.yml -f production=true`), after staging passes; GitHub Free has no required reviewers on a private repo (`.github/workflows/ci.yml`, `deploy.yml`). Ingest is rebuilt only when something it's built from changed, or when the workflow is run by hand with `ingest` ticked. Pull requests get a production `terraform plan`. GitHub needs:
+A push to main deploys staging and smoke-tests it (imports a new text and waits until it's ready). Production deploys when the workflow is run by hand with `production` ticked (`gh workflow run ci.yml -f production=true`), after staging passes; GitHub Free has no required reviewers on a private repo (`.github/workflows/ci.yml`, `deploy.yml`). Every deploy runs `deploy-ingest`: the image is tagged with a hash of the git trees it's built from (`analysis/`, `.dockerignore`), so it's built and pushed only when that tag isn't in the registry yet, and wrangler leaves an unchanged image deployed as it is. Pull requests get a production `terraform plan`. GitHub needs:
 
 - variable `CLOUDFLARE_ACCOUNT_ID`
 - secrets `CLOUDFLARE_API_TOKEN` (the Terraform token above), `TFSTATE_ACCESS_KEY_ID`, `TFSTATE_SECRET_ACCESS_KEY`, `ALERT_EMAIL`

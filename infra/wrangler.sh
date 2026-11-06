@@ -6,7 +6,8 @@ set -euo pipefail
 
 env=${1:-}
 case $env in
-  production) shift; flags=() ;;
+  # The top level, named explicitly: without --env wrangler warns when env blocks exist
+  production) shift; flags=(--env=) ;;
   staging) shift; flags=(--env "$env") ;;
   *) echo "usage: wrangler.sh <staging|production> <wrangler args...>" >&2; exit 2 ;;
 esac

@@ -23,7 +23,7 @@ run = ["pnpm test", "cd analysis && uv run pytest -q"]
 description = "The reader and the API bundle Terraform uploads"
 run = [
   "pnpm --filter @skolia/reader build",
-  "pnpm --dir api exec wrangler deploy --dry-run --outdir dist",
+  "pnpm --dir api exec wrangler deploy --dry-run --outdir dist --env=''",
 ]
 
 [tasks.data]

@@ -15,23 +15,37 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 tf() { "$root/infra/tf.sh" "$env" "$@"; }
 wrangler() { "$root/infra/wrangler.sh" "$env" "$@"; }
 
-"$root/analysis/scripts/build_data.sh"
-
-tag=skolia-ingest:$(git -C "$root" rev-parse --short=12 HEAD)
-cache=()
-if [ -n "${INGEST_CACHE:-}" ]; then
-  cache=(--cache-from "$INGEST_CACHE" --cache-to "$INGEST_CACHE,mode=max")
+# The image is named by the git trees it's built from (analysis/ and .dockerignore; the
+# lexicon is pinned in analysis/inputs.sha256), so an unchanged image is neither rebuilt
+# nor redeployed, whichever commits came between
+built_from=(analysis .dockerignore)
+if [ -n "$(git -C "$root" status --porcelain -- "${built_from[@]}")" ]; then
+  echo "uncommitted changes under ${built_from[*]}: commit them first" >&2
+  exit 1
 fi
-docker buildx build --platform linux/amd64 -f "$root/analysis/Dockerfile" --target cloudflare \
-  --load -t "$tag" ${cache[@]+"${cache[@]}"} "$root"
+version=$(cd "$root" && git rev-parse "${built_from[@]/#/HEAD:}" | git hash-object --stdin | cut -c1-12)
+tag=skolia-ingest:$version
 
-# Cloudflare's registry sometimes times out committing a large layer (on 2026-11-06 a
-# 1 GB model layer failed 3 times, then went through); layers already pushed are kept
-for attempt in 1 2 3 4 5; do
-  wrangler containers push "$tag" && break
-  [ "$attempt" = 5 ] && exit 1
-  echo "push failed (attempt $attempt)" >&2
-done
+if wrangler containers images list --json |
+  jq -e --arg v "$version" '.[] | select(.name == "skolia-ingest") | .tags | index($v)' >/dev/null; then
+  echo "$tag is already in the registry"
+else
+  "$root/analysis/scripts/build_data.sh"
+  cache=()
+  if [ -n "${INGEST_CACHE:-}" ]; then
+    cache=(--cache-from "$INGEST_CACHE" --cache-to "$INGEST_CACHE,mode=max")
+  fi
+  docker buildx build --platform linux/amd64 -f "$root/analysis/Dockerfile" --target cloudflare \
+    --load -t "$tag" ${cache[@]+"${cache[@]}"} "$root"
+
+  # Cloudflare's registry sometimes times out committing a large layer (on 2026-11-06 a
+  # 1 GB model layer failed 3 times, then went through); layers already pushed are kept
+  for attempt in 1 2 3 4 5; do
+    wrangler containers push "$tag" && break
+    [ "$attempt" = 5 ] && exit 1
+    echo "push failed (attempt $attempt)" >&2
+  done
+fi
 
 # The committed config builds the Dockerfile (for wrangler dev); deploy the pushed image
 image=registry.cloudflare.com/$CLOUDFLARE_ACCOUNT_ID/$tag
