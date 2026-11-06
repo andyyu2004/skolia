@@ -63,7 +63,7 @@ By hand, with the credentials above, the same tasks CI runs:
 ```fish
 mise run plan staging
 mise run deploy staging          # all of the below, in order
-mise run infra staging           # terraform apply, D1 migrations
+mise run deploy-infra staging    # terraform apply, D1 migrations
 mise run deploy-ingest staging   # build, push and deploy the containers
 mise run deploy-web staging      # the skolia Worker (reader and API)
 mise run smoke staging

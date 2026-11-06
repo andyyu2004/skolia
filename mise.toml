@@ -69,12 +69,12 @@ run = "infra/tf.sh $usage_env apply -input=false"
 description = "Terraform and D1 migrations, the ingest Worker, then the skolia Worker: the queue's consumer before its producer"
 usage = 'arg "<env>" { choices "staging" "production" }'
 run = [
-  "mise run infra $usage_env",
+  "mise run deploy-infra $usage_env",
   "mise run deploy-ingest $usage_env",
   "mise run deploy-web $usage_env",
 ]
 
-[tasks.infra]
+[tasks.deploy-infra]
 description = "Terraform, then D1 migrations"
 usage = 'arg "<env>" { choices "staging" "production" }'
 run = ["mise run apply $usage_env", "mise run migrate $usage_env"]

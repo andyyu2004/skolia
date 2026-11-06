@@ -37,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      - run: mise run infra ${{ inputs.env }}
+      - run: mise run deploy-infra ${{ inputs.env }}
 
   # The images are named by their inputs, not the environment, so a build for one
   # environment is reused by the other
