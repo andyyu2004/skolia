@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MAX_TEXT_LENGTH, type DocumentList, type DocumentSummary, type User } from "@skolia/shared/api";
+import { MAX_TEXT_LENGTH, type DocumentList, type DocumentSummary } from "@skolia/shared/api";
 import { docId, partKey, statusKey, versionsKey } from "@skolia/shared/keys";
 import type { IngestJob } from "@skolia/shared/schema";
 import { brotliCompressSync, brotliDecompressSync } from "node:zlib";
@@ -17,20 +17,9 @@ import {
   parseStatus,
   parseVersions,
 } from "./app.ts";
+import { NO_AUTH } from "./auth.ts";
+import { ORIGIN, testAuth } from "./auth-testing.ts";
 import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob } from "./ports.ts";
-
-const ALICE: User = { id: "u1", name: "Alice", email: "alice@example.com", image: null };
-
-class FakeAuth implements Auth {
-  readonly handled: string[] = [];
-  async handle(request: Request): Promise<Response> {
-    this.handled.push(new URL(request.url).pathname);
-    return new Response("from auth");
-  }
-  async user(headers: Headers): Promise<User | null> {
-    return headers.get("cookie") === "session=alice" ? ALICE : null;
-  }
-}
 
 class MemoryDocuments implements DocumentStore {
   readonly rows = new Map<string, DocumentRecord>();
@@ -68,11 +57,10 @@ class MemoryQueue implements JobQueue {
 
 const TEXT = "Idę do starego psa.";
 
-function setup(maxImportsPerDay = 100) {
+function setup(maxImportsPerDay = 100, auth: Auth = NO_AUTH) {
   const documents = new MemoryDocuments();
   const blobs = new MemoryBlobs();
   const queue = new MemoryQueue();
-  const auth = new FakeAuth();
   const app = createApp({
     auth,
     maxImportsPerDay,
@@ -81,22 +69,63 @@ function setup(maxImportsPerDay = 100) {
     queue,
     now: () => new Date("2026-11-04T00:00:00Z"),
   });
-  return { app, auth, documents, blobs, queue };
+  return { app, documents, blobs, queue };
 }
 
-test("/api/auth/* goes to the auth handler", async () => {
-  const { app, auth } = setup();
-  const response = await app.request("/api/auth/sign-in/social", { method: "POST" });
-  assert.equal(await response.text(), "from auth");
-  assert.deepEqual(auth.handled, ["/api/auth/sign-in/social"]);
+async function setupWithAuth() {
+  const auth = await testAuth();
+  return { ...setup(100, auth.auth), ...auth };
+}
+
+const ALICE = { name: "Alice", email: "alice@example.com" };
+
+test("Google sign-in answers with Google's authorize URL, back to /api/auth/callback/google", async () => {
+  const { app } = await setupWithAuth();
+  const response = await app.request(`${ORIGIN}/api/auth/sign-in/social`, {
+    method: "POST",
+    headers: { "content-type": "application/json", origin: ORIGIN },
+    body: JSON.stringify({ provider: "google", callbackURL: "/" }),
+  });
+  assert.equal(response.status, 200);
+  const url = new URL(((await response.json()) as { url: string }).url);
+  assert.equal(url.origin, "https://accounts.google.com");
+  assert.equal(url.searchParams.get("redirect_uri"), `${ORIGIN}/api/auth/callback/google`);
 });
 
-test("/api/me is the signed-in user, 401 without a session", async () => {
-  const { app } = setup();
-  assert.equal((await app.request("/api/me")).status, 401);
-  const response = await app.request("/api/me", { headers: { cookie: "session=alice" } });
+test("/api/me is the session's user, 401 without one", async () => {
+  const { app, signUp, signIn } = await setupWithAuth();
+  assert.equal((await app.request(`${ORIGIN}/api/me`)).status, 401);
+  const alice = await signUp(ALICE);
+  const response = await app.request(`${ORIGIN}/api/me`, { headers: await signIn(alice.id) });
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), ALICE);
+  assert.deepEqual(await response.json(), alice);
+});
+
+test("after signing out the session's cookie signs nobody in", async () => {
+  const { app, signUp, signIn } = await setupWithAuth();
+  const headers = await signIn((await signUp(ALICE)).id);
+  assert.equal((await app.request(`${ORIGIN}/api/me`, { headers })).status, 200);
+  const out = await app.request(`${ORIGIN}/api/auth/sign-out`, {
+    method: "POST",
+    headers: { cookie: headers.get("cookie") ?? "", "content-type": "application/json", origin: ORIGIN },
+    body: "{}",
+  });
+  assert.equal(out.status, 200);
+  assert.equal((await app.request(`${ORIGIN}/api/me`, { headers })).status, 401);
+});
+
+test("an expired session signs nobody in", async () => {
+  const { app, db, signUp, signIn } = await setupWithAuth();
+  const headers = await signIn((await signUp(ALICE)).id);
+  assert.equal((await app.request(`${ORIGIN}/api/me`, { headers })).status, 200);
+  db.prepare(`update session set "expiresAt" = ?`).run(new Date(Date.now() - 1000).toISOString());
+  assert.equal((await app.request(`${ORIGIN}/api/me`, { headers })).status, 401);
+});
+
+test("without its configuration sign-in answers 503 and nobody is signed in", async () => {
+  const { app } = setup();
+  assert.equal((await app.request(`${ORIGIN}/api/auth/sign-in/social`, { method: "POST" })).status, 503);
+  assert.equal((await app.request(`${ORIGIN}/api/me`)).status, 401);
 });
 
 function importText(app: ReturnType<typeof setup>["app"], text = TEXT) {

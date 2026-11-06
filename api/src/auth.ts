@@ -21,7 +21,10 @@ export function authOptions(config: AuthConfig) {
 }
 
 export function createAuth(config: AuthConfig): Auth {
-  const auth = betterAuth(authOptions(config));
+  return toAuth(betterAuth(authOptions(config)));
+}
+
+export function toAuth(auth: Pick<ReturnType<typeof betterAuth>, "handler" | "api">): Auth {
   return {
     handle: (request) => auth.handler(request),
     async user(headers) {
