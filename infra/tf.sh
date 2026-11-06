@@ -18,7 +18,9 @@ export TF_VAR_account_id=${TF_VAR_account_id:-$CLOUDFLARE_ACCOUNT_ID}
 key=skolia.tfstate
 [ "$env" = production ] || key=skolia-$env.tfstate
 if [ ! -f "$TF_DATA_DIR/terraform.tfstate" ]; then
-  terraform init -input=false -backend-config="key=$key" \
+  # readonly: a missing platform hash fails here instead of dirtying the checkout, which
+  # the smoke test's git describe would then report as -dirty
+  terraform init -input=false -lockfile=readonly -backend-config="key=$key" \
     -backend-config="endpoints={s3=\"https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com\"}" >&2
 fi
 exec terraform "$@"
