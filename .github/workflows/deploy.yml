@@ -1,0 +1,61 @@
+name: Deploy
+
+# One environment: migrations and Terraform, the ingest container when it changed, and
+# for staging a smoke test. Called by ci.yml.
+
+on:
+  workflow_call:
+    inputs:
+      env:
+        type: string
+        required: true
+      ingest:
+        description: Build and deploy the ingest container
+        type: boolean
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.env }}
+    concurrency:
+      group: deploy-${{ inputs.env }}
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_ACCESS_KEY }}
+      MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+      TF_IN_AUTOMATION: "1"
+      TF_CLI_ARGS_apply: -auto-approve
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - run: mise run deploy ${{ inputs.env }}
+
+      - name: Free disk space for the image
+        if: inputs.ingest
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+      - uses: docker/setup-buildx-action@v4
+        if: inputs.ingest
+      - uses: docker/login-action@v4
+        if: inputs.ingest
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Deploy ingest
+        if: inputs.ingest
+        run: |
+          export INGEST_CACHE=ghcr.io/${GITHUB_REPOSITORY,,}/ingest-cache
+          mise run deploy-ingest ${{ inputs.env }}
+
+      - name: Smoke test
+        if: inputs.env == 'staging'
+        run: mise run smoke staging

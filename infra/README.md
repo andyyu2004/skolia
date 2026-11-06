@@ -15,54 +15,45 @@ Account `1d3ca537bca3f2918d2778118d23f0a8`. Secrets in `pass` under `cloudflare/
 5. skolia.io bought through Cloudflare Registrar, so its zone is on the account.
 6. Dashboard (Notifications): a Billing Budget alert in dollars. `alerts.tf` covers per-product usage, but Containers have no usage alert and the provider has no budget alert type.
 
-## Environment
+## Environments
+
+| | production | staging |
+|---|---|---|
+| URL | https://skolia.io | https://staging.skolia.io |
+| Names | `skolia`, `skolia-ingest` | `skolia-staging`, `skolia-ingest-staging` |
+| Terraform state | `skolia.tfstate` | `skolia-staging.tfstate` |
+| Wrangler | top level of `api/wrangler*.jsonc` | `env.staging` |
+
+Both are on the same account. Billing alerts are per account, so only production makes them. `infra/tf.sh <env>` and `infra/wrangler.sh <env>` run terraform and wrangler for one environment. `api/wrangler.jsonc` holds each D1 id (`infra/tf.sh <env> output -raw d1_database_id`), for migrations.
+
+A new environment: add it to the `case` in `tf.sh`, `wrangler.sh` and `deploy-ingest.sh` and to `var.env`, add its `env` blocks, then `infra/tf.sh <env> apply`, put its D1 id in `api/wrangler.jsonc`, and deploy.
+
+## Credentials
 
 ```fish
 set -l p cloudflare/andyyu2004@gmail.com/1d3ca537bca3f2918d2778118d23f0a8
 set -x CLOUDFLARE_ACCOUNT_ID 1d3ca537bca3f2918d2778118d23f0a8
 set -x CLOUDFLARE_API_TOKEN (pass show $p/skolia-terraform)
-set -x TF_VAR_account_id $CLOUDFLARE_ACCOUNT_ID
 set -x TF_VAR_alert_email andyyu2004@gmail.com
 set -x AWS_ACCESS_KEY_ID (pass show $p/skolia-tfstate-access-id)
 set -x AWS_SECRET_ACCESS_KEY (pass show $p/skolia-tfstate-secret-access-key)
-terraform -chdir=infra init -backend-config="endpoints={s3=\"https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com\"}"
 ```
 
 ## Deploy
 
-A push to main deploys (`.github/workflows/ci.yml`): checks, D1 migrations, `terraform apply`, and ingest when anything it's built from changed (or when run by hand with `ingest` ticked). Pull requests get a `terraform plan`. The workflow needs:
+A push to main deploys staging, smoke-tests it (imports a new text and waits until it's ready), then deploys production (`.github/workflows/ci.yml`, `deploy.yml`). Ingest is rebuilt only when something it's built from changed, or when the workflow is run by hand with `ingest` ticked. Pull requests get a production `terraform plan`. GitHub needs:
 
 - variable `CLOUDFLARE_ACCOUNT_ID`
 - secrets `CLOUDFLARE_API_TOKEN` (the Terraform token above), `TFSTATE_ACCESS_KEY_ID`, `TFSTATE_SECRET_ACCESS_KEY`, `ALERT_EMAIL`
+- environments `staging` and `production`; a required reviewer on `production` makes it wait for approval
 
-CI builds the ingest image with buildx, caching layers in GHCR (`ingest-cache`) so unchanged layers keep their digests and Cloudflare's registry skips them, then pushes it with `wrangler containers push` and deploys that image.
-
-By hand, from the repo root, with the environment above:
-
-```fish
-pnpm --filter @skolia/reader build
-pnpm --dir api exec wrangler deploy --dry-run --outdir dist   # the bundle Terraform uploads
-terraform -chdir=infra plan -out=skolia.tfplan
-terraform -chdir=infra apply skolia.tfplan
-pnpm --dir api exec wrangler d1 migrations apply skolia --remote
-```
-
-`api/wrangler.jsonc` holds the D1 id (`terraform -chdir=infra output -raw d1_database_id`); update it if the database is ever recreated.
-
-Then the ingest Worker and container, when `analysis/` or `api/src/worker/ingest.ts` changed. Wrangler builds `analysis/Dockerfile` for amd64 (so `data/lexicon/pl.sqlite` and `pl-valency.json` must exist: `analysis/scripts/build_data.sh`) and pushes the layers the registry doesn't have. It runs with your `wrangler login`, not the Terraform token:
+By hand, with the credentials above, the same tasks CI runs:
 
 ```fish
-function tf_out; terraform -chdir=infra output -raw $argv[1]; end
-set -l endpoint (tf_out r2_s3_endpoint)
-set -l secrets (mktemp); chmod 600 $secrets
-printf 'S3_ACCESS_KEY_ID=%s\nS3_SECRET_ACCESS_KEY=%s\n' (tf_out ingest_s3_access_key_id) (tf_out ingest_s3_secret_access_key) > $secrets
-set -e CLOUDFLARE_API_TOKEN AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
-pnpm --dir api exec wrangler deploy -c wrangler.ingest.jsonc --var S3_ENDPOINT:$endpoint --secrets-file $secrets
-rm $secrets
+mise run plan staging
+mise run deploy staging          # D1 migrations, then terraform apply
+mise run deploy-ingest staging   # build, push and deploy the container
+mise run smoke staging
 ```
 
-## Check
-
-```fish
-curl -s https://skolia.io/api/documents
-```
+`deploy-ingest` builds the lexicon (`mise run data`), builds the image with buildx for amd64, pushes it with `wrangler containers push` (retrying: the registry sometimes times out on large layers) and deploys the ingest Worker with that image. In CI, `INGEST_CACHE` keeps buildx's layer cache in GHCR (`ingest-cache`), so unchanged layers keep their digests and the registry skips them.

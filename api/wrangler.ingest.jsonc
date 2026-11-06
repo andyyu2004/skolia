@@ -32,5 +32,26 @@
   },
   // S3_ENDPOINT is passed at deploy (--var, terraform output r2_s3_endpoint) and
   // locally in .dev.vars, which a value here would override
-  "vars": { "S3_BUCKET": "skolia" }
+  "vars": { "S3_BUCKET": "skolia" },
+  // Deployed as skolia-ingest-staging. Bindings and containers aren't inherited.
+  "env": {
+    "staging": {
+      "containers": [
+        {
+          "class_name": "Ingest",
+          "image": "../analysis/Dockerfile",
+          "image_build_context": "..",
+          "instance_type": "standard-2",
+          "max_instances": 1
+        }
+      ],
+      "durable_objects": {
+        "bindings": [{ "name": "INGEST", "class_name": "Ingest" }]
+      },
+      "queues": {
+        "consumers": [{ "queue": "skolia-ingest-staging", "max_batch_size": 10, "max_retries": 10 }]
+      },
+      "vars": { "S3_BUCKET": "skolia-staging" }
+    }
+  }
 }

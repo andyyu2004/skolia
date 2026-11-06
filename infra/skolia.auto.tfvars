@@ -1,1 +1,1 @@
-domain = "skolia.io"
+zone = "skolia.io"

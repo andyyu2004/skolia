@@ -1,6 +1,11 @@
 variable "alert_email" {
   type        = string
-  description = "Address that gets the Usage Based Billing emails."
+  default     = null
+  description = "Address that gets the Usage Based Billing emails. Required in production."
+  validation {
+    condition     = var.env != "production" || var.alert_email != null
+    error_message = "alert_email is required in production."
+  }
 }
 
 locals {
@@ -18,8 +23,9 @@ locals {
   }
 }
 
+# Usage is per account, so the alerts are made once, with production
 resource "cloudflare_notification_policy" "usage" {
-  for_each = local.usage_alerts
+  for_each = var.env == "production" ? local.usage_alerts : {}
 
   account_id  = var.account_id
   name        = "skolia: ${each.value.name}"

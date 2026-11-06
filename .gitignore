@@ -7,4 +7,4 @@ node_modules/
 .wrangler/
 /api/dist/
 .dev.vars
-/api/wrangler.ingest.ci.jsonc
+/api/wrangler.ingest.deploy.jsonc

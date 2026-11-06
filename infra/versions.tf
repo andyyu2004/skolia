@@ -8,10 +8,10 @@ terraform {
     }
   }
 
-  # R2 via the S3 backend. endpoints.s3 and credentials are passed at init (see README.md).
+  # R2 via the S3 backend. key (one state per environment), endpoints.s3 and credentials
+  # are passed at init by tf.sh.
   backend "s3" {
     bucket                      = "skolia-tfstate"
-    key                         = "skolia.tfstate"
     region                      = "auto"
     use_path_style              = true
     use_lockfile                = true

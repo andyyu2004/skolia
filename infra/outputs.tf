@@ -6,6 +6,10 @@ output "queue_id" {
   value = cloudflare_queue.ingest.queue_id
 }
 
+output "url" {
+  value = local.hostname == null ? null : "https://${local.hostname}"
+}
+
 output "r2_s3_endpoint" {
   value = "https://${var.account_id}.r2.cloudflarestorage.com"
 }

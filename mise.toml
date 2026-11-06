@@ -1,2 +1,61 @@
 [tools]
 terraform = "1.17.1"
+
+# mise run <task> [env]. CI runs the same tasks (.github/workflows/ci.yml). Deploy tasks
+# need the credentials in infra/README.md.
+
+[tasks.check]
+description = "Typecheck and lint everything"
+run = [
+  "pnpm check",
+  "cd analysis && uv run ruff check . && uv run ruff format --check . && uv run pyright",
+  "terraform -chdir=infra fmt -check",
+  "TF_DATA_DIR=.terraform-validate terraform -chdir=infra init -backend=false -input=false >/dev/null && TF_DATA_DIR=.terraform-validate terraform -chdir=infra validate",
+]
+
+[tasks.test]
+description = "Unit tests"
+run = ["pnpm test", "cd analysis && uv run pytest -q"]
+
+[tasks.build]
+description = "The reader and the API bundle Terraform uploads"
+run = [
+  "pnpm --filter @skolia/reader build",
+  "pnpm --dir api exec wrangler deploy --dry-run --outdir dist",
+]
+
+[tasks.data]
+description = "The lexicon and valency files, from the inputs pinned in analysis/inputs.sha256"
+run = "analysis/scripts/build_data.sh"
+
+[tasks.plan]
+description = "What a deploy would change"
+usage = 'arg "<env>" { choices "staging" "production" }'
+depends = ["build"]
+run = "infra/tf.sh $usage_env plan -input=false"
+
+[tasks.migrate]
+description = "Apply D1 migrations"
+usage = 'arg "<env>" { choices "staging" "production" }'
+run = "infra/wrangler.sh $usage_env d1 migrations apply DB --remote"
+
+[tasks.apply]
+description = "Terraform: the API Worker with the reader, storage, queue, domain"
+usage = 'arg "<env>" { choices "staging" "production" }'
+depends = ["build"]
+run = "infra/tf.sh $usage_env apply -input=false"
+
+[tasks.deploy]
+description = "Migrations, then Terraform"
+usage = 'arg "<env>" { choices "staging" "production" }'
+run = ["mise run migrate $usage_env", "mise run apply $usage_env"]
+
+[tasks.deploy-ingest]
+description = "Build, push and deploy the ingest container"
+usage = 'arg "<env>" { choices "staging" "production" }'
+run = "infra/deploy-ingest.sh $usage_env"
+
+[tasks.smoke]
+description = "Import a new text and wait until it's ready"
+usage = 'arg "<env>" { choices "staging" "production" }'
+run = 'node api/src/smoke.ts "$(infra/tf.sh $usage_env output -raw url)"'

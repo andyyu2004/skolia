@@ -3,32 +3,32 @@ locals {
 }
 
 data "cloudflare_zone" "skolia" {
-  count = var.domain == null ? 0 : 1
+  count = var.zone == null ? 0 : 1
   filter = {
-    name = var.domain
+    name = var.zone
   }
 }
 
 resource "cloudflare_r2_bucket" "blobs" {
   account_id = var.account_id
-  name       = "skolia"
+  name       = "skolia${local.suffix}"
 }
 
 resource "cloudflare_d1_database" "skolia" {
   account_id = var.account_id
-  name       = "skolia"
+  name       = "skolia${local.suffix}"
 }
 
-# The consumer is the skolia-ingest Worker; wrangler attaches it.
+# The consumer is the ingest Worker (skolia-ingest[-env]); wrangler attaches it.
 resource "cloudflare_queue" "ingest" {
   account_id = var.account_id
-  queue_name = "skolia-ingest"
+  queue_name = "skolia-ingest${local.suffix}"
 }
 
 # Uploading a script deploys it to 100% of traffic, so no separate version/deployment.
 resource "cloudflare_workers_script" "skolia" {
   account_id         = var.account_id
-  script_name        = "skolia"
+  script_name        = "skolia${local.suffix}"
   main_module        = "main.js"
   content_file       = local.bundle
   content_sha256     = filesha256(local.bundle)
@@ -73,10 +73,10 @@ resource "cloudflare_workers_script_subdomain" "skolia" {
 }
 
 resource "cloudflare_workers_custom_domain" "apex" {
-  count      = var.domain == null ? 0 : 1
+  count      = var.zone == null ? 0 : 1
   account_id = var.account_id
   zone_id    = data.cloudflare_zone.skolia[0].id
-  hostname   = var.domain
+  hostname   = local.hostname
   service    = cloudflare_workers_script.skolia.script_name
 }
 
@@ -87,7 +87,7 @@ data "cloudflare_account_api_token_permission_groups_list" "all" {
 
 resource "cloudflare_account_token" "ingest_r2" {
   account_id = var.account_id
-  name       = "skolia-ingest R2"
+  name       = "skolia-ingest${local.suffix} R2"
   policies = [{
     effect = "allow"
     permission_groups = [{

@@ -1,5 +1,10 @@
 name: CI
 
+# Every push and pull request: checks and tests. Pull requests: a production plan.
+# main: deploy staging, smoke-test it, then production (after approval, if the
+# production environment requires it). The steps are mise tasks (mise.toml), so a
+# deploy by hand runs the same commands.
+
 on:
   push:
     branches: [main]
@@ -16,94 +21,43 @@ permissions:
 
 env:
   CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
 
 jobs:
   check:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm check
-      - run: pnpm test
+      - uses: ./.github/actions/setup
+      - run: mise run check
+      - run: mise run test
 
-      - uses: astral-sh/setup-uv@v10
-        with:
-          working-directory: analysis
-          enable-cache: true
-      - name: Analysis checks
-        working-directory: analysis
-        run: |
-          uv sync --frozen
-          uv run ruff check .
-          uv run ruff format --check .
-          uv run pyright
-          uv run pytest -q
-
-      - uses: jdx/mise-action@v5
-      - name: Terraform checks
-        run: |
-          terraform -chdir=infra fmt -check
-          terraform -chdir=infra init -backend=false -input=false
-          terraform -chdir=infra validate
-
-  # What a pull request would change in production
   plan:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     needs: check
     runs-on: ubuntu-24.04
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      TF_VAR_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
       AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_ACCESS_KEY }}
       TF_IN_AUTOMATION: "1"
+      TF_CLI_ARGS_plan: -lock=false
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - uses: jdx/mise-action@v5
-      - name: Build the reader and the API bundle
-        run: |
-          pnpm --filter @skolia/reader build
-          pnpm --dir api exec wrangler deploy --dry-run --outdir dist
-      - name: Terraform plan
-        run: |
-          terraform -chdir=infra init -input=false \
-            -backend-config="endpoints={s3=\"https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com\"}"
-          terraform -chdir=infra plan -input=false -lock=false
+      - uses: ./.github/actions/setup
+      - run: mise run plan production
 
-  deploy:
+  # Whether ingest needs a new image
+  changes:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: check
     runs-on: ubuntu-24.04
-    environment: production
-    concurrency:
-      group: deploy
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      packages: write
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      TF_VAR_account_id: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-      TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_ACCESS_KEY }}
-      TF_IN_AUTOMATION: "1"
+    outputs:
+      ingest: ${{ steps.filter.outputs.ingest == 'true' || inputs.ingest == true }}
     steps:
       - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
-        id: changed
+        id: filter
         with:
           filters: |
             ingest:
@@ -113,92 +67,26 @@ jobs:
               - api/package.json
               - pnpm-lock.yaml
               - .dockerignore
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - uses: jdx/mise-action@v5
+              - infra/deploy-ingest.sh
 
-      - name: Build the reader and the API bundle
-        run: |
-          pnpm --filter @skolia/reader build
-          pnpm --dir api exec wrangler deploy --dry-run --outdir dist
-      # Before the new API code goes out
-      - name: D1 migrations
-        run: pnpm --dir api exec wrangler d1 migrations apply skolia --remote
-      - name: Terraform apply
-        run: |
-          terraform -chdir=infra init -input=false \
-            -backend-config="endpoints={s3=\"https://$CLOUDFLARE_ACCOUNT_ID.r2.cloudflarestorage.com\"}"
-          terraform -chdir=infra apply -input=false -auto-approve
+  staging:
+    needs: [check, changes]
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/deploy.yml
+    with:
+      env: staging
+      ingest: ${{ needs.changes.outputs.ingest == 'true' }}
+    secrets: inherit
 
-      # --- ingest: only when something it's built from changed --------------------
-      - name: Free disk space for the image
-        if: steps.changed.outputs.ingest == 'true' || inputs.ingest
-        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
-      - uses: astral-sh/setup-uv@v10
-        if: steps.changed.outputs.ingest == 'true' || inputs.ingest
-        with:
-          working-directory: analysis
-          enable-cache: true
-      - name: Build the lexicon and valency files
-        if: steps.changed.outputs.ingest == 'true' || inputs.ingest
-        run: analysis/scripts/build_data.sh
-      - name: Image names
-        if: steps.changed.outputs.ingest == 'true' || inputs.ingest
-        id: image
-        run: |
-          echo "cache=ghcr.io/${GITHUB_REPOSITORY,,}/ingest-cache" >> "$GITHUB_OUTPUT"
-          echo "tag=skolia-ingest:${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v4
-        if: steps.changed.outputs.ingest == 'true' || inputs.ingest
-      - uses: docker/login-action@v4
-        if: steps.changed.outputs.ingest == 'true' || inputs.ingest
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      # The layer cache keeps unchanged layers' digests, so the push to Cloudflare
-      # skips them (the models are about 2 GB)
-      - uses: docker/build-push-action@v7
-        if: steps.changed.outputs.ingest == 'true' || inputs.ingest
-        with:
-          context: .
-          file: analysis/Dockerfile
-          target: cloudflare
-          platforms: linux/amd64
-          load: true
-          tags: ${{ steps.image.outputs.tag }}
-          cache-from: type=registry,ref=${{ steps.image.outputs.cache }}
-          cache-to: type=registry,ref=${{ steps.image.outputs.cache }},mode=max
-      # Cloudflare's registry sometimes times out committing a large layer
-      - name: Push the image to Cloudflare
-        if: steps.changed.outputs.ingest == 'true' || inputs.ingest
-        run: |
-          for attempt in 1 2 3; do
-            pnpm --dir api exec wrangler containers push "${{ steps.image.outputs.tag }}" && exit 0
-            echo "push failed (attempt $attempt)"
-          done
-          exit 1
-      - name: Deploy ingest
-        if: steps.changed.outputs.ingest == 'true' || inputs.ingest
-        working-directory: api
-        env:
-          IMAGE: registry.cloudflare.com/${{ vars.CLOUDFLARE_ACCOUNT_ID }}/${{ steps.image.outputs.tag }}
-        run: |
-          # The committed config builds the Dockerfile (for wrangler dev); deploy the pushed image
-          sed -e "s#\"image\": \"../analysis/Dockerfile\",#\"image\": \"$IMAGE\",#" \
-              -e '/"image_build_context"/d' wrangler.ingest.jsonc > wrangler.ingest.ci.jsonc
-          grep -q "\"image\": \"$IMAGE\"" wrangler.ingest.ci.jsonc
-
-          out() { terraform -chdir=../infra output -raw "$1"; }
-          key_id=$(out ingest_s3_access_key_id)
-          secret=$(out ingest_s3_secret_access_key)
-          echo "::add-mask::$secret"
-          secrets=$RUNNER_TEMP/ingest.secrets
-          (umask 077; printf 'S3_ACCESS_KEY_ID=%s\nS3_SECRET_ACCESS_KEY=%s\n' "$key_id" "$secret" > "$secrets")
-          pnpm exec wrangler deploy -c wrangler.ingest.ci.jsonc \
-            --var "S3_ENDPOINT:$(out r2_s3_endpoint)" --secrets-file "$secrets"
-          rm "$secrets"
+  production:
+    needs: [changes, staging]
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/deploy.yml
+    with:
+      env: production
+      ingest: ${{ needs.changes.outputs.ingest == 'true' }}
+    secrets: inherit

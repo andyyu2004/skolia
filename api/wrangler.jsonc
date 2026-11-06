@@ -26,5 +26,24 @@
   "vars": { "MAX_IMPORTS_PER_DAY": "50" },
   "queues": {
     "producers": [{ "binding": "INGEST", "queue": "skolia-ingest" }]
+  },
+  // Bindings aren't inherited, so each environment lists its own (Terraform's names)
+  "env": {
+    "staging": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "skolia-staging",
+          // infra/tf.sh staging output -raw d1_database_id
+          "database_id": "fcffbf4c-49da-4a60-b85b-c6ccabd225a1",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "skolia-staging" }],
+      "vars": { "MAX_IMPORTS_PER_DAY": "50" },
+      "queues": {
+        "producers": [{ "binding": "INGEST", "queue": "skolia-ingest-staging" }]
+      }
+    }
   }
 }
