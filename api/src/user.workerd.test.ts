@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { after, before, test } from "node:test";
 import { createTestHarness, type TestHarness } from "wrangler";
 import type { KnownLemma, LemmaStatus } from "@skolia/shared/api";
+import { MIGRATIONS } from "./user-data.ts";
 
 const dist = new URL("../dist/", import.meta.url);
 
@@ -39,16 +40,16 @@ test("each user's Durable Object keeps its own lemmas", async () => {
   assert.deepEqual(await env.USER.getByName("bob").lemmas(), []);
 });
 
-test("the bundled migrations made the tables, and ran once", async () => {
+test("the migrations made the tables and recorded how many ran", async () => {
   const env = await server.getWorker<Env>().getEnv();
   await env.USER.getByName("carol").lemmas();
   const storage = await server.getWorker().getDurableObjectStorage("User", { name: "carol" });
   const tables = await storage.exec<{ name: string }>("select name from sqlite_master where type = 'table' order by name");
   assert.ok(tables.some((t) => t.name === "known_lemma"));
-  assert.deepEqual(await storage.exec("select count(*) as n from __drizzle_migrations"), [{ n: 1 }]);
+  assert.deepEqual(await storage.exec("select count(*) as n from migration"), [{ n: MIGRATIONS.length }]);
 });
 
-test("schema.ts's withoutRowid tables are WITHOUT ROWID", async () => {
+test("known_lemma is WITHOUT ROWID", async () => {
   const env = await server.getWorker<Env>().getEnv();
   await env.USER.getByName("dave").lemmas();
   const storage = await server.getWorker().getDurableObjectStorage("User", { name: "dave" });

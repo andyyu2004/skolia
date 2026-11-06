@@ -1,30 +1,30 @@
 import { DurableObject } from "cloudflare:workers";
-import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
-import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 import type { KnownLemma, LemmaId, LemmaStatus } from "@skolia/shared/api";
-import migrations from "../user/migrations.gen.ts";
-import { knownLemma } from "../user/schema.ts";
-
-const schema = { knownLemma };
+import { LEMMAS, MIGRATIONS, SET_LEMMA, toKnownLemma } from "../user-data.ts";
 
 export class User extends DurableObject<object> {
-  private readonly db: DrizzleSqliteDODatabase<typeof schema>;
+  private readonly sql: SqlStorage;
 
   constructor(ctx: DurableObjectState, env: object) {
     super(ctx, env);
-    this.db = drizzle(ctx.storage, { schema });
-    void ctx.blockConcurrencyWhile(() => migrate(this.db, migrations));
+    this.sql = ctx.storage.sql;
+    ctx.storage.transactionSync(() => migrate(this.sql));
   }
 
   lemmas(): KnownLemma[] {
-    return this.db.select().from(knownLemma).all();
+    return this.sql.exec(LEMMAS).toArray().map(toKnownLemma);
   }
 
   setLemma(lemmaId: LemmaId, status: LemmaStatus, updated: string): void {
-    this.db
-      .insert(knownLemma)
-      .values({ lemmaId, status, updated })
-      .onConflictDoUpdate({ target: knownLemma.lemmaId, set: { status, updated } })
-      .run();
+    this.sql.exec(SET_LEMMA, lemmaId, status, updated);
   }
+}
+
+function migrate(sql: SqlStorage): void {
+  sql.exec("CREATE TABLE IF NOT EXISTS migration (id INTEGER PRIMARY KEY)");
+  const { applied } = sql.exec<{ applied: number }>("SELECT count(*) AS applied FROM migration").one();
+  MIGRATIONS.slice(applied).forEach((migration, i) => {
+    sql.exec(migration);
+    sql.exec("INSERT INTO migration (id) VALUES (?)", applied + i);
+  });
 }

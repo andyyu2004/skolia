@@ -19,9 +19,6 @@ importers:
       better-auth:
         specifier: 1.7.12
         version: 1.7.12(drizzle-kit@0.31.11)(drizzle-orm@0.45.4(@cloudflare/workers-types@5.20261019.1)(kysely@0.29.8))(svelte@5.57.2)
-      drizzle-orm:
-        specifier: 0.45.4
-        version: 0.45.4(@cloudflare/workers-types@5.20261019.1)(kysely@0.29.8)
       hono:
         specifier: 4.13.13
         version: 4.13.13
@@ -32,9 +29,6 @@ importers:
       '@types/node':
         specifier: 26.6.5
         version: 26.6.5
-      drizzle-kit:
-        specifier: 0.31.11
-        version: 0.31.11
       typescript:
         specifier: 7.0.2
         version: 7.0.2
@@ -1782,7 +1776,8 @@ snapshots:
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
 
-  '@drizzle-team/brocli@0.10.2': {}
+  '@drizzle-team/brocli@0.10.2':
+    optional: true
 
   '@emnapi/runtime@1.11.3':
     dependencies:
@@ -1793,11 +1788,13 @@ snapshots:
     dependencies:
       esbuild: 0.18.20
       source-map-support: 0.5.21
+    optional: true
 
   '@esbuild-kit/esm-loader@2.6.5':
     dependencies:
       '@esbuild-kit/core-utils': 3.3.2
       get-tsconfig: 4.14.3
+    optional: true
 
   '@esbuild/aix-ppc64@0.25.12':
     optional: true
@@ -2346,7 +2343,8 @@ snapshots:
 
   blake3-wasm@2.1.5: {}
 
-  buffer-from@1.1.2: {}
+  buffer-from@1.1.2:
+    optional: true
 
   chokidar@4.0.3:
     dependencies:
@@ -2370,11 +2368,13 @@ snapshots:
       '@esbuild-kit/esm-loader': 2.6.5
       esbuild: 0.25.12
       tsx: 4.23.15
+    optional: true
 
   drizzle-orm@0.45.4(@cloudflare/workers-types@5.20261019.1)(kysely@0.29.8):
     optionalDependencies:
       '@cloudflare/workers-types': 5.20261019.1
       kysely: 0.29.8
+    optional: true
 
   error-stack-parser-es@1.0.5: {}
 
@@ -2402,6 +2402,7 @@ snapshots:
       '@esbuild/win32-arm64': 0.18.20
       '@esbuild/win32-ia32': 0.18.20
       '@esbuild/win32-x64': 0.18.20
+    optional: true
 
   esbuild@0.25.12:
     optionalDependencies:
@@ -2431,6 +2432,7 @@ snapshots:
       '@esbuild/win32-arm64': 0.25.12
       '@esbuild/win32-ia32': 0.25.12
       '@esbuild/win32-x64': 0.25.12
+    optional: true
 
   esbuild@0.28.2:
     optionalDependencies:
@@ -2477,6 +2479,7 @@ snapshots:
   get-tsconfig@4.14.3:
     dependencies:
       resolve-pkg-maps: 1.0.0
+    optional: true
 
   hono@4.13.13: {}
 
@@ -2586,7 +2589,8 @@ snapshots:
 
   readdirp@4.1.2: {}
 
-  resolve-pkg-maps@1.0.0: {}
+  resolve-pkg-maps@1.0.0:
+    optional: true
 
   rolldown@1.2.16:
     dependencies:
@@ -2658,8 +2662,10 @@ snapshots:
     dependencies:
       buffer-from: 1.1.2
       source-map: 0.6.1
+    optional: true
 
-  source-map@0.6.1: {}
+  source-map@0.6.1:
+    optional: true
 
   supports-color@10.2.2: {}
 
@@ -2709,6 +2715,7 @@ snapshots:
       esbuild: 0.28.2
     optionalDependencies:
       fsevents: 2.3.3
+    optional: true
 
   typescript@6.0.3: {}
 
