@@ -9,11 +9,15 @@ if TYPE_CHECKING:
     # Only for the type: plugin.py imports the lexicon schema, which imports from lang/
     from ..plugin import LanguagePlugin
 
-LANGS = ("pl",)
+LANGS = ("en", "pl")
 
 
 def plugin(lang: str) -> LanguagePlugin:
     match lang:
+        case "en":
+            from .en import plugin as en
+
+            return en
         case "pl":
             from .pl import plugin as pl
 

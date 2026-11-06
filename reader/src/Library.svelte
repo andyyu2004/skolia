@@ -1,6 +1,7 @@
 <script lang="ts">
-  import type { DocumentSummary, User } from "@skolia/shared/api";
-  import { MAX_TEXT_LENGTH } from "@skolia/shared/api";
+  import type { DocumentSummary, Lang, User } from "@skolia/shared/api";
+  import { LANGS, MAX_TEXT_LENGTH } from "@skolia/shared/api";
+  import { LANGUAGES } from "./lang/index.ts";
   import { currentUser, importDocument, listDocuments, signIn, signOut } from "./lib/api.ts";
   import { badge } from "./lib/reading.ts";
 
@@ -9,6 +10,7 @@
   let error = $state<string | null>(null);
   let title = $state("");
   let text = $state("");
+  let lang = $state<Lang>("pl");
   let importing = $state(false);
 
   async function refresh(): Promise<void> {
@@ -24,7 +26,7 @@
     event.preventDefault();
     importing = true;
     try {
-      const summary = await importDocument({ title, text, lang: "pl" });
+      const summary = await importDocument({ title, text, lang });
       location.hash = `#/doc/${summary.id}`;
     } catch (e: unknown) {
       error = e instanceof Error ? e.message : String(e);
@@ -73,9 +75,15 @@
     <h2>Import a text</h2>
     <form onsubmit={submit}>
       <input bind:value={title} placeholder="Title (optional)" maxlength="200" />
+      <select bind:value={lang} aria-label="Language">
+        {#each LANGS as code (code)}
+          <option value={code}>{LANGUAGES[code].name}</option>
+        {/each}
+      </select>
       <textarea
         bind:value={text}
-        placeholder="Paste Polish text here"
+        {lang}
+        placeholder={`Paste ${LANGUAGES[lang].name} text here`}
         rows="8"
         maxlength={MAX_TEXT_LENGTH}
         required

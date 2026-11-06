@@ -3,9 +3,16 @@
 // API is ours, so they're trusted to match.
 import { hc } from "hono/client";
 import type { AppType } from "@skolia/api/app";
-import type { ApiError, DocumentSummary, ImportRequest, Lang, ReadingNames, User } from "@skolia/shared/api";
+import {
+  isLang,
+  type ApiError,
+  type DocumentSummary,
+  type ImportRequest,
+  type Lang,
+  type ReadingNames,
+  type User,
+} from "@skolia/shared/api";
 import { BUNDLE_SCHEMA, SCHEMA, type Blob, type Bundle } from "@skolia/shared/schema";
-import { isLang } from "../lang/index.ts";
 
 const api = hc<AppType>("/").api;
 

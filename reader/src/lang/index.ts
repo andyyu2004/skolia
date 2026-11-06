@@ -1,11 +1,9 @@
-import { LANGS, type Lang } from "@skolia/shared/api";
+import type { Lang } from "@skolia/shared/api";
+import { english } from "./en/index.ts";
 import { polish } from "./pl/index.ts";
 import type { Language } from "./types.ts";
 
 export const LANGUAGES: Record<Lang, Language> = {
+  en: english,
   pl: polish,
 };
-
-export function isLang(code: string): code is Lang {
-  return LANGS.some((l) => l === code);
-}
