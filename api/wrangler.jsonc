@@ -39,6 +39,10 @@
   "queues": {
     "producers": [{ "binding": "INGEST", "queue": "skolia-ingest" }]
   },
+  "durable_objects": {
+    "bindings": [{ "name": "USER", "class_name": "User" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["User"] }],
   // Bindings aren't inherited, so each environment lists its own (Terraform's names)
   "env": {
     "staging": {
@@ -55,6 +59,9 @@
       "vars": { "MAX_IMPORTS_PER_DAY": "50", "BASE_URL": "https://staging.skolia.io" },
       "queues": {
         "producers": [{ "binding": "INGEST", "queue": "skolia-ingest-staging" }]
+      },
+      "durable_objects": {
+        "bindings": [{ "name": "USER", "class_name": "User" }]
       }
     }
   }

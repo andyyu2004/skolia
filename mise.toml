@@ -16,7 +16,8 @@ run = [
 ]
 
 [tasks.test]
-description = "Unit tests"
+description = "Unit tests, and the built Worker's Durable Object in workerd"
+depends = ["build"]
 run = ["pnpm test", "cd analysis && uv run pytest -q"]
 
 [tasks.build]

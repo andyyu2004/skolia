@@ -8,15 +8,19 @@ import {
   type DocumentList,
   type DocumentSummary,
   type ImportRequest,
+  type KnownLemma,
   type Lang,
+  type LemmaStatus,
   type User,
+  LEMMA_STATUSES,
 } from "@skolia/shared/api";
 import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { State, Status, Versions } from "@skolia/shared/schema";
-import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob } from "./ports.ts";
+import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob, UserData } from "./ports.ts";
 
 export interface Deps {
   auth: Auth;
+  users: UserData;
   documents: DocumentStore;
   blobs: BlobStore;
   queue: JobQueue;
@@ -76,6 +80,25 @@ export function createApp(deps: Deps) {
       const user = await deps.auth.user(c.req.raw.headers);
       if (!user) return c.json({ error: "not signed in" } satisfies ApiError, 401);
       return c.json(user satisfies User, 200);
+    })
+    .get("/api/me/lemmas", async (c) => {
+      const user = await deps.auth.user(c.req.raw.headers);
+      if (!user) return c.json({ error: "not signed in" } satisfies ApiError, 401);
+      return c.json((await deps.users.lemmas(user.id)) satisfies KnownLemma[], 200);
+    })
+    .put("/api/me/lemmas/:lemmaId", async (c) => {
+      const user = await deps.auth.user(c.req.raw.headers);
+      if (!user) return c.json({ error: "not signed in" } satisfies ApiError, 401);
+      const lemmaId = c.req.param("lemmaId");
+      if (!LEMMA_ID.test(lemmaId)) {
+        return c.json({ error: "lemma id must be {lang}:{lemma}:{upos}" } satisfies ApiError, 400);
+      }
+      const status = parseLemmaStatus(await c.req.json().catch(() => null));
+      if (status === null) {
+        return c.json({ error: `status must be one of ${LEMMA_STATUSES.join(", ")}` } satisfies ApiError, 400);
+      }
+      await deps.users.setLemma(user.id, lemmaId, status, now().toISOString());
+      return c.body(null, 204);
     })
     .get("/api/documents", async (c) => {
       const records = await deps.documents.list();
@@ -312,4 +335,12 @@ function isState(value: unknown): value is State {
 
 function isLang(value: unknown): value is Lang {
   return LANGS.some((l) => l === value);
+}
+
+const LEMMA_ID = /^[a-z]{2,3}:[^:\s/]{1,100}:[A-Z]{1,5}$/u;
+
+export function parseLemmaStatus(body: unknown): LemmaStatus | null {
+  if (!isRecord(body)) return null;
+  const { status } = body;
+  return LEMMA_STATUSES.find((s) => s === status) ?? null;
 }

@@ -3,6 +3,6 @@
   "compilerOptions": {
     "types": ["@cloudflare/workers-types"]
   },
-  "include": [".", "../app.ts", "../auth.ts", "../ports.ts", "../documents.ts", "../../../shared"],
+  "include": [".", "../app.ts", "../auth.ts", "../ports.ts", "../documents.ts", "../user/schema.ts", "../user/migrations.gen.ts", "../../../shared"],
   "exclude": []
 }

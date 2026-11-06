@@ -39,6 +39,15 @@ export interface DocumentList {
   documents: DocumentSummary[];
 }
 
+export const LEMMA_STATUSES = ["new", "learning", "known", "ignored"] as const;
+export type LemmaStatus = (typeof LEMMA_STATUSES)[number];
+
+export interface KnownLemma {
+  lemmaId: string;
+  status: LemmaStatus;
+  updated: string;
+}
+
 export interface User {
   id: string;
   name: string;

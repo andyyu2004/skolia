@@ -1,7 +1,26 @@
-// The ports on Cloudflare: D1 for document metadata, R2 for blobs, Queues for jobs.
+// The ports on Cloudflare: D1 for document metadata, R2 for blobs, Queues for jobs, a
+// Durable Object per user for their own data.
+import type { KnownLemma, LemmaStatus } from "@skolia/shared/api";
 import type { IngestJob } from "@skolia/shared/schema";
 import { ADD, COUNT_SINCE, GET, LIST, addParams, toCount, toRecord } from "../documents.ts";
-import type { BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob } from "../ports.ts";
+import type { BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob, UserData } from "../ports.ts";
+import type { User } from "./user.ts";
+
+export class DurableObjectUsers implements UserData {
+  private readonly users: DurableObjectNamespace<User>;
+
+  constructor(users: DurableObjectNamespace<User>) {
+    this.users = users;
+  }
+
+  async lemmas(userId: string): Promise<KnownLemma[]> {
+    return this.users.getByName(userId).lemmas();
+  }
+
+  async setLemma(userId: string, lemmaId: string, status: LemmaStatus, updated: string): Promise<void> {
+    await this.users.getByName(userId).setLemma(lemmaId, status, updated);
+  }
+}
 
 export class D1Documents implements DocumentStore {
   private readonly db: D1Database;

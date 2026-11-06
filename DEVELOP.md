@@ -36,8 +36,18 @@ mise run e2e                 # fresh local state: import a text, wait until it's
 
 ```fish
 pnpm -r check                # tsc (api), svelte-check (reader)
-pnpm -r test                 # node --test
+pnpm -r test                 # node --test; mise run build first, for api/dist
 ```
+
+`api/src/user.workerd.test.ts` loads the built Worker (`api/dist`, what Terraform uploads) into wrangler's test harness and calls the per-user Durable Object over RPC, so it runs in workerd with real SQLite storage. `mise run test` builds first.
+
+Each user's data lives in their own Durable Object (`api/src/worker/user.ts`), addressed by their user id, with Drizzle for queries. After changing `api/src/user/schema.ts`, generate the migration; `migrations.test.ts` fails until you do. Each object applies new migrations the next time it starts:
+
+```fish
+pnpm --dir api user-migrations   # drizzle-kit generate, then inline the SQL into migrations.gen.ts
+```
+
+drizzle-kit's own `migrations.js` imports each migration as a `.sql` module, which wrangler would upload beside `main.js`; Terraform uploads only `main.js`, so the script inlines them and deletes `migrations.js`.
 
 Both are strict TypeScript (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`). The API uses TypeScript 7; the reader stays on 6 because svelte-check, which type-checks the `.svelte` components, supports TypeScript 5 and 6 only (move it to 7 when svelte-check does). The tests run the `.ts` files directly with Node's type stripping (wrangler bundles them for Workers); that also means TypeScript-only syntax (enums, parameter properties) isn't allowed (`erasableSyntaxOnly`).
 

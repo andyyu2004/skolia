@@ -21,7 +21,20 @@ import {
 } from "./app.ts";
 import { NO_AUTH } from "./auth.ts";
 import { ORIGIN, testAuth } from "./auth-testing.ts";
-import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob } from "./ports.ts";
+import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob, UserData } from "./ports.ts";
+import type { KnownLemma, LemmaStatus } from "@skolia/shared/api";
+
+class MemoryUsers implements UserData {
+  readonly lemmasOf = new Map<string, Map<string, KnownLemma>>();
+  async lemmas(userId: string): Promise<KnownLemma[]> {
+    return [...(this.lemmasOf.get(userId)?.values() ?? [])];
+  }
+  async setLemma(userId: string, lemmaId: string, status: LemmaStatus, updated: string): Promise<void> {
+    const lemmas = this.lemmasOf.get(userId) ?? new Map<string, KnownLemma>();
+    lemmas.set(lemmaId, { lemmaId, status, updated });
+    this.lemmasOf.set(userId, lemmas);
+  }
+}
 
 class MemoryDocuments implements DocumentStore {
   readonly rows = new Map<string, DocumentRecord>();
@@ -63,15 +76,17 @@ function setup(maxImportsPerDay = 100, auth: Auth = NO_AUTH) {
   const documents = new MemoryDocuments();
   const blobs = new MemoryBlobs();
   const queue = new MemoryQueue();
+  const users = new MemoryUsers();
   const app = createApp({
     auth,
+    users,
     maxImportsPerDay,
     documents,
     blobs,
     queue,
     now: () => new Date("2026-11-04T00:00:00Z"),
   });
-  return { app, documents, blobs, queue };
+  return { app, documents, blobs, queue, users };
 }
 
 async function setupWithAuth() {
@@ -80,6 +95,36 @@ async function setupWithAuth() {
 }
 
 const ALICE = { name: "Alice", email: "alice@example.com" };
+
+function putLemma(app: ReturnType<typeof setup>["app"], headers: Headers | undefined, lemmaId: string, body: unknown) {
+  const init: RequestInit = { method: "PUT", body: JSON.stringify(body) };
+  init.headers = new Headers(headers);
+  init.headers.set("content-type", "application/json");
+  return app.request(`${ORIGIN}/api/me/lemmas/${encodeURIComponent(lemmaId)}`, init);
+}
+
+test("a signed-in user's lemma statuses are set and listed under their own id", async () => {
+  const { app, users, signUp, signIn } = await setupWithAuth();
+  const alice = await signUp(ALICE);
+  const headers = await signIn(alice.id);
+  assert.equal((await putLemma(app, headers, "pl:pies:NOUN", { status: "learning" })).status, 204);
+  assert.equal((await putLemma(app, headers, "pl:pies:NOUN", { status: "known" })).status, 204);
+  const listed = await app.request(`${ORIGIN}/api/me/lemmas`, { headers });
+  assert.equal(listed.status, 200);
+  const known = { lemmaId: "pl:pies:NOUN", status: "known", updated: "2026-11-04T00:00:00.000Z" };
+  assert.deepEqual(await listed.json(), [known]);
+  assert.deepEqual([...users.lemmasOf.keys()], [alice.id]);
+});
+
+test("lemma statuses need a session, a {lang}:{lemma}:{upos} id and a known status", async () => {
+  const { app, signUp, signIn } = await setupWithAuth();
+  assert.equal((await app.request(`${ORIGIN}/api/me/lemmas`)).status, 401);
+  assert.equal((await putLemma(app, undefined, "pl:pies:NOUN", { status: "known" })).status, 401);
+  const headers = await signIn((await signUp(ALICE)).id);
+  assert.equal((await putLemma(app, headers, "pies", { status: "known" })).status, 400);
+  assert.equal((await putLemma(app, headers, "pl:pies:NOUN", { status: "mastered" })).status, 400);
+  assert.equal((await putLemma(app, headers, "pl:pies:NOUN", null)).status, 400);
+});
 
 test("Google sign-in answers with Google's authorize URL, back to /api/auth/callback/google", async () => {
   const { app } = await setupWithAuth();
