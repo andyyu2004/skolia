@@ -1,9 +1,10 @@
 <script lang="ts">
-  import type { DocumentSummary } from "@skolia/shared/api";
+  import type { DocumentSummary, User } from "@skolia/shared/api";
   import { MAX_TEXT_LENGTH } from "@skolia/shared/api";
-  import { importDocument, listDocuments } from "./lib/api.ts";
+  import { currentUser, importDocument, listDocuments, signIn, signOut } from "./lib/api.ts";
   import { badge } from "./lib/reading.ts";
 
+  let user = $state<User | null | undefined>(undefined);
   let documents = $state<DocumentSummary[] | null>(null);
   let error = $state<string | null>(null);
   let title = $state("");
@@ -32,14 +33,40 @@
     }
   }
 
+  async function run(action: () => Promise<void>): Promise<void> {
+    try {
+      await action();
+    } catch (e: unknown) {
+      error = e instanceof Error ? e.message : String(e);
+    }
+  }
+
   $effect(() => {
     void refresh();
+    void run(async () => {
+      user = await currentUser();
+    });
   });
 </script>
 
 <main class="library">
   <header>
     <h1>skolia</h1>
+    {#if user}
+      <span class="account">
+        <span class="muted">{user.name}</span>
+        <button
+          type="button"
+          onclick={() =>
+            run(async () => {
+              await signOut();
+              user = null;
+            })}>Sign out</button
+        >
+      </span>
+    {:else if user === null}
+      <button type="button" onclick={() => run(signIn)}>Sign in with Google</button>
+    {/if}
   </header>
 
   <section>

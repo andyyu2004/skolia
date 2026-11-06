@@ -7,6 +7,7 @@
   "name": "skolia",
   "main": "src/worker/main.ts",
   "compatibility_date": "2026-10-19",
+  "minify": true,
   "assets": {
     "directory": "../reader/dist",
     "not_found_handling": "single-page-application",
@@ -32,8 +33,9 @@
       }
     }
   ],
-  // In production Terraform sets it (var.max_imports_per_day)
-  "vars": { "MAX_IMPORTS_PER_DAY": "50" },
+  // In production Terraform sets them (var.max_imports_per_day, local.hostname). The
+  // auth secrets for wrangler dev go in api/.env.local (DEVELOP.md).
+  "vars": { "MAX_IMPORTS_PER_DAY": "50", "BASE_URL": "http://localhost:5173" },
   "queues": {
     "producers": [{ "binding": "INGEST", "queue": "skolia-ingest" }]
   },
@@ -50,7 +52,7 @@
         }
       ],
       "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "skolia-staging" }],
-      "vars": { "MAX_IMPORTS_PER_DAY": "50" },
+      "vars": { "MAX_IMPORTS_PER_DAY": "50", "BASE_URL": "https://staging.skolia.io" },
       "queues": {
         "producers": [{ "binding": "INGEST", "queue": "skolia-ingest-staging" }]
       }

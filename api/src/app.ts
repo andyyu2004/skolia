@@ -9,12 +9,14 @@ import {
   type DocumentSummary,
   type ImportRequest,
   type Lang,
+  type User,
 } from "@skolia/shared/api";
 import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { State, Status, Versions } from "@skolia/shared/schema";
-import type { BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob } from "./ports.ts";
+import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob } from "./ports.ts";
 
 export interface Deps {
+  auth: Auth;
   documents: DocumentStore;
   blobs: BlobStore;
   queue: JobQueue;
@@ -39,6 +41,14 @@ export function createApp(deps: Deps): Hono {
   app.onError((error, c) => {
     console.error(error);
     return c.json<ApiError>({ error: "internal error" }, 500);
+  });
+
+  app.on(["GET", "POST"], "/api/auth/*", (c) => deps.auth.handle(c.req.raw));
+
+  app.get("/api/me", async (c) => {
+    const user = await deps.auth.user(c.req.raw.headers);
+    if (!user) return c.json<ApiError>({ error: "not signed in" }, 401);
+    return c.json<User>(user);
   });
 
   /** The summary, after queueing the document again if ingest now produces other

@@ -30,6 +30,7 @@ mise run e2e                 # fresh local state: import a text, wait until it's
 - The ingest image builds natively for `linux/arm64` (Apple Silicon, ARM Linux) and `linux/amd64`. PyPI's `morfeusz2` has a Linux wheel for x86-64 only, so the Dockerfile compiles Morfeusz from SGJP's source and installs SGJP's compiled dictionary from the same release (1.99.15, 2026-06-01). On 16,325 words (PDB dev plus the sample texts) and the 10,971 lemmas they analyse to, its `analyse` and `generate` output is byte-identical to the PyPI wheel's, on both architectures. A 4,700-word text takes about 100 s natively on an M-series Mac.
 - To bump Morfeusz: change `MORFEUSZ_RELEASE` and both SHA-256 values in `analysis/Dockerfile`, and the `morfeusz2` version in `pyproject.toml`, to the same release.
 - On a phone on the same network: `pnpm --filter @skolia/reader dev --host` and open the address it prints.
+- Sign-in is optional: without it you can read, but no flashcards are made. To try sign-in locally, put the dev OAuth client's credentials (infra/README.md) and any 32+ character secret in `api/.env.local` (git-ignored, loaded with `api/.env`): `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Without them `/api/auth` answers 503. Sign in from http://localhost:5173, the origin `BASE_URL` names.
 
 ## API and reader (TypeScript)
 

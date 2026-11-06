@@ -14,6 +14,15 @@ Account `1d3ca537bca3f2918d2778118d23f0a8`. Secrets in `pass` under `cloudflare/
 4. The state bucket `skolia-tfstate`, created once through the API with the Terraform token (Terraform can't create its own state bucket).
 5. skolia.io bought through Cloudflare Registrar, so its zone is on the account.
 6. Dashboard (Notifications): a Billing Budget alert in dollars. `alerts.tf` covers per-product usage, but Containers have no usage alert and the provider has no budget alert type.
+7. Google Cloud project `skolia` (andyyu2004@gmail.com), Google Auth Platform: External audience, scopes `openid`, `userinfo.email`, `userinfo.profile`, authorised domain `skolia.io`. One OAuth client (Web application, no JavaScript origins) per environment, each in `pass` under `gcp/andyyu2004@gmail.com/<client>/{client-id,client-secret}`:
+
+   | Client | Redirect URI |
+   |---|---|
+   | `skolia-dev` | `http://localhost:5173/api/auth/callback/google` |
+   | `skolia-staging` | `https://staging.skolia.io/api/auth/callback/google` |
+   | `skolia` | `https://skolia.io/api/auth/callback/google` |
+
+   Each Worker gets its client's id and secret and its own `BETTER_AUTH_SECRET` (`openssl rand -base64 32`) as secrets: `infra/wrangler.sh <env> secret put GOOGLE_CLIENT_ID`, and the same for `GOOGLE_CLIENT_SECRET` and `BETTER_AUTH_SECRET`. Terraform keeps `secret_text` bindings (`keep_bindings`), so they stay out of the state. Without them sign-in answers 503. Done for `skolia-dev` only.
 
 ## Environments
 

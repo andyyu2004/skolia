@@ -2,6 +2,8 @@
 // served before the Worker runs, except for /api/*.
 import type { IngestJob } from "@skolia/shared/schema";
 import { createApp, parseImportCap } from "../app.ts";
+import { NO_AUTH, createAuth } from "../auth.ts";
+import type { Auth } from "../ports.ts";
 import { CloudflareQueue, D1Documents, R2Blobs } from "./adapters.ts";
 
 interface Env {
@@ -10,6 +12,29 @@ interface Env {
   INGEST: Queue<IngestJob>;
   /** Set by Terraform (var.max_imports_per_day) */
   MAX_IMPORTS_PER_DAY?: string;
+  BASE_URL?: string;
+  BETTER_AUTH_SECRET?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+}
+
+let auth: Auth | undefined;
+
+function authFor(env: Env): Auth {
+  if (auth) return auth;
+  const { BASE_URL, BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = env;
+  if (!BASE_URL || !BETTER_AUTH_SECRET || !GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    console.error("BASE_URL, BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET isn't set; sign-in is off");
+    auth = NO_AUTH;
+  } else {
+    auth = createAuth({
+      database: env.DB,
+      baseURL: BASE_URL,
+      secret: BETTER_AUTH_SECRET,
+      google: { clientId: GOOGLE_CLIENT_ID, clientSecret: GOOGLE_CLIENT_SECRET },
+    });
+  }
+  return auth;
 }
 
 export default {
@@ -17,6 +42,7 @@ export default {
     const maxImportsPerDay = parseImportCap(env.MAX_IMPORTS_PER_DAY);
     if (maxImportsPerDay === null) console.error("MAX_IMPORTS_PER_DAY isn't set; refusing imports");
     const app = createApp({
+      auth: authFor(env),
       // Misconfigured: accept none rather than run uncapped
       maxImportsPerDay: maxImportsPerDay ?? 0,
       documents: new D1Documents(env.DB),

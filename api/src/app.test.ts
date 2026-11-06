@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MAX_TEXT_LENGTH, type DocumentList, type DocumentSummary } from "@skolia/shared/api";
+import { MAX_TEXT_LENGTH, type DocumentList, type DocumentSummary, type User } from "@skolia/shared/api";
 import { docId, partKey, statusKey, versionsKey } from "@skolia/shared/keys";
 import type { IngestJob } from "@skolia/shared/schema";
 import { brotliCompressSync, brotliDecompressSync } from "node:zlib";
@@ -17,7 +17,20 @@ import {
   parseStatus,
   parseVersions,
 } from "./app.ts";
-import type { BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob } from "./ports.ts";
+import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob } from "./ports.ts";
+
+const ALICE: User = { id: "u1", name: "Alice", email: "alice@example.com", image: null };
+
+class FakeAuth implements Auth {
+  readonly handled: string[] = [];
+  async handle(request: Request): Promise<Response> {
+    this.handled.push(new URL(request.url).pathname);
+    return new Response("from auth");
+  }
+  async user(headers: Headers): Promise<User | null> {
+    return headers.get("cookie") === "session=alice" ? ALICE : null;
+  }
+}
 
 class MemoryDocuments implements DocumentStore {
   readonly rows = new Map<string, DocumentRecord>();
@@ -59,15 +72,32 @@ function setup(maxImportsPerDay = 100) {
   const documents = new MemoryDocuments();
   const blobs = new MemoryBlobs();
   const queue = new MemoryQueue();
+  const auth = new FakeAuth();
   const app = createApp({
+    auth,
     maxImportsPerDay,
     documents,
     blobs,
     queue,
     now: () => new Date("2026-11-04T00:00:00Z"),
   });
-  return { app, documents, blobs, queue };
+  return { app, auth, documents, blobs, queue };
 }
+
+test("/api/auth/* goes to the auth handler", async () => {
+  const { app, auth } = setup();
+  const response = await app.request("/api/auth/sign-in/social", { method: "POST" });
+  assert.equal(await response.text(), "from auth");
+  assert.deepEqual(auth.handled, ["/api/auth/sign-in/social"]);
+});
+
+test("/api/me is the signed-in user, 401 without a session", async () => {
+  const { app } = setup();
+  assert.equal((await app.request("/api/me")).status, 401);
+  const response = await app.request("/api/me", { headers: { cookie: "session=alice" } });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), ALICE);
+});
 
 function importText(app: ReturnType<typeof setup>["app"], text = TEXT) {
   return app.request("/api/documents", {
