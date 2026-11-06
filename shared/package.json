@@ -5,6 +5,10 @@
   "exports": {
     "./schema": "./schema.gen.ts",
     "./api": "./api.ts",
-    "./keys": "./keys.ts"
+    "./keys": "./keys.ts",
+    "./schemas": "./schemas.ts"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
   }
 }

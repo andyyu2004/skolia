@@ -46,11 +46,22 @@ resource "cloudflare_workers_script" "skolia" {
   # secret put (README.md), so they stay out of the state
   keep_bindings = ["secret_text"]
 
+  # The same as migrations in api/wrangler.jsonc
+  migrations = {
+    new_tag            = "v1"
+    new_sqlite_classes = ["User"]
+  }
+
   bindings = concat([
     {
       name = "DB"
       type = "d1"
       id   = cloudflare_d1_database.skolia.id
+    },
+    {
+      name       = "USER"
+      type       = "durable_object_namespace"
+      class_name = "User"
     },
     {
       name        = "BLOBS"
