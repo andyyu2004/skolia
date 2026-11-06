@@ -49,6 +49,18 @@ def test_resolve_falls_back(tmp_path: Path) -> None:
     assert bundle.resolve(lexicon, "pl:xyzzy:NOUN") == (None, "none")
 
 
+def test_resolve_prefers_the_closest_part_of_speech(tmp_path: Path) -> None:
+    path = tmp_path / "en.sqlite"
+    senses: list[Sense] = [{"gloss": f"sense {i}", "tags": []} for i in range(3)]
+    rows = [
+        store.Row("en:must:NOUN", "must", "NOUN", senses, [], []),
+        store.Row("en:must:VERB", "must", "VERB", senses[:1], [], []),
+    ]
+    store.write(path, rows, {})
+    found, match = bundle.resolve(store.Lexicon(path), "en:must:AUX")
+    assert (found and found.lemma_id, match) == ("en:must:VERB", "other-pos")
+
+
 def test_bundle_shares_feature_sets_and_groups_forms(tmp_path: Path) -> None:
     path = tmp_path / "pl.sqlite"
     store.write(

@@ -10,6 +10,20 @@ from .store import Lexicon, Row
 
 LEMMA_ID_SEP = ":"
 
+# For a lemma the lexicon has only under other parts of speech, the ones a dictionary
+# files a word with this UPOS under, most likely first: an auxiliary is a verb to
+# Wiktionary (must, AUX: the verb, not the noun a must). Any others come after, most
+# senses first. Subordinators aren't listed: the most senses pick better than any fixed
+# order (because is a conjunction, before and until prepositions).
+CLOSEST_UPOS: dict[Upos, tuple[Upos, ...]] = {
+    "AUX": ("VERB",),
+    "PROPN": ("NOUN",),
+    "NOUN": ("PROPN",),
+    "DET": ("PRON", "ADJ"),
+    "PRON": ("DET",),
+    "PART": ("ADV",),
+}
+
 type Paradigms = Callable[[str, Upos], list[Paradigm]]
 type Frames = Callable[[str, Upos], list[Schema]]
 """A word's valency schemata, by lemma and part of speech."""
@@ -43,7 +57,12 @@ def resolve(lexicon: Lexicon, lemma_id: str) -> tuple[Row | None, Match]:
             return lowered, "lowercase"
     same_lemma = lexicon.by_lemma(lemma)
     if same_lemma:
-        return same_lemma[0], "other-pos"
+        closest = CLOSEST_UPOS.get(upos, ())
+        # sorted is stable: within a rank, by_lemma's most-senses order stays
+        ranked = sorted(
+            same_lemma, key=lambda r: closest.index(r.upos) if r.upos in closest else len(closest)
+        )
+        return ranked[0], "other-pos"
     if lemma != lemma.lower():
         any_pos = lexicon.by_lowercase(lemma)
         if any_pos:
