@@ -47,7 +47,7 @@ Each user's data lives in their own Durable Object (`api/src/worker/user.ts`), a
 pnpm --dir api user-migrations   # drizzle-kit generate, then inline the SQL into migrations.gen.ts
 ```
 
-Tables keyed by text are `WITHOUT ROWID` (one B-tree instead of a rowid table plus its primary-key index). drizzle-kit can't express that, so add it to the generated `CREATE TABLE` by hand, and check the SQL of any migration that rebuilds such a table.
+Tables keyed by text are `WITHOUT ROWID` (one B-tree instead of a rowid table plus its primary-key index). drizzle-kit can't express that ([drizzle-orm#408](https://github.com/drizzle-team/drizzle-orm/issues/408)), so list the table in `withoutRowid` in `schema.ts`; the script adds `WITHOUT ROWID` to its `CREATE TABLE`, including the `__new_<table>` that drizzle-kit creates when it rebuilds a table. The `.sql` files stay as drizzle-kit wrote them.
 
 drizzle-kit's own `migrations.js` imports each migration as a `.sql` module, which wrangler would upload beside `main.js`; Terraform uploads only `main.js`, so the script inlines them and deletes `migrations.js`.
 

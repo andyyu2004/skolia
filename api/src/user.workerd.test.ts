@@ -48,7 +48,7 @@ test("the bundled migrations made the tables, and ran once", async () => {
   assert.deepEqual(await storage.exec("select count(*) as n from __drizzle_migrations"), [{ n: 1 }]);
 });
 
-test("tables keyed by text are WITHOUT ROWID (drizzle-kit can't say so: edit its SQL)", async () => {
+test("schema.ts's withoutRowid tables are WITHOUT ROWID", async () => {
   const env = await server.getWorker<Env>().getEnv();
   await env.USER.getByName("dave").lemmas();
   const storage = await server.getWorker().getDurableObjectStorage("User", { name: "dave" });

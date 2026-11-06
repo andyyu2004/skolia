@@ -1,8 +1,11 @@
 // drizzle-kit's migrations.js imports each migration as a .sql module, which wrangler
 // uploads beside main.js, and Terraform only uploads main.js. This inlines them instead:
-// src/user/migrations/ (drizzle-kit's output) -> src/user/migrations.gen.ts.
+// src/user/migrations/ (drizzle-kit's output) -> src/user/migrations.gen.ts, adding
+// WITHOUT ROWID to the CREATE TABLE of the tables in schema.ts's withoutRowid.
 // Run with: pnpm --dir api user-migrations
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { getTableName } from "drizzle-orm";
+import { withoutRowid } from "../src/user/schema.ts";
 
 const dir = new URL("../src/user/migrations/", import.meta.url);
 
@@ -10,10 +13,21 @@ interface Journal {
   entries: { idx: number; when: number; tag: string; breakpoints: boolean }[];
 }
 
+export function addWithoutRowid(sql: string, tables: readonly string[]): string {
+  const names = new Set(tables.flatMap((t) => [t, `__new_${t}`]));
+  return sql.replace(/CREATE TABLE `([^`]+)` \(([\s\S]*?)\n\);/g, (statement, name: string, body: string) =>
+    names.has(name) ? `CREATE TABLE \`${name}\` (${body}\n) WITHOUT ROWID;` : statement,
+  );
+}
+
 export function migrationsSource(): string {
   const journal = JSON.parse(readFileSync(new URL("meta/_journal.json", dir), "utf8")) as Journal;
+  const tables = withoutRowid.map((t) => getTableName(t));
   const migrations = Object.fromEntries(
-    journal.entries.map((e) => [`m${String(e.idx).padStart(4, "0")}`, readFileSync(new URL(`${e.tag}.sql`, dir), "utf8")]),
+    journal.entries.map((e) => [
+      `m${String(e.idx).padStart(4, "0")}`,
+      addWithoutRowid(readFileSync(new URL(`${e.tag}.sql`, dir), "utf8"), tables),
+    ]),
   );
   const entries = journal.entries.map(({ idx, when, tag, breakpoints }) => ({ idx, when, tag, breakpoints }));
   return [
