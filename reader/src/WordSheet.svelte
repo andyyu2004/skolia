@@ -1,22 +1,27 @@
 <script lang="ts">
+  import type { Lang } from "@skolia/shared/api";
   import type { Bundle, Token } from "@skolia/shared/schema";
-  import { CASE_NAME, explainCase } from "./lib/cases.ts";
-  import { argumentsOf, frames } from "./lib/frames.ts";
+  import type { Language } from "./lang/types.ts";
   import type { Piece } from "./lib/doc.ts";
   import { entryFor, rankSenses } from "./lib/lexicon.ts";
   import { paradigmTables } from "./lib/paradigm.ts";
-  import { featureWords, roleLabel, UPOS_LABEL } from "./lib/ud.ts";
+  import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "./lib/ud.ts";
   import ParadigmTable from "./ParadigmTable.svelte";
 
   type WordPiece = Extract<Piece, { kind: "word" }>;
 
   let {
+    lang,
+    language,
     bundle,
     piece,
     headText,
     sentenceTokens,
     onclose,
   }: {
+    /** For the lang attribute of text in the document's language */
+    lang: Lang;
+    language: Language;
     bundle: Bundle;
     piece: WordPiece;
     headText: (sentence: number, index: number) => string | null;
@@ -25,22 +30,9 @@
   } = $props();
 
   const SHOWN_SENSES = 3;
-  // Wiktionary tags the grammar line already shows (gender, animacy, aspect)
-  const GRAMMAR_TAGS = new Set([
-    "masculine",
-    "feminine",
-    "neuter",
-    "animal-not-person",
-    "person",
-    "personal",
-    "inanimate",
-    "animate",
-    "perfective",
-    "imperfective",
-  ]);
 
   function visibleTags(tags: string[]): string[] {
-    return tags.filter((t) => !GRAMMAR_TAGS.has(t));
+    return tags.filter((t) => !language.grammarTags.has(t));
   }
 
   /** On a phone the sheet starts at half height; tapping the handle gives it the screen. */
@@ -62,21 +54,24 @@
       .filter((w) => w.token.upos !== "PUNCT")
       .map((w) => {
         const entry = entryFor(bundle, w.token);
-        const isPersonEnding = (w.token.xpos ?? "").startsWith("aglt");
+        const partOfWord = language.partOfWord(w.token);
         const role = roleLabel(w.token.deprel);
         const head = w.token.head === null ? null : headText(w.sentence, w.token.head);
-        const args = argumentsOf(sentenceTokens(w.sentence), w.index);
-        const shownFrames = entry && !isPersonEnding ? frames(entry.frames, args) : [];
+        const tokens = sentenceTokens(w.sentence);
+        const uses = entry && partOfWord === null ? language.uses(entry, tokens, w.index) : [];
         return {
           ref: w,
           entry,
-          isPersonEnding,
+          partOfWord,
           role: role && head ? { role, head } : null,
-          caseWhy: explainCase(sentenceTokens(w.sentence), w.index),
+          caseWhy: language.explainCase(tokens, w.index),
           senses: entry ? rankSenses(entry, w.token.feats) : [],
-          uses: shownFrames.filter((f) => !f.idiom),
-          idioms: shownFrames.filter((f) => f.idiom),
-          tables: entry && !isPersonEnding ? paradigmTables(bundle, entry, w.token) : [],
+          uses: uses.filter((u) => !u.idiom),
+          idioms: uses.filter((u) => u.idiom),
+          tables:
+            entry && partOfWord === null
+              ? paradigmTables(bundle, entry, w.token, language.paradigm, language.mergeLabels)
+              : [],
         };
       }),
   );
@@ -93,30 +88,30 @@
     {@const token = word.ref.token}
     <section class="word">
       <h2>
-        <span lang="pl">{token.text}</span>
+        <span {lang}>{token.text}</span>
         {#if token.lemma && token.lemma !== token.text}
-          <span class="lemma">(<span lang="pl">{word.entry?.lemma ?? token.lemma}</span>)</span>
+          <span class="lemma">(<span {lang}>{word.entry?.lemma ?? token.lemma}</span>)</span>
         {/if}
       </h2>
       <p class="grammar">
-        {[word.isPersonEnding ? "person ending" : UPOS_LABEL[token.upos], ...featureWords(token.feats)].join(
+        {[word.partOfWord ?? UPOS_LABEL[token.upos], ...featureWords(token.feats)].join(
           " · ",
         )}
       </p>
       {#if word.role}
-        <p class="role muted">{word.role.role} <span lang="pl" class="mark-head">{word.role.head}</span></p>
+        <p class="role muted">{word.role.role} <span {lang} class="mark-head">{word.role.head}</span></p>
       {/if}
       {#if word.caseWhy && token.feats.Case}
         <p class="why">
           <span class="why-label">Why {CASE_NAME[token.feats.Case]}?</span>
-          <span lang="pl"
+          <span {lang}
             >{#each word.caseWhy.parts as part, j (j)}{#if part.trigger}<span class="mark-trigger">{part.text}</span
                 >{:else}{part.text}{/if}{/each}</span
           >
         </p>
       {/if}
 
-      {#if !word.isPersonEnding}
+      {#if word.partOfWord === null}
         {#if word.senses.length > 0}
           <ol class="senses">
             {#each allSenses ? word.senses : word.senses.slice(0, SHOWN_SENSES) as { sense, fits }, i (i)}
@@ -127,7 +122,7 @@
                 {/if}
                 {#each sense.examples ?? [] as example, j (j)}
                   <div class="example">
-                    <span lang="pl">{example.text}</span>
+                    <span {lang}>{example.text}</span>
                     {#if example.translation}<span class="muted"> — {example.translation}</span>{/if}
                   </div>
                 {/each}
@@ -147,8 +142,8 @@
           <ul class="relations">
             {#each word.entry.relations as relation (relation.type + relation.lemma)}
               <li>
-                {relation.type === "aspect-partner" ? `${relation.note ?? "aspect"} partner` : `from (${relation.note ?? "derived"})`}:
-                <span lang="pl">{relation.lemma}</span>
+                {language.relationLabel(relation)}:
+                <span {lang}>{relation.lemma}</span>
               </li>
             {/each}
           </ul>
@@ -157,11 +152,11 @@
         {#if word.uses.length > 0}
           <div class="frames">
             <h3>Used with</h3>
-            <ul lang="pl">
+            <ul {lang}>
               {#each allUses ? word.uses : word.uses.slice(0, SHOWN_USES) as frame, i (i)}
                 <li class:here={frame.here}>
                   {#if frame.here}<span class="here-label" lang="en">in this sentence</span>{/if}
-                  <span class="frame-head">{word.entry?.lemma}{frame.reflexive ? " się" : ""}</span>
+                  <span class="frame-head">{frame.head}</span>
                   {#each patternParts(frame.pattern) as part, j (j)}
                     {#if part.label}<span class="case-label">{part.text}</span>{:else}{part.text}{/if}
                   {/each}
@@ -180,11 +175,11 @@
         {#if word.idioms.length > 0}
           <details class="frames">
             <summary>Idioms ({word.idioms.length})</summary>
-            <ul lang="pl">
+            <ul {lang}>
               {#each word.idioms as frame, i (i)}
                 <li class:here={frame.here}>
                   {#if frame.here}<span class="here-label" lang="en">in this sentence</span>{/if}
-                  <span class="frame-head">{word.entry?.lemma}{frame.reflexive ? " się" : ""}</span>
+                  <span class="frame-head">{frame.head}</span>
                   {#each patternParts(frame.pattern) as part, j (j)}
                     {#if part.label}<span class="case-label">{part.text}</span>{:else}{part.text}{/if}
                   {/each}
@@ -197,7 +192,7 @@
         {/if}
 
         {#each word.tables as table (table.title)}
-          <ParadigmTable {table} />
+          <ParadigmTable {lang} {table} />
         {/each}
       {/if}
     </section>

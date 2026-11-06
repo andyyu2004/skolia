@@ -3,12 +3,14 @@
 // API is ours, so they're trusted to match.
 import { hc } from "hono/client";
 import type { AppType } from "@skolia/api/app";
-import type { ApiError, DocumentSummary, ImportRequest, ReadingNames, User } from "@skolia/shared/api";
+import type { ApiError, DocumentSummary, ImportRequest, Lang, ReadingNames, User } from "@skolia/shared/api";
 import { BUNDLE_SCHEMA, SCHEMA, type Blob, type Bundle } from "@skolia/shared/schema";
+import { isLang } from "../lang/index.ts";
 
 const api = hc<AppType>("/").api;
 
 export interface Reading {
+  lang: Lang;
   text: string;
   analysis: Blob;
   bundle: Bundle;
@@ -64,8 +66,8 @@ export async function importDocument(body: ImportRequest): Promise<DocumentSumma
   return response.json();
 }
 
-/** The reading by name, or "unsupported" when its shape is one this reader doesn't
- * know (an old analysis, served while a new one is made). */
+/** The reading by name, or "unsupported" when its shape or language is one this reader
+ * doesn't know (an old analysis served while a new one is made, or a newer API). */
 export async function loadReading(id: string, names: ReadingNames): Promise<Reading | "unsupported"> {
   const doc = api.documents[":id"];
   const [text, analysis, bundle] = await Promise.all([
@@ -75,6 +77,7 @@ export async function loadReading(id: string, names: ReadingNames): Promise<Read
   ]);
   for (const response of [text, analysis, bundle]) if (!response.ok) throw await failure(response);
   const [a, b] = [(await analysis.json()) as Blob, (await bundle.json()) as Bundle];
-  if (a.schema !== SCHEMA || b.schema !== BUNDLE_SCHEMA) return "unsupported";
-  return { text: await text.text(), analysis: a, bundle: b };
+  const lang = a.lang;
+  if (a.schema !== SCHEMA || b.schema !== BUNDLE_SCHEMA || !isLang(lang)) return "unsupported";
+  return { lang, text: await text.text(), analysis: a, bundle: b };
 }

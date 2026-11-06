@@ -1,5 +1,5 @@
 // Universal Dependencies labels in plain English, for the word sheet.
-import type { Deprel, Feats, Upos } from "@skolia/shared/schema";
+import type { Case, Deprel, Feats, Upos } from "@skolia/shared/schema";
 
 export const UPOS_LABEL: Record<Upos, string> = {
   ADJ: "adjective",
@@ -71,15 +71,15 @@ export function featureWords(feats: Feats): string[] {
   return words;
 }
 
-export const CASE_ORDER = ["Nom", "Gen", "Dat", "Acc", "Ins", "Loc", "Voc"] as const;
-export const CASE_SHORT: Record<(typeof CASE_ORDER)[number], string> = {
-  Nom: "nom.",
-  Gen: "gen.",
-  Dat: "dat.",
-  Acc: "acc.",
-  Ins: "ins.",
-  Loc: "loc.",
-  Voc: "voc.",
+/** For "Why genitive?" */
+export const CASE_NAME: Record<Case, string> = {
+  Nom: "nominative",
+  Gen: "genitive",
+  Dat: "dative",
+  Acc: "accusative",
+  Ins: "instrumental",
+  Loc: "locative",
+  Voc: "vocative",
 };
 
 // Dependency relations as "the word is the ___ of its head"
