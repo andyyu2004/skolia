@@ -1,9 +1,9 @@
 name: CI
 
 # Every push and pull request: checks and tests. Pull requests: a production plan.
-# main: deploy staging, smoke-test it, then production (after approval, if the
-# production environment requires it). The steps are mise tasks (mise.toml), so a
-# deploy by hand runs the same commands.
+# main: deploy staging and smoke-test it. Production: run the workflow by hand with
+# "production" ticked. The steps are mise tasks (mise.toml), so a deploy by hand runs
+# the same commands.
 
 on:
   push:
@@ -13,6 +13,10 @@ on:
     inputs:
       ingest:
         description: Deploy ingest even if nothing it is built from changed
+        type: boolean
+        default: false
+      production:
+        description: After staging passes, deploy production
         type: boolean
         default: false
 
@@ -77,7 +81,10 @@ jobs:
       ingest: ${{ needs.changes.outputs.ingest == 'true' }}
     secrets: inherit
 
+  # Only by hand while the repo is private: GitHub Free has no required reviewers on a
+  # private repo's environments
   production:
+    if: github.event_name == 'workflow_dispatch' && inputs.production
     needs: [changes, staging]
     uses: ./.github/workflows/deploy.yml
     with:
