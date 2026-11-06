@@ -118,7 +118,18 @@ class Source:
 
 
 def paradigm_forms(word: str, upos: Upos, kaikki_forms: Iterable[KaikkiForm]) -> Iterator[Form]:
-    """The headword and its inflections, each with every feature set it has."""
+    """The headword and its inflections, each with every feature set it has, once: Kaikki
+    lists a verb's forms from the headword line (walked: past) and again from its
+    conjugation table (walked: first-person singular past)."""
+    seen: set[tuple[str, tuple[tuple[str, object], ...]]] = set()
+    for form in _paradigm_forms(word, upos, kaikki_forms):
+        key = (form["form"], tuple(sorted(form["feats"].items())))
+        if key not in seen:
+            seen.add(key)
+            yield form
+
+
+def _paradigm_forms(word: str, upos: Upos, kaikki_forms: Iterable[KaikkiForm]) -> Iterator[Form]:
     inflections = [
         (f.get("form", ""), set(f.get("tags", [])))
         for f in kaikki_forms

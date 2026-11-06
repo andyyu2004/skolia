@@ -31,6 +31,15 @@ def test_regular_verb_forms_serve_every_person_they_can() -> None:
     assert forms_of(GO, "go", "goeth") == []
 
 
+def test_forms_from_the_headword_and_the_table_are_listed_once() -> None:
+    table: list[KaikkiForm] = [
+        {"form": "went", "tags": ["first-person", "past", "singular"]},
+        {"form": "goes", "tags": ["present", "singular", "third-person"]},
+    ]
+    assert len(forms_of(GO + table, "go", "went")) == 6
+    assert len(forms_of(GO + table, "go", "goes")) == 1
+
+
 def test_be_takes_its_persons_from_the_table() -> None:
     be: list[KaikkiForm] = [
         {"form": "am", "tags": ["first-person", "present", "singular"]},
