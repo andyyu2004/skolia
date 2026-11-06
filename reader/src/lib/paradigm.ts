@@ -52,9 +52,22 @@ export function paradigmTables(
 ): Table[] {
   const forms = chooseParadigm(bundle, entry, token);
   if (forms.length <= 1) return [];
-  const isCurrent = (f: Form): boolean =>
-    f.text.toLowerCase() === token.text.toLowerCase() && featsMatch(f.feats, token.feats);
-  return layout(new Builder(isCurrent, mergeLabels), forms, entry, token);
+  return layout(new Builder(isTokenForm(forms, token), mergeLabels), forms, entry, token);
+}
+
+/** Matches the token's own form: the same text (ignoring case and the apostrophe's
+ * shape, ’m for 'm) with the token's features, counting only features the paradigm's
+ * forms have. A feature none of them has doesn't tell forms apart (English first is
+ * NumType=Ord, its forms only have Degree). */
+function isTokenForm(forms: Form[], token: Token): (f: Form) => boolean {
+  const used = new Set(forms.flatMap((f) => Object.keys(f.feats)));
+  const feats = Object.fromEntries(Object.entries(token.feats).filter(([key]) => used.has(key))) as Feats;
+  const text = foldText(token.text);
+  return (f) => foldText(f.text) === text && featsMatch(f.feats, feats);
+}
+
+function foldText(text: string): string {
+  return text.toLowerCase().replaceAll("’", "'");
 }
 
 function chooseParadigm(bundle: Bundle, entry: Entry, token: Token): Form[] {
@@ -67,11 +80,7 @@ function chooseParadigm(bundle: Bundle, entry: Entry, token: Token): Form[] {
     ),
   );
   // Homonyms (pies the dog vs the cop) inflect differently: use the one with this form
-  const own = expanded.find((forms) =>
-    forms.some(
-      (f) => f.text.toLowerCase() === token.text.toLowerCase() && featsMatch(f.feats, token.feats),
-    ),
-  );
+  const own = expanded.find((forms) => forms.some(isTokenForm(forms, token)));
   return own ?? expanded[0] ?? [];
 }
 
