@@ -14,17 +14,29 @@ const TEXTS: Record<Lang, string> = {
   pl: "Szukam psa, który uciekł wczoraj wieczorem.",
 };
 
+// A new Worker's workers.dev name can take a while to answer (24 s for a preview's), so
+// errors are retried until the deadline too
 async function checkVersion(base: string, expected: string): Promise<void> {
   const deadline = Date.now() + VERSION_TIMEOUT_MS;
   for (;;) {
-    const response = await fetch(`${base}/api/version`);
-    if (!response.ok) throw new Error(`version: ${response.status} ${await response.text()}`);
-    const { version } = (await response.json()) as Version;
-    if (version === expected) {
-      console.log(`version ${version}`);
-      return;
+    let result: string;
+    try {
+      const response = await fetch(`${base}/api/version`);
+      if (response.ok) {
+        const { version } = (await response.json()) as Version;
+        if (version === expected) {
+          console.log(`version ${version}`);
+          return;
+        }
+        result = `serving ${version}, expected ${expected}`;
+      } else {
+        result = `${response.status} ${await response.text()}`;
+      }
+    } catch (error: unknown) {
+      result = error instanceof Error ? error.message : String(error);
     }
-    if (Date.now() > deadline) throw new Error(`version: serving ${version}, expected ${expected}`);
+    if (Date.now() > deadline) throw new Error(`version: ${result}`);
+    console.log(`version: ${result}`);
     await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }
 }
