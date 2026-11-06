@@ -6,20 +6,24 @@
 #   deploy-ingest.sh <env> deploy         deploy the ingest Worker with every language's
 #                                          image, which must be in the registry
 #   deploy-ingest.sh <env>                both, every language in turn
-# env is staging or production. deploy runs after tf.sh apply (it reads the R2
+# env is staging, production or pr-N. deploy runs after tf.sh apply (it reads the R2
 # credentials from Terraform). Each image is built on a base (models and dependencies,
 # analysis/Dockerfile) kept in the registry under a tag of its own, so a code change
 # builds and pushes only the code and lexicon layers on top of it.
 set -euo pipefail
 
 env=${1:-}
-case $env in
-  staging | production) ;;
-  *) echo "usage: deploy-ingest.sh <staging|production> [build <lang> | deploy]" >&2; exit 2 ;;
-esac
+usage="usage: deploy-ingest.sh <staging|production|pr-N> [build <lang> | deploy]"
+if [[ ! $env =~ ^(staging|production|pr-[0-9]+)$ ]]; then
+  echo "$usage" >&2
+  exit 2
+fi
 root=$(cd "$(dirname "$0")/.." && pwd)
 tf() { "$root/infra/tf.sh" "$env" "$@"; }
 wrangler() { "$root/infra/wrangler.sh" "$env" "$@"; }
+# The registry is the account's, whichever environment; a preview's config may not be
+# made yet when its images are built
+registry_wrangler() { "$root/infra/wrangler.sh" account "$@"; }
 
 # One image per language, each for its container class in wrangler.ingest.jsonc,
 # Ingest{Lang}: IngestPl. CI's matrix in .github/workflows/deploy.yml lists them too.
@@ -43,7 +47,7 @@ repo=registry.cloudflare.com/$CLOUDFLARE_ACCOUNT_ID
 
 registry=
 in_registry() {
-  [ -n "$registry" ] || registry=$(wrangler containers images list --json)
+  [ -n "$registry" ] || registry=$(registry_wrangler containers images list --json)
   jq -e --arg n "$1" --arg v "$2" '.[] | select(.name == $n) | .tags | index($v)' \
     <<<"$registry" >/dev/null
 }
@@ -54,7 +58,7 @@ in_registry() {
 logged_in=
 login() {
   [ -n "$logged_in" ] && return
-  wrangler containers registries credentials registry.cloudflare.com --push --pull \
+  registry_wrangler containers registries credentials registry.cloudflare.com --push --pull \
     --expiration-minutes 60 | tail -n1 |
     docker login --username v1 --password-stdin registry.cloudflare.com
   logged_in=1
@@ -118,7 +122,7 @@ build_lang() {
 }
 
 deploy() {
-  local lang images=() pair config secrets
+  local lang images=() pair config secrets copies
   for lang in "${langs[@]}"; do
     if ! in_registry "skolia-ingest-$lang" "$version"; then
       echo "skolia-ingest-$lang:$version isn't in the registry: build it first" >&2
@@ -133,20 +137,32 @@ deploy() {
   secrets=$(mktemp)
   # Expanded now: the trap runs at exit, after deploy's locals are gone
   trap "rm -f '$secrets' '$root/api/$config'" EXIT
-  awk -v images="$(IFS=,; echo "${images[*]}")" '
-    BEGIN { n = split(images, pairs, ","); for (i = 1; i <= n; i++) { split(pairs[i], kv, "="); image[kv[1]] = kv[2] } }
-    match($0, /"class_name": "[^"]+"/) { class = substr($0, RSTART + 15, RLENGTH - 16) }
-    /"image": "\.\.\/analysis\/Dockerfile",/ {
-      if (!(class in image)) { print "no image for container class " class > "/dev/stderr"; exit 1 }
-      sub(/"\.\.\/analysis\/Dockerfile"/, "\"" image[class] "\"")
-    }
-    /"image_build_context"|"image_vars"/ { next }
-    { print }
-  ' "$root/api/wrangler.ingest.jsonc" > "$root/api/$config"
-  # Each image in production and staging
+  if [[ $env == pr-* ]]; then
+    # A preview's config is JSON (api/src/preview.ts) and holds only the preview
+    [ -f "$root/api/wrangler.ingest.$env.json" ] || node "$root/api/src/preview.ts" config "$env" >&2
+    jq --argjson image "$(jq -n '$ARGS.positional | map(split("=") | {(.[0]): .[1]}) | add' --args "${images[@]}")" '
+      .containers |= map(
+        if $image[.class_name] then .image = $image[.class_name] | del(.image_build_context, .image_vars)
+        else error("no image for container class \(.class_name)") end)
+    ' "$root/api/wrangler.ingest.$env.json" > "$root/api/$config"
+    copies=1
+  else
+    awk -v images="$(IFS=,; echo "${images[*]}")" '
+      BEGIN { n = split(images, pairs, ","); for (i = 1; i <= n; i++) { split(pairs[i], kv, "="); image[kv[1]] = kv[2] } }
+      match($0, /"class_name": "[^"]+"/) { class = substr($0, RSTART + 15, RLENGTH - 16) }
+      /"image": "\.\.\/analysis\/Dockerfile",/ {
+        if (!(class in image)) { print "no image for container class " class > "/dev/stderr"; exit 1 }
+        sub(/"\.\.\/analysis\/Dockerfile"/, "\"" image[class] "\"")
+      }
+      /"image_build_context"|"image_vars"/ { next }
+      { print }
+    ' "$root/api/wrangler.ingest.jsonc" > "$root/api/$config"
+    # Production and staging
+    copies=2
+  fi
   for pair in "${images[@]}"; do
-    if [ "$(grep -c "\"image\": \"${pair#*=}\"" "$root/api/$config")" != 2 ]; then
-      echo "expected ${pair#*=} twice in $config" >&2
+    if [ "$(grep -c "\"image\": \"${pair#*=}\"" "$root/api/$config")" != "$copies" ]; then
+      echo "expected ${pair#*=} $copies times in $config" >&2
       exit 1
     fi
   done
@@ -172,5 +188,5 @@ case ${2:-} in
     registry=
     deploy
     ;;
-  *) echo "usage: deploy-ingest.sh <staging|production> [build <lang> | deploy]" >&2; exit 2 ;;
+  *) echo "$usage" >&2; exit 2 ;;
 esac
