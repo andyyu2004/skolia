@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# terraform for one environment: tf.sh <staging|production> <terraform args...>
-# Each environment has its own state (skolia.tfstate, skolia-staging.tfstate) and init
-# directory (.terraform-{env}). Needs CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN and the
-# state bucket's AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (README.md).
+# terraform for one environment: tf.sh <staging|production|pr-N> <terraform args...>
+# Each environment has its own state (skolia.tfstate, skolia-staging.tfstate,
+# skolia-pr-12.tfstate) and init directory (.terraform-{env}). Needs
+# CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN and the state bucket's AWS_ACCESS_KEY_ID /
+# AWS_SECRET_ACCESS_KEY (README.md).
 set -euo pipefail
 
 env=${1:-}
-case $env in
-  staging | production) shift ;;
-  *) echo "usage: tf.sh <staging|production> <terraform args...>" >&2; exit 2 ;;
-esac
+if [[ ! $env =~ ^(staging|production|pr-[0-9]+)$ ]]; then
+  echo "usage: tf.sh <staging|production|pr-N> <terraform args...>" >&2
+  exit 2
+fi
+shift
 
 cd "$(dirname "$0")"
 export TF_DATA_DIR=.terraform-$env TF_VAR_env=$env

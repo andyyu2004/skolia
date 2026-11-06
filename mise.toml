@@ -52,22 +52,22 @@ run = "analysis/scripts/build_data.sh"
 
 [tasks.plan]
 description = "What a deploy would change in Terraform's resources"
-usage = 'arg "<env>" { choices "staging" "production" }'
+usage = 'arg "<env>" help="staging, production or pr-<N>"'
 run = "infra/tf.sh $usage_env plan -input=false"
 
 [tasks.migrate]
 description = "Apply D1 migrations"
-usage = 'arg "<env>" { choices "staging" "production" }'
+usage = 'arg "<env>" help="staging, production or pr-<N>"'
 run = "infra/wrangler.sh $usage_env d1 migrations apply DB --remote"
 
 [tasks.apply]
 description = "Terraform: storage, queue, ingest's R2 token, billing alerts"
-usage = 'arg "<env>" { choices "staging" "production" }'
+usage = 'arg "<env>" help="staging, production or pr-<N>"'
 run = "infra/tf.sh $usage_env apply -input=false"
 
 [tasks.deploy]
 description = "Terraform and D1 migrations, the ingest Worker, then the skolia Worker: the queue's consumer before its producer"
-usage = 'arg "<env>" { choices "staging" "production" }'
+usage = 'arg "<env>" help="staging, production or pr-<N>"'
 run = [
   "mise run deploy-infra $usage_env",
   "mise run deploy-ingest $usage_env",
@@ -75,13 +75,17 @@ run = [
 ]
 
 [tasks.deploy-infra]
-description = "Terraform, then D1 migrations"
-usage = 'arg "<env>" { choices "staging" "production" }'
-run = ["mise run apply $usage_env", "mise run migrate $usage_env"]
+description = "Terraform, then D1 migrations; for a preview, its wrangler configs in between (they need its D1 id)"
+usage = 'arg "<env>" help="staging, production or pr-<N>"'
+run = [
+  "mise run apply $usage_env",
+  'case $usage_env in pr-*) infra/preview.py config "$usage_env" ;; esac',
+  "mise run migrate $usage_env",
+]
 
 [tasks.deploy-web]
 description = "The skolia Worker (reader and API) with wrangler"
-usage = 'arg "<env>" { choices "staging" "production" }'
+usage = 'arg "<env>" help="staging, production or pr-<N>"'
 # The version /api/version and the reader's footer show
 env = { VITE_VERSION = "{{exec(command='git describe --tags --always --dirty')}}" }
 run = [
@@ -91,11 +95,23 @@ run = [
 
 [tasks.deploy-ingest]
 description = "Build, push and deploy the ingest container"
-usage = 'arg "<env>" { choices "staging" "production" }'
+usage = 'arg "<env>" help="staging, production or pr-<N>"'
 run = "infra/deploy-ingest.sh $usage_env"
 
 [tasks.smoke]
 description = "Check the environment serves this checkout's version, then import a new text and wait until it's ready"
-usage = 'arg "<env>" { choices "staging" "production" }'
+usage = 'arg "<env>" help="staging, production or pr-<N>"'
 env = { VERSION = "{{exec(command='git describe --tags --always --dirty')}}" }
-run = 'node api/src/smoke.ts "https://$([ "$usage_env" = production ] || echo "$usage_env.")skolia.io" "$VERSION"'
+run = '''
+case $usage_env in
+  production) url=https://skolia.io ;;
+  staging) url=https://staging.skolia.io ;;
+  *) url=$(infra/preview.py url "$usage_env") || exit ;;
+esac
+node api/src/smoke.ts "$url" "$VERSION"
+'''
+
+[tasks.teardown]
+description = "Delete a preview (pr-<N>): its Workers, container applications, storage, queue and Terraform state"
+usage = 'arg "<env>" help="pr-<N>"'
+run = "infra/teardown.sh $usage_env"

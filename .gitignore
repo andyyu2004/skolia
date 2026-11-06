@@ -9,3 +9,5 @@ node_modules/
 .dev.vars
 /api/.env.local
 /api/wrangler.ingest.deploy.jsonc
+/api/wrangler.pr-*.json
+/api/wrangler.ingest.pr-*.json
