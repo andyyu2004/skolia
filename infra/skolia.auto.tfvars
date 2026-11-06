@@ -1,1 +1,0 @@
-zone = "skolia.io"

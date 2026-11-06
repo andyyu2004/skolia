@@ -6,8 +6,6 @@ terraform = "1.17.1"
 
 [tasks.check]
 description = "Typecheck and lint everything"
-# terraform validate reads the bundle (filesha256)
-depends = ["build"]
 run = [
   "pnpm check",
   "cd analysis && uv run ruff check . && uv run ruff format --check . && uv run pyright",
@@ -21,7 +19,7 @@ depends = ["build"]
 run = ["pnpm test", "cd analysis && uv run pytest -q"]
 
 [tasks.build]
-description = "The reader and the API bundle Terraform uploads"
+description = "The reader and the API bundle (api/dist, for the workerd tests)"
 run = [
   "pnpm --filter @skolia/reader build",
   "pnpm --dir api exec wrangler deploy --dry-run --outdir dist --env=''",
@@ -53,9 +51,8 @@ description = "The lexicon and valency files, from the inputs pinned in analysis
 run = "analysis/scripts/build_data.sh"
 
 [tasks.plan]
-description = "What a deploy would change"
+description = "What a deploy would change in Terraform's resources"
 usage = 'arg "<env>" { choices "staging" "production" }'
-depends = ["build"]
 run = "infra/tf.sh $usage_env plan -input=false"
 
 [tasks.migrate]
@@ -64,15 +61,19 @@ usage = 'arg "<env>" { choices "staging" "production" }'
 run = "infra/wrangler.sh $usage_env d1 migrations apply DB --remote"
 
 [tasks.apply]
-description = "Terraform: the API Worker with the reader, storage, queue, domain"
+description = "Terraform: storage, queue, ingest's R2 token, billing alerts"
 usage = 'arg "<env>" { choices "staging" "production" }'
-depends = ["build"]
 run = "infra/tf.sh $usage_env apply -input=false"
 
 [tasks.deploy]
-description = "Migrations, then Terraform"
+description = "Terraform, D1 migrations, then the skolia Worker (reader and API) with wrangler"
 usage = 'arg "<env>" { choices "staging" "production" }'
-run = ["mise run migrate $usage_env", "mise run apply $usage_env"]
+run = [
+  "mise run apply $usage_env",
+  "mise run migrate $usage_env",
+  "pnpm --filter @skolia/reader build",
+  "infra/wrangler.sh $usage_env deploy",
+]
 
 [tasks.deploy-ingest]
 description = "Build, push and deploy the ingest container"
@@ -82,4 +83,4 @@ run = "infra/deploy-ingest.sh $usage_env"
 [tasks.smoke]
 description = "Import a new text and wait until it's ready"
 usage = 'arg "<env>" { choices "staging" "production" }'
-run = 'node api/src/smoke.ts "$(infra/tf.sh $usage_env output -raw url)"'
+run = 'node api/src/smoke.ts "https://$([ "$usage_env" = production ] || echo "$usage_env.")skolia.io"'

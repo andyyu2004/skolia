@@ -39,7 +39,7 @@ pnpm -r check                # tsc (api), svelte-check (reader)
 pnpm -r test                 # node --test; mise run build first, for api/dist
 ```
 
-Nothing is faked. The `*.workerd.test.ts` files load the built Worker (`api/dist`, what Terraform uploads) into wrangler's test harness (`api/src/testing/harness.ts`), which runs it in workerd with local D1, R2, queue and Durable Objects. The route tests call the app with the real adapters over those bindings and Better Auth on the local D1. A test-only Worker (`api/src/testing/ingest-recorder.ts`) consumes the local queue so the tests can see what was queued. `mise run test` builds first. The `*.workerd.test.ts` files need both Node and Workers types, so they have their own `tsconfig.workerd-test.json`.
+Nothing is faked. The `*.workerd.test.ts` files load the built Worker (`api/dist`, what wrangler deploys) into wrangler's test harness (`api/src/testing/harness.ts`), which runs it in workerd with local D1, R2, queue and Durable Objects. The route tests call the app with the real adapters over those bindings and Better Auth on the local D1. A test-only Worker (`api/src/testing/ingest-recorder.ts`) consumes the local queue so the tests can see what was queued. `mise run test` builds first. The `*.workerd.test.ts` files need both Node and Workers types, so they have their own `tsconfig.workerd-test.json`.
 
 Each user's data lives in their own Durable Object (`api/src/worker/user.ts`), addressed by their user id, with plain SQL written where it's used. To change the schema, add the next numbered file to `api/src/user/migrations/` exporting `up` and `down` SQL, and list it in `index.ts` with its version and name; never edit, rename or remove a migration that has been deployed.
 

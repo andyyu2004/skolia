@@ -1,13 +1,17 @@
 // skolia on Cloudflare: one Worker serves the reader (static assets) and the API.
-// In production Terraform (infra/) deploys it; this file is for wrangler dev, building
-// the bundle Terraform uploads (wrangler deploy --dry-run --outdir dist), and D1
-// migrations. Ingest is a separate Worker: wrangler.ingest.jsonc.
+// Deployed with wrangler (infra/wrangler.sh <env> deploy), which also applies the
+// Durable Object migrations. Terraform (infra/) makes the D1 database, R2 bucket and
+// queue it binds. The top level is production and wrangler dev; staging is env.staging.
+// Ingest is a separate Worker: wrangler.ingest.jsonc.
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "skolia",
   "main": "src/worker/main.ts",
   "compatibility_date": "2026-10-19",
   "minify": true,
+  "workers_dev": true,
+  "preview_urls": false,
+  "routes": [{ "pattern": "skolia.io", "custom_domain": true }],
   "assets": {
     "directory": "../reader/dist",
     "not_found_handling": "single-page-application",
@@ -17,7 +21,7 @@
     {
       "binding": "DB",
       "database_name": "skolia",
-      // terraform -chdir=infra output -raw d1_database_id
+      // infra/tf.sh production output -raw d1_database_id
       "database_id": "e9c02964-6266-463f-9d7a-ce71a33f3b98",
       "migrations_dir": "migrations"
     }
@@ -33,9 +37,10 @@
       }
     }
   ],
-  // In production Terraform sets them (var.max_imports_per_day, local.hostname). The
-  // auth secrets for wrangler dev go in api/.env.local (DEVELOP.md).
-  "vars": { "MAX_IMPORTS_PER_DAY": "50", "BASE_URL": "http://localhost:5173" },
+  // MAX_IMPORTS_PER_DAY: new texts the API accepts per UTC day, across all users;
+  // analysis time is the main cost. wrangler dev takes BASE_URL from api/.env, and the
+  // auth secrets from api/.env.local (DEVELOP.md); deployed, they're wrangler secrets.
+  "vars": { "MAX_IMPORTS_PER_DAY": "50", "BASE_URL": "https://skolia.io" },
   "queues": {
     "producers": [{ "binding": "INGEST", "queue": "skolia-ingest" }]
   },
@@ -43,9 +48,11 @@
     "bindings": [{ "name": "USER", "class_name": "User" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["User"] }],
-  // Bindings aren't inherited, so each environment lists its own (Terraform's names)
+  // Bindings and routes aren't inherited, so each environment lists its own (Terraform's
+  // names). Deployed as skolia-staging.
   "env": {
     "staging": {
+      "routes": [{ "pattern": "staging.skolia.io", "custom_domain": true }],
       "d1_databases": [
         {
           "binding": "DB",
