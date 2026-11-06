@@ -29,8 +29,14 @@ class StanzaParser:
         import stanza
 
         self._package = package
+        # Models already in STANZA_RESOURCES_DIR (the image has them) are used as they
+        # are: by default Stanza fetches resources.json from GitHub on every start
         self._nlp = stanza.Pipeline(
-            lang, package=package, processors=PROCESSORS, logging_level="WARN"
+            lang,
+            package=package,
+            processors=PROCESSORS,
+            logging_level="WARN",
+            download_method=stanza.DownloadMethod.REUSE_RESOURCES,
         )
 
     @property
