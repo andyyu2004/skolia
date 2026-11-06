@@ -159,7 +159,7 @@ zstd -19 -T0 -c ../data/kaikki/kaikki.org-dictionary-Polish.jsonl | pnpm --dir .
 # then put $sha on the kaikki line of inputs.sha256
 ```
 
-`wrangler r2 object put` takes at most 300 MiB. The English extract compresses to more (305 MB at `zstd -19`), so upload it through R2's S3 API instead (any S3 client, with the tfstate credentials in infra/README.md).
+`wrangler r2 object put` takes at most 300 MiB. The English extract is over that at `zstd -19` (320 MB) and under it at `zstd --ultra -22 --long=27` (281 MB, about 6 minutes); `zstd -d` reads a 2^27 window without any flag, so `build_data.sh` needs none.
 
 Or build from a local extract (about 10 s):
 
