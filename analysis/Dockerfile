@@ -66,7 +66,7 @@ RUN sed -i '/add_subdirectory (java)/d' Morfeusz/morfeusz/wrappers/CMakeLists.tx
 # shared blobs/, outside the model's directory, so this keeps them apart for the copy.
 FROM python:3.12.13-slim AS fetch
 RUN pip install --no-cache-dir huggingface-hub==2.4.0 hf-xet==1.8.0
-COPY analysis/scripts/fetch_model.py analysis/scripts/fetch_stanza.py /tmp/
+COPY analysis/scripts/fetch_model.py /tmp/
 
 # Polish: COMBO. The base model's weights aren't needed: COMBO's checkpoints replace them
 # (combo_parser.py).
@@ -89,6 +89,11 @@ RUN --mount=type=secret,id=hf_token,env=HF_TOKEN \
 # and the ELECTRA they're built on, which Stanza loads from the Hub cache. Stanza finds
 # its models through resources.json, pinned here by hash.
 FROM fetch AS models-en
+RUN --mount=type=secret,id=hf_token,env=HF_TOKEN \
+    HF_HUB_CACHE=/models/electra-large python /tmp/fetch_model.py \
+      google/electra-large-discriminator c13c3df7efadc2162f42588bd28eb4e187d602a5 \
+      config.json pytorch_model.bin tokenizer.json tokenizer_config.json vocab.txt
+COPY analysis/scripts/fetch_stanza.py /tmp/
 ARG STANZA_RESOURCES_SHA256=ed01f17735f351e8f08fda331c3208091657d79420a2a10b4f9cfbc685f3d65d
 RUN --mount=type=secret,id=hf_token,env=HF_TOKEN \
     python /tmp/fetch_stanza.py /models/stanza en 4003b0a5a175588fd8f6cb17fde741350f5fd725 \
@@ -97,10 +102,6 @@ RUN --mount=type=secret,id=hf_token,env=HF_TOKEN \
       pretrain/conll17.pt forward_charlm/1billion.pt backward_charlm/1billion.pt \
  && python -c "import urllib.request as u; u.urlretrieve('https://raw.githubusercontent.com/stanfordnlp/stanza-resources/main/resources_1.15.0.json', '/models/stanza/resources.json')" \
  && echo "$STANZA_RESOURCES_SHA256  /models/stanza/resources.json" | sha256sum -c -
-RUN --mount=type=secret,id=hf_token,env=HF_TOKEN \
-    HF_HUB_CACHE=/models/electra-large python /tmp/fetch_model.py \
-      google/electra-large-discriminator c13c3df7efadc2162f42588bd28eb4e187d602a5 \
-      config.json pytorch_model.bin tokenizer.json tokenizer_config.json vocab.txt
 
 # --- the code and its dependencies, the same for every language -------------------
 FROM python:3.12.13-slim AS app
