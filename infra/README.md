@@ -26,16 +26,23 @@ Account `1d3ca537bca3f2918d2778118d23f0a8`. Secrets in `pass` under `cloudflare/
 
 ## Environments
 
-| | production | staging |
-|---|---|---|
-| URL | https://skolia.io | https://staging.skolia.io |
-| Names | `skolia`, `skolia-ingest` | `skolia-staging`, `skolia-ingest-staging` |
-| Terraform state | `skolia.tfstate` | `skolia-staging.tfstate` |
-| Wrangler | top level of `api/wrangler*.jsonc` | `env.staging` |
+| | production | staging | preview of pull request N |
+|---|---|---|---|
+| Env | `production` | `staging` | `pr-N` |
+| URL | https://skolia.io | https://staging.skolia.io | https://skolia-pr-N.andyyu2004.workers.dev |
+| Names | `skolia`, `skolia-ingest` | `skolia-staging`, `skolia-ingest-staging` | `skolia-pr-N`, `skolia-ingest-pr-N` |
+| Terraform state | `skolia.tfstate` | `skolia-staging.tfstate` | `skolia-pr-N.tfstate` |
+| Wrangler | top level of `api/wrangler*.jsonc` | `env.staging` | `api/wrangler.pr-N.json`, `api/wrangler.ingest.pr-N.json` (generated) |
 
-Both are on the same account. Billing alerts are per account, so only production makes them. `infra/tf.sh <env>` and `infra/wrangler.sh <env>` run terraform and wrangler for one environment. `api/wrangler.jsonc` holds each D1 id (`infra/tf.sh <env> output -raw d1_database_id`), for migrations.
+All are on the same account. Billing alerts are per account, so only production makes them. `infra/tf.sh <env>` and `infra/wrangler.sh <env>` run terraform and wrangler for one environment. `api/wrangler.jsonc` holds each D1 id (`infra/tf.sh <env> output -raw d1_database_id`), for migrations.
 
-A new environment: add it to the `case` in `tf.sh`, `wrangler.sh` and `deploy-ingest.sh` and to `var.env`, add its `env` blocks, then `infra/tf.sh <env> apply`, put its D1 id in `api/wrangler.jsonc`, and deploy.
+A new environment: add it to the checks in `tf.sh`, `wrangler.sh` and `deploy-ingest.sh` and to `var.env`, add its `env` blocks, then `infra/tf.sh <env> apply`, put its D1 id in `api/wrangler.jsonc`, and deploy.
+
+### Previews
+
+Each pull request from a branch of this repository gets a preview, `pr-N`, deployed and smoke-tested on every push (`ci.yml`, job `preview`). It is on workers.dev only, with no secrets, so sign-in answers 503, and it accepts 20 imports a day. Its wrangler configs are made by `node api/src/preview.ts config pr-N` from the `env.staging` blocks, with `-pr-N` names, its D1 id and its workers.dev URL; `deploy-infra` makes them after Terraform, and `wrangler.sh` when they're missing. They're gitignored.
+
+Closing the pull request tears the preview down (`mise run teardown pr-N`, `infra/teardown.sh`): the queue's consumer, the ingest Worker, its container applications (which `wrangler delete` leaves), the skolia Worker, the bucket's objects, `terraform destroy`, then the state object. Each step skips what's already gone, so it can be run again. Every night `sweep.yml` runs `infra/sweep.sh`, which finds previews by their resources' and state's names, tears down those whose pull request isn't open, and fails if any are left; `infra/sweep.sh -n` lists them without tearing them down.
 
 ## Credentials
 
@@ -54,7 +61,7 @@ A push to main deploys staging and smoke-tests it: in each language it imports a
 
 - variable `CLOUDFLARE_ACCOUNT_ID`
 - secrets `CLOUDFLARE_API_TOKEN` (the Terraform token above), `TFSTATE_ACCESS_KEY_ID`, `TFSTATE_SECRET_ACCESS_KEY`, `ALERT_EMAIL`
-- environments `staging` and `production`
+- environments `staging`, `production` and `preview` (every pull request's)
 
 These are managed in Terraform in the dotfiles (`~/.dotfiles/terraform/github`), from `pass`.
 
@@ -67,6 +74,7 @@ mise run deploy-infra staging    # terraform apply, D1 migrations
 mise run deploy-ingest staging   # build, push and deploy the containers
 mise run deploy-web staging      # the skolia Worker (reader and API)
 mise run smoke staging
+mise run teardown pr-12          # previews only
 ```
 
 `deploy-ingest` builds each language's lexicon (`build_data.sh <lang>`), builds one image per language with buildx for amd64 (`--build-arg SKOLIA_LANG=pl`), pushes each straight from buildx with the credentials `wrangler containers push` would use (retrying: the registry sometimes times out on large layers) and deploys the ingest Worker with each image in place of the Dockerfile under its container class. The ingest Worker hands each job to its language's container. Each image is the code and lexicon on a base (models and dependencies, the `base-{lang}` stage), tagged `skolia-ingest-{lang}:base-{hash}` with a hash of the files the base is built from (`analysis/Dockerfile`, `pyproject.toml`, `uv.lock`, the fetch scripts). The base is built only when its tag isn't in the registry; otherwise the image is built on the pushed base without pulling it, and only the code and lexicon layers are pushed. There's no layer cache between runs: the Actions cache's 10 GB per repo didn't hold the images. In CI each language's image is built on its own runner, in parallel (`deploy-ingest.sh <env> build <lang>`; one runner's disk didn't hold both), and one job then deploys the ingest Worker with all of them (`deploy-ingest.sh <env> deploy`). The job log shows one line per Dockerfile step, and the end of the full build log when a build fails.
