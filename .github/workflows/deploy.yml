@@ -44,6 +44,7 @@ jobs:
       - name: Deploy ingest
         env:
           INGEST_CACHE: type=gha,scope=ingest
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: mise run deploy-ingest ${{ inputs.env }}
 
       - name: Smoke test

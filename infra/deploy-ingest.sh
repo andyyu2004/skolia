@@ -31,12 +31,16 @@ if wrangler containers images list --json |
   echo "$tag is already in the registry"
 else
   "$root/analysis/scripts/build_data.sh"
-  cache=()
+  options=()
   if [ -n "${INGEST_CACHE:-}" ]; then
-    cache=(--cache-from "$INGEST_CACHE" --cache-to "$INGEST_CACHE,mode=max")
+    options+=(--cache-from "$INGEST_CACHE" --cache-to "$INGEST_CACHE,mode=max")
+  fi
+  # Higher Hugging Face rate limits for the model downloads; optional
+  if [ -n "${HF_TOKEN:-}" ]; then
+    options+=(--secret id=hf_token,env=HF_TOKEN)
   fi
   docker buildx build --platform linux/amd64 -f "$root/analysis/Dockerfile" --target cloudflare \
-    --load -t "$tag" ${cache[@]+"${cache[@]}"} "$root"
+    --load -t "$tag" ${options[@]+"${options[@]}"} "$root"
 
   # Cloudflare's registry sometimes times out committing a large layer (on 2026-11-06 a
   # 1 GB model layer failed 3 times, then went through); layers already pushed are kept

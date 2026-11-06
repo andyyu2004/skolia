@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+# (1.10+ for secret mounts as environment variables)
 # skolia-ingest, for linux/amd64 and linux/arm64. Build from the repo root:
 #   docker build -f analysis/Dockerfile --target ingest .
 # Stage "ingest" (docker compose): models download on first start into
@@ -83,12 +85,18 @@ FROM ingest AS cloudflare
 # The models the default parser (COMBO) loads, at fixed revisions, one layer each:
 # Cloudflare's registry times out committing a single 3 GB layer. The base model's
 # weights aren't needed: COMBO's checkpoints replace them (combo_parser.py)
+# The optional hf_token build secret (--secret id=hf_token,env=HF_TOKEN) raises the
+# Hub's rate limits; it isn't stored in the image and doesn't change the cache key
 COPY analysis/scripts/fetch_model.py /tmp/
-RUN python /tmp/fetch_model.py FacebookAI/xlm-roberta-base e73636d4f797dec63c3081bb6ed5c7b0bb3f2089 \
+RUN --mount=type=secret,id=hf_token,env=HF_TOKEN \
+    python /tmp/fetch_model.py FacebookAI/xlm-roberta-base e73636d4f797dec63c3081bb6ed5c7b0bb3f2089 \
       config.json sentencepiece.bpe.model tokenizer.json tokenizer_config.json
-RUN python /tmp/fetch_model.py clarin-pl/combo-nlp-xlm-roberta-base-polish-pdb-ud2.18 f88e8ac3f57ea0e44e843f9ce85356963825ecae
-RUN python /tmp/fetch_model.py clarin-pl/combo-seg-xlm-roberta-base-polish-pdb-ud2.18 dc9865fad8aa7978f96fa69bc4e30a1943535f8e
-RUN python /tmp/fetch_model.py clarin-pl/combo-nlp-models 668b5a5d5f1afb5b57b0d9b04062c5ed3f812005
+RUN --mount=type=secret,id=hf_token,env=HF_TOKEN \
+    python /tmp/fetch_model.py clarin-pl/combo-nlp-xlm-roberta-base-polish-pdb-ud2.18 f88e8ac3f57ea0e44e843f9ce85356963825ecae
+RUN --mount=type=secret,id=hf_token,env=HF_TOKEN \
+    python /tmp/fetch_model.py clarin-pl/combo-seg-xlm-roberta-base-polish-pdb-ud2.18 dc9865fad8aa7978f96fa69bc4e30a1943535f8e
+RUN --mount=type=secret,id=hf_token,env=HF_TOKEN \
+    python /tmp/fetch_model.py clarin-pl/combo-nlp-models 668b5a5d5f1afb5b57b0d9b04062c5ed3f812005
 # Fails the build if the parser needs anything not fetched above
 RUN HF_HUB_OFFLINE=1 python -c "from skolia_analysis import pl; pl.parser(pl.DEFAULT_MODEL)"
 COPY data/lexicon/pl.sqlite data/lexicon/pl-valency.json /lexicon/
