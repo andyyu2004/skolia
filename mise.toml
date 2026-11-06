@@ -79,7 +79,7 @@ description = "Terraform, then D1 migrations; for a preview, its wrangler config
 usage = 'arg "<env>" help="staging, production or pr-<N>"'
 run = [
   "mise run apply $usage_env",
-  'case $usage_env in pr-*) node api/src/preview.ts config "$usage_env" ;; esac',
+  'case $usage_env in pr-*) infra/preview.py config "$usage_env" ;; esac',
   "mise run migrate $usage_env",
 ]
 
@@ -106,7 +106,7 @@ run = '''
 case $usage_env in
   production) url=https://skolia.io ;;
   staging) url=https://staging.skolia.io ;;
-  *) url=$(node api/src/preview.ts url "$usage_env") || exit ;;
+  *) url=$(infra/preview.py url "$usage_env") || exit ;;
 esac
 node api/src/smoke.ts "$url" "$VERSION"
 '''

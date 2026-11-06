@@ -40,7 +40,7 @@ A new environment: add it to the checks in `tf.sh`, `wrangler.sh` and `deploy-in
 
 ### Previews
 
-Each pull request from a branch of this repository gets a preview, `pr-N`, deployed and smoke-tested on every push (`ci.yml`, job `preview`). It is on workers.dev only, with no secrets, so sign-in answers 503, and it accepts 20 imports a day. Its wrangler configs are made by `node api/src/preview.ts config pr-N` from the `env.staging` blocks, with `-pr-N` names, its D1 id and its workers.dev URL; `deploy-infra` makes them after Terraform, and `wrangler.sh` when they're missing. They're gitignored.
+Each pull request from a branch of this repository gets a preview, `pr-N`, deployed and smoke-tested on every push (`ci.yml`, job `preview`). It is on workers.dev only, with no secrets, so sign-in answers 503, and it accepts 20 imports a day. Its wrangler configs are made by `infra/preview.py config pr-N` from the `env.staging` blocks, with `-pr-N` names, its D1 id and its workers.dev URL; `deploy-infra` makes them after Terraform, and `wrangler.sh` when they're missing. They're gitignored.
 
 Closing the pull request tears the preview down (`mise run teardown pr-N`, `infra/teardown.sh`): the queue's consumer, the ingest Worker, its container applications (which `wrangler delete` leaves), the skolia Worker, the bucket's objects, `terraform destroy`, then the state object. Each step skips what's already gone, so it can be run again. Every night `sweep.yml` runs `infra/sweep.sh`, which finds previews by their resources' and state's names, tears down those whose pull request isn't open, and fails if any are left; `infra/sweep.sh -n` lists them without tearing them down.
 

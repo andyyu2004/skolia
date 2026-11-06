@@ -138,8 +138,8 @@ deploy() {
   # Expanded now: the trap runs at exit, after deploy's locals are gone
   trap "rm -f '$secrets' '$root/api/$config'" EXIT
   if [[ $env == pr-* ]]; then
-    # A preview's config is JSON (api/src/preview.ts) and holds only the preview
-    [ -f "$root/api/wrangler.ingest.$env.json" ] || node "$root/api/src/preview.ts" config "$env" >&2
+    # A preview's config is JSON (infra/preview.py) and holds only the preview
+    [ -f "$root/api/wrangler.ingest.$env.json" ] || "$root/infra/preview.py" config "$env" >&2
     jq --argjson image "$(jq -n '$ARGS.positional | map(split("=") | {(.[0]): .[1]}) | add' --args "${images[@]}")" '
       .containers |= map(
         if $image[.class_name] then .image = $image[.class_name] | del(.image_build_context, .image_vars)
