@@ -1,19 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 import type { KnownLemma, LemmaId, LemmaStatus } from "@skolia/shared/api";
+import * as schemas from "@skolia/shared/schemas";
 import { MIGRATIONS } from "../user/migrations/index.ts";
-import {
-  APPEND_LOG,
-  LOG_SCHEMA,
-  LogEntry,
-  MigrationError,
-  READ_LOG,
-  applied,
-  plan,
-  problems,
-  withChecksums,
-  type Checksummed,
-} from "../user/migrator.ts";
-import { LEMMAS, SET_LEMMA, toKnownLemma } from "../user/queries.ts";
+import { LogEntry, MigrationError, applied, plan, problems, withChecksums, type Checksummed } from "../user/migrator.ts";
 
 export interface MigrationStatus {
   version: number | null;
@@ -49,11 +38,20 @@ export class User extends DurableObject<object> {
   }
 
   lemmas(): KnownLemma[] {
-    return this.sql.exec(LEMMAS).toArray().map(toKnownLemma);
+    return this.sql
+      .exec(`SELECT lemma_id AS "lemmaId", status, updated FROM known_lemma`)
+      .toArray()
+      .map((row) => schemas.KnownLemma.parse(row));
   }
 
   setLemma(lemmaId: LemmaId, status: LemmaStatus, updated: string): void {
-    this.sql.exec(SET_LEMMA, lemmaId, status, updated);
+    this.sql.exec(
+      `INSERT INTO known_lemma (lemma_id, status, updated) VALUES (?, ?, ?)
+       ON CONFLICT (lemma_id) DO UPDATE SET status = excluded.status, updated = excluded.updated`,
+      lemmaId,
+      status,
+      updated,
+    );
   }
 
   async #migrate(target: number): Promise<void> {
@@ -64,15 +62,38 @@ export class User extends DurableObject<object> {
     for (const step of plan(stack.length, target, migrations)) {
       this.ctx.storage.transactionSync(() => {
         this.sql.exec(step.sql);
-        this.sql.exec(APPEND_LOG, step.version, step.name, step.direction, step.checksum, new Date().toISOString());
+        this.sql.exec(
+          "INSERT INTO migration_log (version, name, direction, checksum, applied_at) VALUES (?, ?, ?, ?, ?)",
+          step.version,
+          step.name,
+          step.direction,
+          step.checksum,
+          new Date().toISOString(),
+        );
       });
     }
   }
 
   #log(): LogEntry[] {
     this.ctx.storage.transactionSync(() => {
-      for (const statement of LOG_SCHEMA) this.sql.exec(statement);
+      this.sql.exec(`
+        CREATE TABLE IF NOT EXISTS migration_log (
+          seq INTEGER PRIMARY KEY AUTOINCREMENT,
+          version INTEGER NOT NULL CHECK (version > 0),
+          name TEXT NOT NULL,
+          direction TEXT NOT NULL CHECK (direction IN ('up', 'down')),
+          checksum TEXT NOT NULL,
+          applied_at TEXT NOT NULL
+        ) STRICT;
+        CREATE TRIGGER IF NOT EXISTS migration_log_no_update BEFORE UPDATE ON migration_log
+          BEGIN SELECT RAISE(ABORT, 'migration_log is append-only'); END;
+        CREATE TRIGGER IF NOT EXISTS migration_log_no_delete BEFORE DELETE ON migration_log
+          BEGIN SELECT RAISE(ABORT, 'migration_log is append-only'); END;
+      `);
     });
-    return this.sql.exec(READ_LOG).toArray().map((row) => LogEntry.parse(row));
+    return this.sql
+      .exec(`SELECT seq, version, name, direction, checksum, applied_at AS "appliedAt" FROM migration_log ORDER BY seq`)
+      .toArray()
+      .map((row) => LogEntry.parse(row));
   }
 }

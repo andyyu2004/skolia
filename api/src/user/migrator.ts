@@ -29,25 +29,6 @@ export class MigrationError extends Error {
   override name = "MigrationError";
 }
 
-export const LOG_SCHEMA: readonly string[] = [
-  `CREATE TABLE IF NOT EXISTS migration_log (
-    seq INTEGER PRIMARY KEY AUTOINCREMENT,
-    version INTEGER NOT NULL CHECK (version > 0),
-    name TEXT NOT NULL,
-    direction TEXT NOT NULL CHECK (direction IN ('up', 'down')),
-    checksum TEXT NOT NULL,
-    applied_at TEXT NOT NULL
-  ) STRICT`,
-  `CREATE TRIGGER IF NOT EXISTS migration_log_no_update BEFORE UPDATE ON migration_log
-    BEGIN SELECT RAISE(ABORT, 'migration_log is append-only'); END`,
-  `CREATE TRIGGER IF NOT EXISTS migration_log_no_delete BEFORE DELETE ON migration_log
-    BEGIN SELECT RAISE(ABORT, 'migration_log is append-only'); END`,
-];
-
-export const READ_LOG = `SELECT seq, version, name, direction, checksum, applied_at AS "appliedAt" FROM migration_log ORDER BY seq`;
-
-export const APPEND_LOG = "INSERT INTO migration_log (version, name, direction, checksum, applied_at) VALUES (?, ?, ?, ?, ?)";
-
 export async function checksum(sql: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(sql));
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");

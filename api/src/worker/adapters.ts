@@ -1,8 +1,9 @@
 // The ports on Cloudflare: D1 for document metadata, R2 for blobs, Queues for jobs, a
 // Durable Object per user for their own data.
+import * as z from "zod";
 import type { KnownLemma, LemmaId, LemmaStatus } from "@skolia/shared/api";
 import type { IngestJob } from "@skolia/shared/schema";
-import { ADD, COUNT_SINCE, GET, LIST, addParams, toCount, toRecord } from "../documents.ts";
+import { DocumentRow } from "@skolia/shared/schemas";
 import type { BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob, UserData } from "../ports.ts";
 import type { User } from "./user.ts";
 
@@ -30,21 +31,26 @@ export class D1Documents implements DocumentStore {
   }
 
   async list(): Promise<DocumentRecord[]> {
-    const { results } = await this.db.prepare(LIST).all<Record<string, unknown>>();
-    return results.map(toRecord);
+    const { results } = await this.db.prepare("SELECT * FROM document ORDER BY imported DESC").all();
+    return results.map((row) => DocumentRow.parse(row));
   }
 
   async get(id: string): Promise<DocumentRecord | null> {
-    const row = await this.db.prepare(GET).bind(id).first<Record<string, unknown>>();
-    return row ? toRecord(row) : null;
+    const row = await this.db.prepare("SELECT * FROM document WHERE id = ?").bind(id).first();
+    return row ? DocumentRow.parse(row) : null;
   }
 
-  async add(record: DocumentRecord): Promise<void> {
-    await this.db.prepare(ADD).bind(...addParams(record)).run();
+  async add({ id, title, lang, imported, words }: DocumentRecord): Promise<void> {
+    await this.db
+      .prepare("INSERT OR IGNORE INTO document (id, title, lang, imported, words) VALUES (?, ?, ?, ?, ?)")
+      .bind(id, title, lang, imported, words)
+      .run();
   }
 
   async countImportedSince(since: string): Promise<number> {
-    return toCount(await this.db.prepare(COUNT_SINCE).bind(since).first<Record<string, unknown>>());
+    // ISO 8601 UTC strings sort in time order
+    const row = await this.db.prepare("SELECT COUNT(*) AS n FROM document WHERE imported >= ?").bind(since).first();
+    return z.object({ n: z.number() }).parse(row).n;
   }
 }
 
