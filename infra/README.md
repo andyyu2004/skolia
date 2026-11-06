@@ -8,7 +8,7 @@ Account `1d3ca537bca3f2918d2778118d23f0a8`. Secrets in `pass` under `cloudflare/
 
 1. Dashboard: enable R2 and subscribe to Workers Paid (Containers need it).
 2. Dashboard: an account API token for Terraform, in `pass` as `skolia-terraform`:
-   - Account: Workers Scripts Edit, Workers R2 Storage Edit, D1 Edit, Queues Edit, Account API Tokens Edit, Notifications Edit
+   - Account: Workers Scripts Edit, Workers Containers Edit, Workers R2 Storage Edit, D1 Edit, Queues Edit, Account API Tokens Edit, Notifications Edit
    - Zone skolia.io: Zone Read, Workers Routes Edit
 3. Dashboard: an R2 token for the state bucket, in `pass` as `skolia-tfstate-access-id` and `skolia-tfstate-secret-access-key`.
 4. The state bucket `skolia-tfstate`, created once through the API with the Terraform token (Terraform can't create its own state bucket).
@@ -30,7 +30,14 @@ terraform -chdir=infra init -backend-config="endpoints={s3=\"https://$CLOUDFLARE
 
 ## Deploy
 
-From the repo root, with the environment above:
+A push to main deploys (`.github/workflows/ci.yml`): checks, D1 migrations, `terraform apply`, and ingest when anything it's built from changed (or when run by hand with `ingest` ticked). Pull requests get a `terraform plan`. The workflow needs:
+
+- variable `CLOUDFLARE_ACCOUNT_ID`
+- secrets `CLOUDFLARE_API_TOKEN` (the Terraform token above), `TFSTATE_ACCESS_KEY_ID`, `TFSTATE_SECRET_ACCESS_KEY`, `ALERT_EMAIL`
+
+CI builds the ingest image with buildx, caching layers in GHCR (`ingest-cache`) so unchanged layers keep their digests and Cloudflare's registry skips them, then pushes it with `wrangler containers push` and deploys that image.
+
+By hand, from the repo root, with the environment above:
 
 ```fish
 pnpm --filter @skolia/reader build
@@ -42,7 +49,7 @@ pnpm --dir api exec wrangler d1 migrations apply skolia --remote
 
 `api/wrangler.jsonc` holds the D1 id (`terraform -chdir=infra output -raw d1_database_id`); update it if the database is ever recreated.
 
-Then the ingest Worker and container, when `analysis/` or `api/src/worker/ingest.ts` changed. Wrangler builds `analysis/Dockerfile` for amd64 (so `data/lexicon/pl.sqlite` and `pl-valency.json` must exist) and pushes about 2.8 GB. It runs with your `wrangler login`, not the Terraform token:
+Then the ingest Worker and container, when `analysis/` or `api/src/worker/ingest.ts` changed. Wrangler builds `analysis/Dockerfile` for amd64 (so `data/lexicon/pl.sqlite` and `pl-valency.json` must exist: `analysis/scripts/build_data.sh`) and pushes the layers the registry doesn't have. It runs with your `wrangler login`, not the Terraform token:
 
 ```fish
 function tf_out; terraform -chdir=infra output -raw $argv[1]; end
