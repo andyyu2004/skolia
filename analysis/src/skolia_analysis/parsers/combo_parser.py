@@ -7,15 +7,19 @@ models CC BY-NC-SA 4.0 (trained on PDB).
 from __future__ import annotations
 
 import contextlib
+import importlib
 import sys
+from collections.abc import Generator
 from importlib.metadata import version
 from typing import TYPE_CHECKING, NotRequired, TypedDict, cast
+from unittest import mock
 
 from .. import ud
 from ..parsed import ParsedSentence, ParsedToken, ParsedWord, align
 
 if TYPE_CHECKING:
     from combo import COMBO
+    from transformers import PreTrainedModel
 
 
 class _Multiword(TypedDict):
@@ -59,7 +63,7 @@ class ComboParser:
 
         self._model = model
         # COMBO prints progress to stdout, which would corrupt the analyser's output
-        with contextlib.redirect_stdout(sys.stderr):
+        with contextlib.redirect_stdout(sys.stderr), _without_base_weights():
             self._nlp: COMBO = COMBO.from_pretrained(model, device=device, batch_size=BATCH_SIZE)
 
     @property
@@ -84,6 +88,38 @@ class ComboParser:
             )
             sentences.append(ParsedSentence(tokens))
         return sentences
+
+
+class _EncoderFromConfig:
+    """Stands in for transformers.AutoModel while COMBO loads."""
+
+    @staticmethod
+    def from_pretrained(name: str) -> PreTrainedModel:
+        from transformers import AutoConfig, AutoModel
+        from transformers.initialization import no_init_weights
+
+        config = AutoConfig.from_pretrained(name)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        # The checkpoint overwrites every weight, so random initialisation is wasted time
+        with no_init_weights():
+            return cast("PreTrainedModel", AutoModel.from_config(config))  # pyright: ignore[reportUnknownMemberType]
+
+
+@contextlib.contextmanager
+def _without_base_weights() -> Generator[None]:
+    """Build COMBO's encoders from the base model's config, without its weights.
+
+    The parser and the segmenter each load their encoder with
+    AutoModel.from_pretrained(base model), then replace every encoder weight from
+    their own checkpoint. So the base model's 1.1 GB of weights are read and thrown
+    away, and the image needn't contain them: only its config and tokenizer.
+    """
+    parser = importlib.import_module("combo.model.parser")
+    segmenter = importlib.import_module("combo_seg.model")
+    with (
+        mock.patch.object(parser, "AutoModel", _EncoderFromConfig),
+        mock.patch.object(segmenter, "AutoModel", _EncoderFromConfig),
+    ):
+        yield
 
 
 def _group(words: list[_Word]) -> list[tuple[str, list[_Word]]]:
