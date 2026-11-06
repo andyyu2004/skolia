@@ -7,7 +7,9 @@
 !analysis/src
 !analysis/typings
 !analysis/scripts/fetch_model.py
+!analysis/scripts/fetch_stanza.py
 !data/lexicon/pl.sqlite
 !data/lexicon/pl-valency.json
+!data/lexicon/en.sqlite
 **/node_modules
 **/__pycache__

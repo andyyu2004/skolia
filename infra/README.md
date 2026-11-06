@@ -50,7 +50,7 @@ set -x AWS_SECRET_ACCESS_KEY (pass show $p/skolia-tfstate-secret-access-key)
 
 ## Deploy
 
-A push to main deploys staging and smoke-tests it (imports a new text and waits until it's ready). Production deploys when the workflow is run by hand with `production` ticked (`gh workflow run ci.yml -f production=true`), after staging passes; GitHub Free has no required reviewers on a private repo (`.github/workflows/ci.yml`, `deploy.yml`). Every deploy runs `deploy-ingest`: the image is tagged with a hash of the git trees it's built from (`analysis/`, `.dockerignore`), so it's built and pushed only when that tag isn't in the registry yet, and wrangler leaves an unchanged image deployed as it is. Pull requests get a production `terraform plan`. GitHub needs:
+A push to main deploys staging and smoke-tests it (imports a new text and waits until it's ready). Production deploys when the workflow is run by hand with `production` ticked (`gh workflow run ci.yml -f production=true`), after staging passes; GitHub Free has no required reviewers on a private repo (`.github/workflows/ci.yml`, `deploy.yml`). Every deploy runs `deploy-ingest`: each language's image (`skolia-ingest-{lang}`) is tagged with a hash of the git trees it's built from (`analysis/`, `.dockerignore`), so it's built and pushed only when that tag isn't in the registry yet, and wrangler leaves an unchanged image deployed as it is. Pull requests get a production `terraform plan`. GitHub needs:
 
 - variable `CLOUDFLARE_ACCOUNT_ID`
 - secrets `CLOUDFLARE_API_TOKEN` (the Terraform token above), `TFSTATE_ACCESS_KEY_ID`, `TFSTATE_SECRET_ACCESS_KEY`, `ALERT_EMAIL`
@@ -67,4 +67,6 @@ mise run deploy-ingest staging   # build, push and deploy the container
 mise run smoke staging
 ```
 
-`deploy-ingest` builds the lexicon (`mise run data`), builds the image with buildx for amd64, pushes it with `wrangler containers push` (retrying: the registry sometimes times out on large layers) and deploys the ingest Worker with that image. In CI, `INGEST_CACHE` keeps buildx's layer cache in the Actions cache (10 GB per repo; GHCR's free allowance for a private repo is 500 MB), so unchanged layers keep their digests and the registry skips them.
+`deploy-ingest` builds the lexicons (`mise run data`), builds one image per language with buildx for amd64 (`--build-arg SKOLIA_LANG=pl`), pushes each with `wrangler containers push` (retrying: the registry sometimes times out on large layers) and deploys the ingest Worker with each image in place of the Dockerfile under its container class. The ingest Worker hands each job to its language's container. In CI, `INGEST_CACHE` keeps buildx's layer cache in the Actions cache, a scope per language (10 GB per repo; GHCR's free allowance for a private repo is 500 MB), so unchanged layers keep their digests and the registry skips them.
+
+A new language: a final stage `ingest-{lang}` in `analysis/Dockerfile`, a container class in `api/src/worker/ingest.ts` and `api/wrangler.ingest.jsonc` (both environments, and a migration for the class), and the language in `langs` and `class_of` in `deploy-ingest.sh`.

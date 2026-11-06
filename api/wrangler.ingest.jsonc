@@ -1,6 +1,7 @@
-// skolia-ingest: the queue consumer and its analysis container (src/worker/ingest.ts).
-// Deployed with wrangler, since Terraform's Cloudflare provider has no container
-// resource. The queue itself is created by Terraform (infra/).
+// skolia-ingest: the queue consumer and its analysis containers, one per language
+// (src/worker/ingest.ts). Deployed with wrangler, since Terraform's Cloudflare provider
+// has no container resource. The queue itself is created by Terraform (infra/).
+// infra/deploy-ingest.sh puts each class's pushed image in place of the Dockerfile.
 //
 // Secrets (from terraform output): S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY. See
 // infra/README.md for the deploy command.
@@ -15,18 +16,36 @@
   "observability": { "enabled": true },
   "containers": [
     {
+      // Polish
       "class_name": "Ingest",
       "image": "../analysis/Dockerfile",
       "image_build_context": "..",
-      // 1 vCPU, 6 GiB: ingest peaks at about 3.8 GiB
+      "image_vars": { "SKOLIA_LANG": "pl" },
+      // 1 vCPU, 6 GiB: Polish ingest peaks at about 3.8 GiB
+      "instance_type": "standard-2",
+      "max_instances": 1
+    },
+    {
+      "class_name": "IngestEn",
+      "image": "../analysis/Dockerfile",
+      "image_build_context": "..",
+      "image_vars": { "SKOLIA_LANG": "en" },
+      // English ingest peaked at 4.7 GiB on a 2,800-word text (in Docker); the two
+      // languages in one container peaked at 6.7 GiB
       "instance_type": "standard-2",
       "max_instances": 1
     }
   ],
   "durable_objects": {
-    "bindings": [{ "name": "INGEST", "class_name": "Ingest" }]
+    "bindings": [
+      { "name": "INGEST", "class_name": "Ingest" },
+      { "name": "INGEST_EN", "class_name": "IngestEn" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Ingest"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Ingest"] },
+    { "tag": "v2", "new_sqlite_classes": ["IngestEn"] }
+  ],
   "queues": {
     "consumers": [{ "queue": "skolia-ingest", "max_batch_size": 10, "max_retries": 10 }]
   },
@@ -41,12 +60,24 @@
           "class_name": "Ingest",
           "image": "../analysis/Dockerfile",
           "image_build_context": "..",
+          "image_vars": { "SKOLIA_LANG": "pl" },
+          "instance_type": "standard-2",
+          "max_instances": 1
+        },
+        {
+          "class_name": "IngestEn",
+          "image": "../analysis/Dockerfile",
+          "image_build_context": "..",
+          "image_vars": { "SKOLIA_LANG": "en" },
           "instance_type": "standard-2",
           "max_instances": 1
         }
       ],
       "durable_objects": {
-        "bindings": [{ "name": "INGEST", "class_name": "Ingest" }]
+        "bindings": [
+          { "name": "INGEST", "class_name": "Ingest" },
+          { "name": "INGEST_EN", "class_name": "IngestEn" }
+        ]
       },
       "queues": {
         "consumers": [{ "queue": "skolia-ingest-staging", "max_batch_size": 10, "max_retries": 10 }]

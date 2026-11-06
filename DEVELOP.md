@@ -15,7 +15,7 @@ reader (Vite, :5173) → wrangler dev (:8787): skolia → local queue → skolia
                                               └── local D1, R2 ◄── S3 API ──────────┘
 ```
 
-`wrangler dev` runs both Workers from their configs, with local D1, R2 and Queue in `api/.wrangler/state`, and builds the ingest container from `analysis/Dockerfile` with Docker. The container reaches the local bucket through the dev server's S3 endpoint (`api/.env`, which wrangler dev loads for both Workers; `--env-file` would reach only the first config, and an `api/.dev.vars` would replace it).
+`wrangler dev` runs both Workers from their configs, with local D1, R2 and Queue in `api/.wrangler/state`, and builds each language's ingest container from `analysis/Dockerfile` with Docker. The container reaches the local bucket through the dev server's S3 endpoint (`api/.env`, which wrangler dev loads for both Workers; `--env-file` would reach only the first config, and an `api/.dev.vars` would replace it).
 
 Once: install the JavaScript packages and build the lexicon (`mise run data`, see Lexicon below).
 
@@ -143,10 +143,10 @@ PDB is licensed CC BY-NC-SA 4.0 (non-commercial). Use it for evaluation only; do
 
 ### Lexicon
 
-Large inputs and outputs live in `data/` at the repo root (git-ignored). The lexicon and valency files the image ships are built from the inputs pinned in `inputs.sha256`, kept in R2 (`skolia-tfstate/inputs/{sha256}-{name}.zst`) because kaikki.org overwrites its extract in place. This is what CI runs (needs `wrangler login`):
+Large inputs and outputs live in `data/` at the repo root (git-ignored). The lexicon and valency files the images ship are built from the inputs pinned in `inputs.sha256`, kept in R2 (`skolia-tfstate/inputs/{sha256}-{name}.zst`) because kaikki.org overwrites its extract in place. This is what CI runs (needs `wrangler login`):
 
 ```fish
-scripts/build_data.sh   # → ../data/lexicon/pl.sqlite and pl-valency.json
+scripts/build_data.sh   # → ../data/lexicon/en.sqlite, pl.sqlite and pl-valency.json
 ```
 
 The lexicon's version names the extract by its hash, so the same extract gives the same version on any machine. To move to a newer extract (this re-bundles every document once):
@@ -158,6 +158,8 @@ set -l sha (shasum -a 256 ../data/kaikki/kaikki.org-dictionary-Polish.jsonl | cu
 zstd -19 -T0 -c ../data/kaikki/kaikki.org-dictionary-Polish.jsonl | pnpm --dir ../api exec wrangler r2 object put skolia-tfstate/inputs/$sha-kaikki.org-dictionary-Polish.jsonl.zst --pipe --remote
 # then put $sha on the kaikki line of inputs.sha256
 ```
+
+`wrangler r2 object put` takes at most 300 MiB. The English extract compresses to more (305 MB at `zstd -19`), so upload it through R2's S3 API instead (any S3 client, with the tfstate credentials in infra/README.md).
 
 Or build from a local extract (about 10 s):
 
