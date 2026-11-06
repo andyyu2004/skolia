@@ -84,10 +84,24 @@ async function summaryOf(app: App, id: string): Promise<DocumentSummary> {
   return (await (await app.request(`/api/documents/${id}`)).json()) as DocumentSummary;
 }
 
-test("0002_auth.sql makes every table and column Better Auth expects", async () => {
+test("the D1 migrations make every table and column Better Auth expects", async () => {
   const { toBeCreated, toBeAdded } = await getMigrations(authOptions(authConfig(local.env.DB)));
   assert.deepEqual(toBeCreated, []);
   assert.deepEqual(toBeAdded, []);
+});
+
+test("every D1 table is STRICT, and timestamps must be toISOString()'s", async () => {
+  const { env } = local;
+  const { results } = await env.DB.prepare(
+    "select name, strict from pragma_table_list where schema = 'main' and name not like 'sqlite_%' and name not like '_cf_%' and name != 'd1_migrations' order by name",
+  ).all();
+  assert.deepEqual(results, ["account", "document", "session", "user", "verification"].map((name) => ({ name, strict: 1 })));
+  const insert = env.DB.prepare("insert into document (id, title, lang, imported, words) values (?, 't', 'pl', ?, 1)");
+  await insert.bind("a", "2026-11-07T00:00:00.000Z").run();
+  for (const imported of ["2026-11-07T00:00:00Z", "2026-11-07 00:00:00", "yesterday"]) {
+    await assert.rejects(insert.bind("b", imported).run(), /CHECK constraint failed/);
+  }
+  await assert.rejects(env.DB.prepare("insert into document values ('c', 't', 'pl', '2026-11-07T00:00:00.000Z', 'many')").run(), /cannot store TEXT/);
 });
 
 test("a forged session cookie signs nobody in", async () => {

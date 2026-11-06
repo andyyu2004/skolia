@@ -76,7 +76,7 @@ test("an applied migration that was edited, or that the code doesn't have, stops
   const frank = local.env.USER.getByName("frank");
   await frank.migrate(0);
   const storage = await storageOf("frank");
-  const insert = "insert into migration_log (version, name, direction, checksum, applied_at) values (?, ?, 'up', ?, '2026-11-07T00:00:00Z')";
+  const insert = "insert into migration_log (version, name, direction, checksum, applied_at) values (?, ?, 'up', ?, '2026-11-07T00:00:00.000Z')";
   await storage.exec(insert, 1, MIGRATIONS[0]!.name, "edited");
   assert.deepEqual((await frank.migrationStatus()).problems, [`version 1 (${MIGRATIONS[0]!.name}) was edited after it was applied`]);
   await assert.rejects(frank.migrate(0));
@@ -88,8 +88,21 @@ test("an applied migration that was edited, or that the code doesn't have, stops
   await assert.rejects(grace.migrate(LATEST));
 });
 
-test("known_lemma is WITHOUT ROWID", async () => {
-  await local.env.USER.getByName("heidi").lemmas();
-  const [table] = await (await storageOf("heidi")).exec<{ sql: string }>("select sql from sqlite_master where name = 'known_lemma'");
-  assert.match(table?.sql ?? "", /WITHOUT ROWID\s*$/);
+test("the tables are STRICT, known_lemma is WITHOUT ROWID, and timestamps must be toISOString()'s", async () => {
+  const heidi = local.env.USER.getByName("heidi");
+  await heidi.lemmas();
+  const storage = await storageOf("heidi");
+  assert.deepEqual(
+    await storage.exec("select name, strict, wr from pragma_table_list where name in ('known_lemma', 'migration_log') order by name"),
+    [
+      { name: "known_lemma", strict: 1, wr: 1 },
+      { name: "migration_log", strict: 1, wr: 0 },
+    ],
+  );
+  await heidi.setLemma("pl:pies:NOUN", "known", "2026-11-07T00:00:00.000Z");
+  for (const updated of ["2026-11-07T00:00:00Z", "2026-11-07 00:00:00", "yesterday"]) {
+    await assert.rejects(heidi.setLemma("pl:kot:NOUN", "known", updated));
+  }
+  await assert.rejects(storage.exec("insert into known_lemma values ('pl:kot:NOUN', x'00', '2026-11-07T00:00:00.000Z')"), /cannot store BLOB/);
+  assert.equal((await heidi.lemmas()).length, 1);
 });

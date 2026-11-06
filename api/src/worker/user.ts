@@ -83,7 +83,7 @@ export class User extends DurableObject<object> {
           name TEXT NOT NULL,
           direction TEXT NOT NULL CHECK (direction IN ('up', 'down')),
           checksum TEXT NOT NULL,
-          applied_at TEXT NOT NULL
+          applied_at TEXT NOT NULL CHECK (applied_at IS strftime('%Y-%m-%dT%H:%M:%fZ', applied_at))
         ) STRICT;
         CREATE TRIGGER IF NOT EXISTS migration_log_no_update BEFORE UPDATE ON migration_log
           BEGIN SELECT RAISE(ABORT, 'migration_log is append-only'); END;
