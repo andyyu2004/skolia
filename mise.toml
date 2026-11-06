@@ -83,6 +83,7 @@ usage = 'arg "<env>" { choices "staging" "production" }'
 run = "infra/deploy-ingest.sh $usage_env"
 
 [tasks.smoke]
-description = "Import a new text and wait until it's ready"
+description = "Check the environment serves this checkout's version, then import a new text and wait until it's ready"
 usage = 'arg "<env>" { choices "staging" "production" }'
-run = 'node api/src/smoke.ts "https://$([ "$usage_env" = production ] || echo "$usage_env.")skolia.io"'
+env = { VERSION = "{{exec(command='git describe --tags --always --dirty')}}" }
+run = 'node api/src/smoke.ts "https://$([ "$usage_env" = production ] || echo "$usage_env.")skolia.io" "$VERSION"'
