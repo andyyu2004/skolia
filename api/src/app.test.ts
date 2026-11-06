@@ -22,14 +22,14 @@ import {
 import { NO_AUTH } from "./auth.ts";
 import { ORIGIN, testAuth } from "./auth-testing.ts";
 import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob, UserData } from "./ports.ts";
-import type { KnownLemma, LemmaStatus } from "@skolia/shared/api";
+import type { KnownLemma, LemmaId, LemmaStatus } from "@skolia/shared/api";
 
 class MemoryUsers implements UserData {
   readonly lemmasOf = new Map<string, Map<string, KnownLemma>>();
   async lemmas(userId: string): Promise<KnownLemma[]> {
     return [...(this.lemmasOf.get(userId)?.values() ?? [])];
   }
-  async setLemma(userId: string, lemmaId: string, status: LemmaStatus, updated: string): Promise<void> {
+  async setLemma(userId: string, lemmaId: LemmaId, status: LemmaStatus, updated: string): Promise<void> {
     const lemmas = this.lemmasOf.get(userId) ?? new Map<string, KnownLemma>();
     lemmas.set(lemmaId, { lemmaId, status, updated });
     this.lemmasOf.set(userId, lemmas);
@@ -122,6 +122,9 @@ test("lemma statuses need a session, a {lang}:{lemma}:{upos} id and a known stat
   assert.equal((await putLemma(app, undefined, "pl:pies:NOUN", { status: "known" })).status, 401);
   const headers = await signIn((await signUp(ALICE)).id);
   assert.equal((await putLemma(app, headers, "pies", { status: "known" })).status, 400);
+  assert.equal((await putLemma(app, headers, "zz:pies:NOUN", { status: "known" })).status, 400);
+  assert.equal((await putLemma(app, headers, "pl:pies:NOPE", { status: "known" })).status, 400);
+  assert.equal((await putLemma(app, headers, "pl:i/lub:CCONJ", { status: "known" })).status, 204);
   assert.equal((await putLemma(app, headers, "pl:pies:NOUN", { status: "mastered" })).status, 400);
   assert.equal((await putLemma(app, headers, "pl:pies:NOUN", null)).status, 400);
 });

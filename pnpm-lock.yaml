@@ -35,9 +35,6 @@ importers:
       drizzle-kit:
         specifier: 0.31.11
         version: 0.31.11
-      miniflare:
-        specifier: 5.20261019.0-beta
-        version: 5.20261019.0-beta(@types/node@26.6.5)
       typescript:
         specifier: 7.0.2
         version: 7.0.2

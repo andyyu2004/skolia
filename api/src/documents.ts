@@ -1,6 +1,6 @@
 // Document metadata in D1 (src/worker/adapters.ts). The tables are made by the files in
 // api/migrations, which wrangler applies.
-import { LANGS, type Lang } from "@skolia/shared/api";
+import { isLang } from "@skolia/shared/api";
 import type { DocumentRecord } from "./ports.ts";
 
 export const LIST = "SELECT * FROM document ORDER BY imported DESC";
@@ -31,8 +31,4 @@ export function toRecord(row: Record<string, unknown>): DocumentRecord {
     throw new Error(`malformed document row: ${JSON.stringify(row)}`);
   }
   return { id, title, lang, imported, words };
-}
-
-function isLang(value: unknown): value is Lang {
-  return LANGS.some((l) => l === value);
 }

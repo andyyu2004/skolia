@@ -1,7 +1,7 @@
 // What the API needs from its surroundings: D1, R2, Cloudflare Queues and a Durable
 // Object per user (src/worker/adapters.ts), Better Auth (src/auth.ts), and fakes in the
 // tests.
-import type { KnownLemma, Lang, LemmaStatus, User } from "@skolia/shared/api";
+import type { KnownLemma, Lang, LemmaId, LemmaStatus, User } from "@skolia/shared/api";
 import type { IngestJob } from "@skolia/shared/schema";
 
 /** A document's metadata, owned by the API. Its state lives in the status blob. */
@@ -38,7 +38,7 @@ export interface JobQueue {
 
 export interface UserData {
   lemmas(userId: string): Promise<KnownLemma[]>;
-  setLemma(userId: string, lemmaId: string, status: LemmaStatus, updated: string): Promise<void>;
+  setLemma(userId: string, lemmaId: LemmaId, status: LemmaStatus, updated: string): Promise<void>;
 }
 
 export interface Auth {

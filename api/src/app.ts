@@ -4,6 +4,8 @@ import type { Context } from "hono";
 import {
   LANGS,
   MAX_TEXT_LENGTH,
+  isLang,
+  parseLemmaId,
   type ApiError,
   type DocumentList,
   type DocumentSummary,
@@ -89,9 +91,9 @@ export function createApp(deps: Deps) {
     .put("/api/me/lemmas/:lemmaId", async (c) => {
       const user = await deps.auth.user(c.req.raw.headers);
       if (!user) return c.json({ error: "not signed in" } satisfies ApiError, 401);
-      const lemmaId = c.req.param("lemmaId");
-      if (!LEMMA_ID.test(lemmaId)) {
-        return c.json({ error: "lemma id must be {lang}:{lemma}:{upos}" } satisfies ApiError, 400);
+      const lemmaId = parseLemmaId(c.req.param("lemmaId"));
+      if (lemmaId === null) {
+        return c.json({ error: `lemma id must be {lang}:{lemma}:{upos}, lang one of ${LANGS.join(", ")}` } satisfies ApiError, 400);
       }
       const status = parseLemmaStatus(await c.req.json().catch(() => null));
       if (status === null) {
@@ -332,12 +334,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isState(value: unknown): value is State {
   return STATES.some((s) => s === value);
 }
-
-function isLang(value: unknown): value is Lang {
-  return LANGS.some((l) => l === value);
-}
-
-const LEMMA_ID = /^[a-z]{2,3}:[^:\s/]{1,100}:[A-Z]{1,5}$/u;
 
 export function parseLemmaStatus(body: unknown): LemmaStatus | null {
   if (!isRecord(body)) return null;

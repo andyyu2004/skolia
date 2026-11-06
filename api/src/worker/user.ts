@@ -1,7 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { drizzle, type DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
-import type { KnownLemma, LemmaStatus } from "@skolia/shared/api";
+import type { KnownLemma, LemmaId, LemmaStatus } from "@skolia/shared/api";
 import migrations from "../user/migrations.gen.ts";
 import { knownLemma } from "../user/schema.ts";
 
@@ -20,7 +20,7 @@ export class User extends DurableObject<object> {
     return this.db.select().from(knownLemma).all();
   }
 
-  setLemma(lemmaId: string, status: LemmaStatus, updated: string): void {
+  setLemma(lemmaId: LemmaId, status: LemmaStatus, updated: string): void {
     this.db
       .insert(knownLemma)
       .values({ lemmaId, status, updated })

@@ -1,6 +1,6 @@
 // Requests and responses of skolia-api. The analysis and bundle shapes come from the
 // Python schemas (schema.gen.ts); these are the API's own.
-import type { State } from "./schema.gen.ts";
+import type { State, Upos } from "./schema.gen.ts";
 
 export const LANGS = ["pl"] as const;
 export type Lang = (typeof LANGS)[number];
@@ -42,8 +42,52 @@ export interface DocumentList {
 export const LEMMA_STATUSES = ["new", "learning", "known", "ignored"] as const;
 export type LemmaStatus = (typeof LEMMA_STATUSES)[number];
 
+export function isLang(value: unknown): value is Lang {
+  return LANGS.some((l) => l === value);
+}
+
+const UPOS: Record<Upos, true> = {
+  ADJ: true,
+  ADP: true,
+  ADV: true,
+  AUX: true,
+  CCONJ: true,
+  DET: true,
+  INTJ: true,
+  NOUN: true,
+  NUM: true,
+  PART: true,
+  PRON: true,
+  PROPN: true,
+  PUNCT: true,
+  SCONJ: true,
+  SYM: true,
+  VERB: true,
+  X: true,
+};
+
+function isUpos(value: string): value is Upos {
+  return Object.hasOwn(UPOS, value);
+}
+
+/** Lexicon entry id, as analysis's blob.lemma_id writes it. */
+export type LemmaId = `${Lang}:${string}:${Upos}`;
+
+const MAX_LEMMA_LENGTH = 100;
+
+export function parseLemmaId(value: string): LemmaId | null {
+  const first = value.indexOf(":");
+  const last = value.lastIndexOf(":");
+  if (last <= first) return null;
+  const lang = value.slice(0, first);
+  const lemma = value.slice(first + 1, last);
+  const upos = value.slice(last + 1);
+  if (!isLang(lang) || !isUpos(upos) || lemma.trim() === "" || lemma.length > MAX_LEMMA_LENGTH) return null;
+  return `${lang}:${lemma}:${upos}`;
+}
+
 export interface KnownLemma {
-  lemmaId: string;
+  lemmaId: LemmaId;
   status: LemmaStatus;
   updated: string;
 }
