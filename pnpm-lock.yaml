@@ -13,6 +13,9 @@ importers:
       '@cloudflare/containers':
         specifier: 0.3.7
         version: 0.3.7
+      '@hono/zod-validator':
+        specifier: 0.9.1
+        version: 0.9.1(hono@4.13.13)(zod@4.6.7)
       '@skolia/shared':
         specifier: workspace:*
         version: link:../shared
@@ -22,6 +25,9 @@ importers:
       hono:
         specifier: 4.13.13
         version: 4.13.13
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
     devDependencies:
       '@cloudflare/workers-types':
         specifier: 5.20261019.1
@@ -67,7 +73,11 @@ importers:
         specifier: 8.3.4
         version: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)
 
-  shared: {}
+  shared:
+    dependencies:
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
 packages:
 
@@ -657,6 +667,12 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@hono/zod-validator@0.9.1':
+    resolution: {integrity: sha512-iiv6w0qrIc0arfvCtUqBWsvl4fXjzaTcQcCJTTtCnkawF9HHGE+KjEl0ox3gQJ6rKZEgE3mLExlQCF72M+mNuw==}
+    peerDependencies:
+      hono: '>=4.11.2'
+      zod: ^3.25.0 || ^4.0.0
 
   '@img/colour@1.1.0':
     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
@@ -2017,6 +2033,11 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.2':
     optional: true
+
+  '@hono/zod-validator@0.9.1(hono@4.13.13)(zod@4.6.7)':
+    dependencies:
+      hono: 4.13.13
+      zod: 4.6.7
 
   '@img/colour@1.1.0': {}
 

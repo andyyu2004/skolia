@@ -11,9 +11,11 @@
   },
   "dependencies": {
     "@cloudflare/containers": "0.3.7",
+    "@hono/zod-validator": "0.9.1",
     "@skolia/shared": "workspace:*",
     "better-auth": "1.7.12",
-    "hono": "4.13.13"
+    "hono": "4.13.13",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261019.1",

@@ -1,6 +1,8 @@
 // Requests and responses of skolia-api. The analysis and bundle shapes come from the
 // Python schemas (schema.gen.ts); these are the API's own.
+import type { z } from "zod";
 import type { State, Upos } from "./schema.gen.ts";
+import type * as schemas from "./schemas.ts";
 
 export const LANGS = ["pl"] as const;
 export type Lang = (typeof LANGS)[number];
@@ -8,11 +10,7 @@ export type Lang = (typeof LANGS)[number];
 /** Longest text accepted by one import, in characters (ingest checks it too). */
 export { MAX_TEXT_LENGTH } from "./schema.gen.ts";
 
-export interface ImportRequest {
-  title: string;
-  text: string;
-  lang: Lang;
-}
+export type ImportRequest = z.input<typeof schemas.ImportRequest>;
 
 export interface DocumentSummary {
   /** sha256 hex of the UTF-8 text: the same text imported twice is one document. */
@@ -42,55 +40,35 @@ export interface DocumentList {
 export const LEMMA_STATUSES = ["new", "learning", "known", "ignored"] as const;
 export type LemmaStatus = (typeof LEMMA_STATUSES)[number];
 
-export function isLang(value: unknown): value is Lang {
-  return LANGS.some((l) => l === value);
-}
+export const UPOS = [
+  "ADJ",
+  "ADP",
+  "ADV",
+  "AUX",
+  "CCONJ",
+  "DET",
+  "INTJ",
+  "NOUN",
+  "NUM",
+  "PART",
+  "PRON",
+  "PROPN",
+  "PUNCT",
+  "SCONJ",
+  "SYM",
+  "VERB",
+  "X",
+] as const satisfies readonly Upos[];
 
-const UPOS: Record<Upos, true> = {
-  ADJ: true,
-  ADP: true,
-  ADV: true,
-  AUX: true,
-  CCONJ: true,
-  DET: true,
-  INTJ: true,
-  NOUN: true,
-  NUM: true,
-  PART: true,
-  PRON: true,
-  PROPN: true,
-  PUNCT: true,
-  SCONJ: true,
-  SYM: true,
-  VERB: true,
-  X: true,
-};
+const UPOS_IS_COMPLETE: Exclude<Upos, (typeof UPOS)[number]> extends never ? true : never = true;
+void UPOS_IS_COMPLETE;
 
-function isUpos(value: string): value is Upos {
-  return Object.hasOwn(UPOS, value);
-}
+export const MAX_LEMMA_LENGTH = 100;
 
 /** Lexicon entry id, as analysis's blob.lemma_id writes it. */
-export type LemmaId = `${Lang}:${string}:${Upos}`;
+export type LemmaId = z.output<typeof schemas.LemmaId>;
 
-const MAX_LEMMA_LENGTH = 100;
-
-export function parseLemmaId(value: string): LemmaId | null {
-  const first = value.indexOf(":");
-  const last = value.lastIndexOf(":");
-  if (last <= first) return null;
-  const lang = value.slice(0, first);
-  const lemma = value.slice(first + 1, last);
-  const upos = value.slice(last + 1);
-  if (!isLang(lang) || !isUpos(upos) || lemma.trim() === "" || lemma.length > MAX_LEMMA_LENGTH) return null;
-  return `${lang}:${lemma}:${upos}`;
-}
-
-export interface KnownLemma {
-  lemmaId: LemmaId;
-  status: LemmaStatus;
-  updated: string;
-}
+export type KnownLemma = z.output<typeof schemas.KnownLemma>;
 
 export interface User {
   id: string;

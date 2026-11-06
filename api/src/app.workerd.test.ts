@@ -317,6 +317,15 @@ test("a document queued or analysing for too long is queued again", async () => 
 test("bad requests and ids are rejected", async () => {
   const app = setup();
   assert.equal((await importText(app, "   ")).status, 400);
+  const german = await app.request("/api/documents", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text: "Ich gehe.", lang: "de" }),
+  });
+  assert.equal(german.status, 400);
+  const malformed = await app.request("/api/documents", { method: "POST", headers: { "content-type": "application/json" }, body: "{" });
+  assert.equal(malformed.status, 400);
+  assert.deepEqual(await local.takeQueued(), []);
   assert.equal((await app.request("/api/documents/../etc")).status, 404);
   assert.equal((await app.request(`/api/documents/${"0".repeat(64)}`)).status, 404);
 });

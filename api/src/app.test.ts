@@ -7,7 +7,6 @@ import {
   isOutdated,
   isStuck,
   nameOf,
-  parseImport,
   parseImportCap,
   parseStatus,
   parseVersions,
@@ -58,16 +57,10 @@ test("versions parsing ignores malformed blobs", () => {
 test("status parsing ignores malformed blobs", () => {
   assert.equal(parseStatus("not json"), null);
   assert.equal(parseStatus(JSON.stringify({ state: "done", updated: "x" })), null);
-  assert.deepEqual(parseStatus(JSON.stringify({ state: "ready", updated: "x", bundle: 3 })), {
-    state: "ready",
-    updated: "x",
-  });
+  assert.equal(parseStatus(JSON.stringify({ state: "ready", updated: "x", bundle: 3 })), null);
+  assert.deepEqual(parseStatus(JSON.stringify({ state: "ready", updated: "x", extra: 1 })), { state: "ready", updated: "x" });
 });
 
 test("words are counted as runs containing letters", () => {
   assert.equal(countWords("Idę do psa — 12 razy."), 4);
-});
-
-test("imports in a language skolia doesn't know are refused", () => {
-  assert.equal(typeof parseImport({ text: "x", lang: "de" }), "string");
 });

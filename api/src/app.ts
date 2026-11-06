@@ -1,23 +1,22 @@
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
+import { HTTPException } from "hono/http-exception";
 import type { Context } from "hono";
+import { zValidator } from "@hono/zod-validator";
+import * as z from "zod";
 import {
   LANGS,
   MAX_TEXT_LENGTH,
-  isLang,
-  parseLemmaId,
   type ApiError,
   type DocumentList,
   type DocumentSummary,
-  type ImportRequest,
   type KnownLemma,
   type Lang,
-  type LemmaStatus,
   type User,
-  LEMMA_STATUSES,
 } from "@skolia/shared/api";
 import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
-import type { State, Status, Versions } from "@skolia/shared/schema";
+import type { Status, Versions } from "@skolia/shared/schema";
+import * as schemas from "@skolia/shared/schemas";
 import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob, UserData } from "./ports.ts";
 
 export interface Deps {
@@ -32,7 +31,6 @@ export interface Deps {
   now?: () => Date;
 }
 
-const STATES: readonly State[] = ["queued", "analysing", "ready", "failed"];
 const ID = /^[0-9a-f]{64}$/;
 const MAX_TITLE_LENGTH = 200;
 // A character is at most 6 bytes in JSON (\uXXXX), plus room for the title. The exact
@@ -74,6 +72,9 @@ export function createApp(deps: Deps) {
 
   const app = new Hono()
     .onError((error, c) => {
+      if (error instanceof HTTPException && error.status < 500) {
+        return c.json({ error: error.message } satisfies ApiError, error.status);
+      }
       console.error(error);
       return c.json({ error: "internal error" } satisfies ApiError, 500);
     })
@@ -88,29 +89,28 @@ export function createApp(deps: Deps) {
       if (!user) return c.json({ error: "not signed in" } satisfies ApiError, 401);
       return c.json((await deps.users.lemmas(user.id)) satisfies KnownLemma[], 200);
     })
-    .put("/api/me/lemmas/:lemmaId", async (c) => {
-      const user = await deps.auth.user(c.req.raw.headers);
-      if (!user) return c.json({ error: "not signed in" } satisfies ApiError, 401);
-      const lemmaId = parseLemmaId(c.req.param("lemmaId"));
-      if (lemmaId === null) {
-        return c.json({ error: `lemma id must be {lang}:{lemma}:{upos}, lang one of ${LANGS.join(", ")}` } satisfies ApiError, 400);
-      }
-      const status = parseLemmaStatus(await c.req.json().catch(() => null));
-      if (status === null) {
-        return c.json({ error: `status must be one of ${LEMMA_STATUSES.join(", ")}` } satisfies ApiError, 400);
-      }
-      await deps.users.setLemma(user.id, lemmaId, status, now().toISOString());
-      return c.body(null, 204);
-    })
+    .put(
+      "/api/me/lemmas/:lemmaId",
+      zValidator("param", z.object({ lemmaId: schemas.LemmaId }), badRequest(`lemma id must be {lang}:{lemma}:{upos}, lang one of ${LANGS.join(", ")}`)),
+      zValidator("json", schemas.SetLemma, badRequest()),
+      async (c) => {
+        const user = await deps.auth.user(c.req.raw.headers);
+        if (!user) return c.json({ error: "not signed in" } satisfies ApiError, 401);
+        const { lemmaId } = c.req.valid("param");
+        const { status } = c.req.valid("json");
+        await deps.users.setLemma(user.id, lemmaId, status, now().toISOString());
+        return c.body(null, 204);
+      },
+    )
     .get("/api/documents", async (c) => {
       const records = await deps.documents.list();
       const versions = versionsOf(deps.blobs);
       const documents = await Promise.all(records.map((r) => current(r, versions)));
       return c.json({ documents } satisfies DocumentList, 200);
     })
-    .post("/api/documents", limit, async (c) => {
-      const request = parseImport(await c.req.json().catch(() => null));
-      if (typeof request === "string") return c.json({ error: request } satisfies ApiError, 400);
+    .post("/api/documents", limit, zValidator("json", schemas.ImportRequest, badRequest()), async (c) => {
+      const body = c.req.valid("json");
+      const request = { ...body, title: body.title?.trim().slice(0, MAX_TITLE_LENGTH) || firstWords(body.text) };
       const id = await docId(request.text);
       const existing = await deps.documents.get(id);
       if (existing) {
@@ -253,18 +253,20 @@ function versionsOf(blobs: BlobStore): VersionsOf {
   };
 }
 
-export function parseVersions(raw: string): Versions | null {
+/** Malformed JSON, or JSON that doesn't fit the schema, counts as missing. */
+export function parseJson<T extends z.ZodType>(schema: T, raw: string): z.output<T> | null {
   let value: unknown;
   try {
     value = JSON.parse(raw);
   } catch {
     return null;
   }
-  if (!isRecord(value)) return null;
-  const { analyzer, lexicon, analysis, bundle } = value;
-  if (typeof analyzer !== "string" || typeof lexicon !== "string") return null;
-  if (typeof analysis !== "string" || typeof bundle !== "string") return null;
-  return { analyzer, lexicon, analysis, bundle };
+  const result = schema.safeParse(value);
+  return result.success ? result.data : null;
+}
+
+export function parseVersions(raw: string): Versions | null {
+  return parseJson(schemas.Versions, raw);
 }
 
 function summarize(record: DocumentRecord, status: Status | null): DocumentSummary {
@@ -283,34 +285,17 @@ export async function readStatus(blobs: BlobStore, id: string): Promise<Status |
   return parseStatus(new TextDecoder().decode(blob.body));
 }
 
-/** The status blob ingest writes; anything malformed counts as missing. */
+/** The status blob ingest writes. */
 export function parseStatus(raw: string): Status | null {
-  let value: unknown;
-  try {
-    value = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (!isRecord(value)) return null;
-  const { state, updated } = value;
-  if (!isState(state) || typeof updated !== "string") return null;
-  const status: Status = { state, updated };
-  for (const key of ["analyzer", "lexicon", "analysis", "bundle", "error"] as const) {
-    const field = value[key];
-    if (typeof field === "string") status[key] = field;
-  }
-  return status;
+  return parseJson(schemas.Status, raw);
 }
 
-/** The request body, or a message saying what's wrong with it. */
-export function parseImport(body: unknown): ImportRequest | string {
-  if (!isRecord(body)) return "expected a JSON object";
-  const { title, text, lang } = body;
-  if (typeof text !== "string" || text.trim() === "") return "text must be a non-empty string";
-  if (text.length > MAX_TEXT_LENGTH) return `text is longer than ${MAX_TEXT_LENGTH} characters`;
-  if (!isLang(lang)) return `lang must be one of ${LANGS.join(", ")}`;
-  const cleanTitle = typeof title === "string" ? title.trim().slice(0, MAX_TITLE_LENGTH) : "";
-  return { title: cleanTitle || firstWords(text), text, lang };
+/** A 400 with the first problem the schema found, or `message` in its place. */
+function badRequest(message?: string) {
+  return (result: { success: true } | { success: false; error: z.core.$ZodError }, c: Context) => {
+    if (result.success) return undefined;
+    return c.json({ error: message ?? result.error.issues[0]?.message ?? "invalid request" } satisfies ApiError, 400);
+  };
 }
 
 export function countWords(text: string): number {
@@ -327,16 +312,3 @@ function firstWords(text: string): string {
   return all.length > TITLE_WORDS ? `${words}…` : words;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isState(value: unknown): value is State {
-  return STATES.some((s) => s === value);
-}
-
-export function parseLemmaStatus(body: unknown): LemmaStatus | null {
-  if (!isRecord(body)) return null;
-  const { status } = body;
-  return LEMMA_STATUSES.find((s) => s === status) ?? null;
-}
