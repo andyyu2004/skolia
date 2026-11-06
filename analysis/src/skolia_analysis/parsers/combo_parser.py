@@ -11,47 +11,20 @@ import importlib
 import sys
 from collections.abc import Generator
 from importlib.metadata import version
-from typing import TYPE_CHECKING, NotRequired, TypedDict, cast
+from typing import TYPE_CHECKING, cast
 from unittest import mock
 
 from .. import ud
 from ..parsed import ParsedSentence, ParsedToken, ParsedWord, align
 
+# Importing combo loads torch, so it waits until a ComboParser is built
 if TYPE_CHECKING:
-    from combo import COMBO
+    from combo import COMBO, Token  # pyright: ignore[reportMissingTypeStubs]
     from transformers import PreTrainedModel
 
 
-class _Multiword(TypedDict):
-    form: str
-    start: int
-    """1-based id of the first word of the fused token."""
-    end: int
-
-
-class _Word(TypedDict):
-    id: str
-    form: str
-    lemma: str | None
-    upos: str | None
-    xpos: str | None
-    feats: dict[str, str] | None
-    head: int | None
-    deprel: str | None
-    multiword: NotRequired[_Multiword | None]
-    """Only on words that are part of a fused token."""
-
-
-class _Sentence(TypedDict):
-    text: str
-    tokens: list[_Word]
-
-
-class _Document(TypedDict):
-    sentences: list[_Sentence]
-
-
 ROOT_HEAD = 0
+UNSET = "_"
 
 # The lemmatizer crashes with larger batches (tensor size mismatch in combo 4.0.14)
 BATCH_SIZE = 1
@@ -59,7 +32,7 @@ BATCH_SIZE = 1
 
 class ComboParser:
     def __init__(self, model: str, device: str = "cpu") -> None:
-        from combo import COMBO
+        from combo import COMBO  # pyright: ignore[reportMissingTypeStubs]
 
         self._model = model
         # COMBO prints progress to stdout, which would corrupt the analyser's output
@@ -71,13 +44,12 @@ class ComboParser:
         return f"combo-{version('combo-nlp')}:{self._model.split('/')[-1]}"
 
     def __call__(self, text: str) -> list[ParsedSentence]:
-        # to_dict() is plain JSON-like data; its shape is declared by _Document above
         with contextlib.redirect_stdout(sys.stderr):
-            doc = cast(_Document, self._nlp(text).to_dict())
+            doc = self._nlp(text)
         sentences: list[ParsedSentence] = []
         cursor = 0
-        for sentence in doc["sentences"]:
-            groups = _group(sentence["tokens"])
+        for sentence in doc.sentences:
+            groups = _group(sentence.tokens)
             surfaces = [surface for surface, _ in groups]
             offsets = list(align(text, surfaces, cursor))
             if offsets:
@@ -122,30 +94,37 @@ def _without_base_weights() -> Generator[None]:
         yield
 
 
-def _group(words: list[_Word]) -> list[tuple[str, list[_Word]]]:
+def _group(words: list[Token]) -> list[tuple[str, list[Token]]]:
     """Words back into surface tokens: a fused token's words share its multiword span."""
-    groups: list[tuple[str, list[_Word]]] = []
+    groups: list[tuple[str, list[Token]]] = []
     index = 0
     while index < len(words):
-        multiword = words[index].get("multiword")
+        multiword = words[index].multiword
         if multiword is None:
-            groups.append((words[index]["form"], [words[index]]))
+            groups.append((words[index].form, [words[index]]))
             index += 1
         else:
-            span = multiword["end"] - multiword["start"] + 1
-            groups.append((multiword["form"], words[index : index + span]))
+            form, (start, end) = multiword
+            span = end - start + 1
+            groups.append((form, words[index : index + span]))
             index += span
     return groups
 
 
-def _word(word: _Word) -> ParsedWord:
-    head = word["head"]
+def _word(word: Token) -> ParsedWord:
+    head = word.head
     return ParsedWord(
-        text=word["form"],
-        lemma=word["lemma"],
-        upos=ud.parse_upos(word["upos"]),
-        xpos=word["xpos"],
-        feats=ud.check_feats(word["feats"]),
+        text=word.form,
+        lemma=_present(word.lemma),
+        upos=ud.parse_upos(_present(word.upos)),
+        # The PDB model's XPOS tags are NKJP tags (Polish National Corpus), e.g. praet:sg:m1:perf
+        xpos=_present(word.xpos),
+        feats=ud.check_feats(word.feats),
         head=None if head in (None, ROOT_HEAD) else head - 1,
-        deprel=ud.parse_deprel(word["deprel"]),
+        deprel=ud.parse_deprel(_present(word.deprel)),
     )
+
+
+def _present(value: str) -> str | None:
+    """COMBO writes a missing value as CoNLL-U's "_"."""
+    return None if value == UNSET else value
