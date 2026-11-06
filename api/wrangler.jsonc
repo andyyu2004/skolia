@@ -12,6 +12,9 @@
   "workers_dev": true,
   "preview_urls": false,
   "routes": [{ "pattern": "skolia.io", "custom_domain": true }],
+  // wrangler dev would otherwise rewrite each request's Host to the route's, and the
+  // ingest container's S3 requests, signed for localhost:8787, would fail
+  "dev": { "host": "localhost:8787" },
   "assets": {
     "directory": "../reader/dist",
     "not_found_handling": "single-page-application",
