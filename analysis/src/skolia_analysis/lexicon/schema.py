@@ -83,6 +83,12 @@ BUNDLE_SCHEMA = 1
 """The bundle's JSON shape. Bump it when the shape changes, so documents get new bundles
 and the reader can refuse one it doesn't know."""
 
+BUNDLER_VERSION = "2"
+"""The bundle-making code's version (lexicon/bundle.py and the plugins' bundlers). Bump it
+when a change gives different bundles for the same analysis and lexicon (the lookup
+fallbacks, how paradigms are made). It's in every bundle's name, so a bump re-bundles each
+document once; ingest reuses the analysis, so that costs a second or two a document."""
+
 
 class Bundle(TypedDict):
     schema: int

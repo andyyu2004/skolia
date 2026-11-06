@@ -6,11 +6,12 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import cast
 
 import brotli
 
 from ..blob import SCHEMA
-from ..lexicon.schema import BUNDLE_SCHEMA, Bundle
+from ..lexicon.schema import BUNDLE_SCHEMA, BUNDLER_VERSION, Bundle
 from ..schema import Blob
 from .blobs import BROTLI, BlobError, Blobs
 from .jobs import JobQueue, Received
@@ -60,7 +61,9 @@ class Pipeline:
             "analyzer": self.analyzer,
             "lexicon": self.lexicon_version,
             "analysis": analysis_name(SCHEMA, self.analyzer),
-            "bundle": bundle_name(BUNDLE_SCHEMA, self.analyzer, self.lexicon_version),
+            "bundle": bundle_name(
+                BUNDLE_SCHEMA, BUNDLER_VERSION, self.analyzer, self.lexicon_version
+            ),
         }
 
 
@@ -116,16 +119,22 @@ class Ingester:
         b_key = bundle_key(doc, versions["bundle"])
         # Already made (the job was queued twice, or the API wrote "queued" over a fresh
         # "ready"): the keys name the versions, so the blobs are current
-        if not (self._blobs.exists(a_key) and self._blobs.exists(b_key)):
-            self._status(doc, "analysing")
-            analysis = pipeline.analyze(text)
-            if analysis["analyzer"] != pipeline.analyzer:
-                # Otherwise the API would keep finding it out of date and queueing it
-                raise JobError(
-                    f"analysed as {analysis['analyzer']!r}, but published {pipeline.analyzer!r}"
-                )
+        if not self._blobs.exists(b_key):
+            # A new bundler or lexicon with the same analyser: only the bundle is remade
+            stored = self._blobs.get(a_key)
+            if stored is not None:
+                analysis = cast(Blob, json.loads(brotli.decompress(stored)))
+            else:
+                self._status(doc, "analysing")
+                analysis = pipeline.analyze(text)
+                if analysis["analyzer"] != pipeline.analyzer:
+                    # Otherwise the API would keep finding it out of date and queueing it
+                    raise JobError(
+                        f"analysed as {analysis['analyzer']!r}, but published {pipeline.analyzer!r}"
+                    )
             bundle = pipeline.bundle(analysis)
-            self._blobs.put(a_key, compressed_json(analysis), JSON, BROTLI)
+            if stored is None:
+                self._blobs.put(a_key, compressed_json(analysis), JSON, BROTLI)
             self._blobs.put(b_key, compressed_json(bundle), JSON, BROTLI)
         return self._status(
             doc,

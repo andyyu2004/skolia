@@ -15,7 +15,7 @@ from skolia_analysis.ingest.schema import (
     versions_key,
 )
 from skolia_analysis.ingest.worker import Ingester, Pipeline
-from skolia_analysis.lexicon.schema import BUNDLE_SCHEMA, Bundle
+from skolia_analysis.lexicon.schema import BUNDLE_SCHEMA, BUNDLER_VERSION, Bundle
 from skolia_analysis.schema import Blob
 
 TEXT = "Idę do psa."
@@ -112,9 +112,10 @@ def test_versions_are_published_for_the_api(tmp_path: Path) -> None:
     versions = json.loads(raw)
     assert versions["analyzer"] == "test/1"
     assert versions["lexicon"] == "lex/1"
-    # The names are what the API compares: the shapes count as much as the versions
+    # The names are what the API compares: the shapes and the bundler count as much as
+    # the versions
     assert versions["analysis"].startswith(f"s{SCHEMA}-a")
-    assert versions["bundle"].startswith(f"b{BUNDLE_SCHEMA}-a")
+    assert versions["bundle"].startswith(f"b{BUNDLE_SCHEMA}-v{BUNDLER_VERSION}-a")
 
 
 def test_the_status_points_at_the_published_names(tmp_path: Path) -> None:
@@ -185,6 +186,31 @@ def test_a_job_already_done_is_not_analysed_again(tmp_path: Path) -> None:
     ingester.process({"doc": doc, "lang": "pl"})
     assert ingester.process({"doc": doc, "lang": "pl"})["state"] == "ready"
     assert len(analysed) == 1
+
+
+def test_a_new_lexicon_rebundles_without_analysing_again(tmp_path: Path) -> None:
+    blobs = DirBlobs(tmp_path)
+    doc = doc_id("pl", TEXT)
+    blobs.put(text_key(doc), TEXT.encode(), "text/plain")
+    analysed: list[str] = []
+    bundled: list[Blob] = []
+
+    def analyze(text: str) -> Blob:
+        analysed.append(text)
+        return fake_analysis(text)
+
+    def bundle(blob: Blob) -> Bundle:
+        bundled.append(blob)
+        return fake_bundle(blob)
+
+    Ingester(blobs, {"pl": Pipeline("pl", analyze, bundle, "test/1", "lex/1")}).process(
+        {"doc": doc, "lang": "pl"}
+    )
+    newer = Ingester(blobs, {"pl": Pipeline("pl", analyze, bundle, "test/1", "lex/2")})
+    ready = newer.process({"doc": doc, "lang": "pl"})
+    assert ready["state"] == "ready" and ready.get("lexicon") == "lex/2"
+    assert len(analysed) == 1
+    assert len(bundled) == 2 and bundled[1] == fake_analysis(TEXT)
 
 
 def test_an_analyser_unlike_the_published_one_fails(tmp_path: Path) -> None:

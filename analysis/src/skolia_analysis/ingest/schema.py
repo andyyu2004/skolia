@@ -66,7 +66,7 @@ def short_hash(value: str) -> str:
 #   doc/{doc}/text.txt
 #   doc/{doc}/status.json
 #   doc/{doc}/analysis/{analysis_name}.json.br   s{schema}-a{analyzer}
-#   doc/{doc}/bundle/{bundle_name}.json.br       b{bundle schema}-a{analyzer}-l{lexicon}
+#   doc/{doc}/bundle/{bundle_name}.json.br       b{bundle schema}-v{bundler}-a{analyzer}-l{lexicon}
 # and, per language:
 #   versions/{lang}.json
 
@@ -87,8 +87,8 @@ def analysis_name(schema: int, analyzer: str) -> str:
     return f"s{schema}-a{short_hash(analyzer)}"
 
 
-def bundle_name(bundle_schema: int, analyzer: str, lexicon: str) -> str:
-    return f"b{bundle_schema}-a{short_hash(analyzer)}-l{short_hash(lexicon)}"
+def bundle_name(bundle_schema: int, bundler: str, analyzer: str, lexicon: str) -> str:
+    return f"b{bundle_schema}-v{bundler}-a{short_hash(analyzer)}-l{short_hash(lexicon)}"
 
 
 def analysis_key(doc: str, name: str) -> str:
