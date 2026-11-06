@@ -40,6 +40,22 @@ def test_forms_from_the_headword_and_the_table_are_listed_once() -> None:
     assert len(forms_of(GO + table, "go", "goes")) == 1
 
 
+def test_modals_have_no_infinitive_and_uninflected_ones_no_paradigm() -> None:
+    can: list[KaikkiForm] = [
+        {"form": "can", "tags": ["present", "singular", "third-person"]},
+        {"form": "able", "tags": ["participle", "present", "suppletive"]},
+        {"form": "could", "tags": ["past"]},
+        {"form": "-", "tags": ["infinitive"]},
+    ]
+    forms = list(lexicon_en.paradigm_forms("can", "VERB", can))
+    assert not any(f["feats"].get("VerbForm") == "Inf" for f in forms)
+    assert not any(f["feats"].get("Mood") == "Imp" for f in forms)
+    assert not any(f["form"] == "able" for f in forms)
+    assert len(forms_of(can, "can", "can")) == 6
+    could: list[KaikkiForm] = [{"form": "coulde", "tags": ["alternative", "archaic"]}]
+    assert list(lexicon_en.paradigm_forms("could", "VERB", could)) == []
+
+
 def test_be_takes_its_persons_from_the_table() -> None:
     be: list[KaikkiForm] = [
         {"form": "am", "tags": ["first-person", "present", "singular"]},

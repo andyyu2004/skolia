@@ -83,6 +83,8 @@ SKIPPED_FORM_TAGS = {
     "inflection-template",
     "class",
     "romanization",
+    # can's "participle" able: another word standing in for the missing form
+    "suppletive",
 }
 
 # be's table lists thou art beside you are with the same tags and no archaic one. The few
@@ -140,6 +142,7 @@ def paradigm_forms(word: str, upos: Upos, kaikki_forms: Iterable[KaikkiForm]) ->
 
 
 def _paradigm_forms(word: str, upos: Upos, kaikki_forms: Iterable[KaikkiForm]) -> Iterator[Form]:
+    kaikki_forms = list(kaikki_forms)
     inflections = [
         (f.get("form", ""), set(f.get("tags", [])))
         for f in kaikki_forms
@@ -159,14 +162,23 @@ def _paradigm_forms(word: str, upos: Upos, kaikki_forms: Iterable[KaikkiForm]) -
                 elif tags == {"superlative"}:
                     yield _form(form, {"Degree": "Sup"})
         case "VERB":
-            yield from _verb_forms(word, inflections)
+            # A modal's table gives its infinitive as "-" (can, must: no to can)
+            no_infinitive = any(
+                f.get("form") == "-" and "infinitive" in f.get("tags", []) for f in kaikki_forms
+            )
+            yield from _verb_forms(word, inflections, no_infinitive)
         case _:
             return
 
 
-def _verb_forms(word: str, inflections: list[tuple[str, set[str]]]) -> Iterator[Form]:
+def _verb_forms(
+    word: str, inflections: list[tuple[str, set[str]]], no_infinitive: bool
+) -> Iterator[Form]:
     """The base form is the infinitive, the imperative, and the present of every person
-    and number no other form covers (all but the third-person singular, usually)."""
+    and number no other form covers (all but the third-person singular, usually). A verb
+    Wiktionary gives no inflections (could, would, ought) has no paradigm."""
+    if not inflections:
+        return
     present_taken: set[tuple[Person, Number]] = set()
     for form, tags in inflections:
         if "participle" in tags:
@@ -198,8 +210,9 @@ def _verb_forms(word: str, inflections: list[tuple[str, set[str]]]) -> Iterator[
                     "VerbForm": "Fin",
                 },
             )
-    yield _form(word, {"VerbForm": "Inf"})
-    yield _form(word, {"Mood": "Imp", "VerbForm": "Fin"})
+    if not no_infinitive:
+        yield _form(word, {"VerbForm": "Inf"})
+        yield _form(word, {"Mood": "Imp", "VerbForm": "Fin"})
     for person in PERSONS:
         for number in NUMBERS:
             if (person, number) not in present_taken:
