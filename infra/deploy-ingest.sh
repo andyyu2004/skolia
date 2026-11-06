@@ -1,22 +1,28 @@
 #!/usr/bin/env bash
 # Builds each language's ingest image, pushes it to Cloudflare's registry and deploys the
-# ingest Worker with them: deploy-ingest.sh <staging|production>. Run after tf.sh apply (it reads
-# the R2 credentials from Terraform). Each image is built on a base (models and
-# dependencies, analysis/Dockerfile) kept in the registry under a tag of its own, so a
-# code change builds and pushes only the code and lexicon layers on top of it.
+# ingest Worker with them:
+#   deploy-ingest.sh <env> build <lang>   build and push one language's image (CI runs
+#                                          one per language, in parallel)
+#   deploy-ingest.sh <env> deploy         deploy the ingest Worker with every language's
+#                                          image, which must be in the registry
+#   deploy-ingest.sh <env>                both, every language in turn
+# env is staging or production. deploy runs after tf.sh apply (it reads the R2
+# credentials from Terraform). Each image is built on a base (models and dependencies,
+# analysis/Dockerfile) kept in the registry under a tag of its own, so a code change
+# builds and pushes only the code and lexicon layers on top of it.
 set -euo pipefail
 
 env=${1:-}
 case $env in
   staging | production) ;;
-  *) echo "usage: deploy-ingest.sh <staging|production>" >&2; exit 2 ;;
+  *) echo "usage: deploy-ingest.sh <staging|production> [build <lang> | deploy]" >&2; exit 2 ;;
 esac
 root=$(cd "$(dirname "$0")/.." && pwd)
 tf() { "$root/infra/tf.sh" "$env" "$@"; }
 wrangler() { "$root/infra/wrangler.sh" "$env" "$@"; }
 
 # One image per language, each for its container class in wrangler.ingest.jsonc,
-# Ingest{Lang}: IngestPl
+# Ingest{Lang}: IngestPl. CI's matrix in .github/workflows/deploy.yml lists them too.
 langs=(pl en)
 
 # The images are named by the git trees they're built from (analysis/ and .dockerignore;
@@ -33,13 +39,14 @@ fi
 tree_hash() { (cd "$root" && git rev-parse "${@/#/HEAD:}" | git hash-object --stdin | cut -c1-12); }
 version=$(tree_hash "${built_from[@]}")
 base_version=base-$(tree_hash "${base_from[@]}")
+repo=registry.cloudflare.com/$CLOUDFLARE_ACCOUNT_ID
 
-registry=$(wrangler containers images list --json)
+registry=
 in_registry() {
+  [ -n "$registry" ] || registry=$(wrangler containers images list --json)
   jq -e --arg n "$1" --arg v "$2" '.[] | select(.name == $n) | .tags | index($v)' \
     <<<"$registry" >/dev/null
 }
-repo=registry.cloudflare.com/$CLOUDFLARE_ACCOUNT_ID
 
 # buildx pushes straight to the registry, with the credentials wrangler containers push
 # would use (user v1), so nothing is loaded into Docker and the base's layers, already
@@ -53,35 +60,38 @@ login() {
   logged_in=1
 }
 
-# Cloudflare's registry sometimes times out committing a large layer (on 2026-11-06 a
-# 1 GB model layer failed 3 times, then went through); a retry rebuilds from the builder's
-# cache and pushes what's missing
+# The full build log goes to a file; the job's log gets one line per Dockerfile step,
+# and the end of the file if the build fails. Cloudflare's registry sometimes times out
+# committing a large layer (on 2026-11-06 a 1 GB model layer failed 3 times, then went
+# through); a retry rebuilds from the builder's cache and pushes what's missing.
 build() {
-  local attempt
+  local attempt log
+  log=$(mktemp)
   for attempt in 1 2 3 4 5; do
-    docker buildx build --platform linux/amd64 -f "$root/analysis/Dockerfile" \
-      --provenance=false --sbom=false "$@" "$root" && return
+    if docker buildx build --progress=plain --platform linux/amd64 -f "$root/analysis/Dockerfile" \
+      --provenance=false --sbom=false "$@" "$root" 2>&1 | tee "$log" |
+      { grep --line-buffered -E '^#[0-9]+ \[[^]]+\] ' || true; }; then
+      rm -f "$log"
+      return
+    fi
+    tail -n 100 "$log" >&2
     [ "$attempt" = 5 ] && exit 1
     echo "build or push failed (attempt $attempt)" >&2
   done
 }
 
-data_built=
-images=()
-for lang in "${langs[@]}"; do
+class_of() { echo "Ingest$(tr '[:lower:]' '[:upper:]' <<<"${1:0:1}")${1:1}"; }
+
+build_lang() {
+  local lang=$1 name tag base push options
   name=skolia-ingest-$lang
   tag=$name:$version
   base=$repo/$name:$base_version
-  class=Ingest$(tr '[:lower:]' '[:upper:]' <<<"${lang:0:1}")${lang:1}
-  images+=("$class=$repo/$tag")
   if in_registry "$name" "$version"; then
     echo "$tag is already in the registry"
-    continue
+    return
   fi
-  if [ -z "$data_built" ]; then
-    "$root/analysis/scripts/build_data.sh"
-    data_built=1
-  fi
+  "$root/analysis/scripts/build_data.sh" "$lang"
   login
   push=(--output type=image,push=true,oci-mediatypes=false)
 
@@ -105,32 +115,61 @@ for lang in "${langs[@]}"; do
   fi
 
   build --build-arg "SKOLIA_LANG=$lang" --build-arg "BASE=$base" -t "$repo/$tag" "${push[@]}"
-done
+}
 
-# The committed config builds the Dockerfile (for wrangler dev); deploy the pushed
-# images, each in place of the Dockerfile under its class_name
-config=wrangler.ingest.deploy.jsonc
-secrets=$(mktemp)
-trap 'rm -f "$secrets" "$root/api/$config"' EXIT
-awk -v images="$(IFS=,; echo "${images[*]}")" '
-  BEGIN { n = split(images, pairs, ","); for (i = 1; i <= n; i++) { split(pairs[i], kv, "="); image[kv[1]] = kv[2] } }
-  match($0, /"class_name": "[^"]+"/) { class = substr($0, RSTART + 15, RLENGTH - 16) }
-  /"image": "\.\.\/analysis\/Dockerfile",/ {
-    if (!(class in image)) { print "no image for container class " class > "/dev/stderr"; exit 1 }
-    sub(/"\.\.\/analysis\/Dockerfile"/, "\"" image[class] "\"")
-  }
-  /"image_build_context"|"image_vars"/ { next }
-  { print }
-' "$root/api/wrangler.ingest.jsonc" > "$root/api/$config"
-# Each image in production and staging
-for pair in "${images[@]}"; do
-  if [ "$(grep -c "\"image\": \"${pair#*=}\"" "$root/api/$config")" != 2 ]; then
-    echo "expected ${pair#*=} twice in $config" >&2
-    exit 1
-  fi
-done
+deploy() {
+  local lang images=() pair config secrets
+  for lang in "${langs[@]}"; do
+    if ! in_registry "skolia-ingest-$lang" "$version"; then
+      echo "skolia-ingest-$lang:$version isn't in the registry: build it first" >&2
+      exit 1
+    fi
+    images+=("$(class_of "$lang")=$repo/skolia-ingest-$lang:$version")
+  done
 
-chmod 600 "$secrets"
-printf 'S3_ACCESS_KEY_ID=%s\nS3_SECRET_ACCESS_KEY=%s\n' \
-  "$(tf output -raw ingest_s3_access_key_id)" "$(tf output -raw ingest_s3_secret_access_key)" > "$secrets"
-wrangler deploy -c "$config" --var "S3_ENDPOINT:$(tf output -raw r2_s3_endpoint)" --secrets-file "$secrets"
+  # The committed config builds the Dockerfile (for wrangler dev); deploy the pushed
+  # images, each in place of the Dockerfile under its class_name
+  config=wrangler.ingest.deploy.jsonc
+  secrets=$(mktemp)
+  trap 'rm -f "$secrets" "$root/api/$config"' EXIT
+  awk -v images="$(IFS=,; echo "${images[*]}")" '
+    BEGIN { n = split(images, pairs, ","); for (i = 1; i <= n; i++) { split(pairs[i], kv, "="); image[kv[1]] = kv[2] } }
+    match($0, /"class_name": "[^"]+"/) { class = substr($0, RSTART + 15, RLENGTH - 16) }
+    /"image": "\.\.\/analysis\/Dockerfile",/ {
+      if (!(class in image)) { print "no image for container class " class > "/dev/stderr"; exit 1 }
+      sub(/"\.\.\/analysis\/Dockerfile"/, "\"" image[class] "\"")
+    }
+    /"image_build_context"|"image_vars"/ { next }
+    { print }
+  ' "$root/api/wrangler.ingest.jsonc" > "$root/api/$config"
+  # Each image in production and staging
+  for pair in "${images[@]}"; do
+    if [ "$(grep -c "\"image\": \"${pair#*=}\"" "$root/api/$config")" != 2 ]; then
+      echo "expected ${pair#*=} twice in $config" >&2
+      exit 1
+    fi
+  done
+
+  chmod 600 "$secrets"
+  printf 'S3_ACCESS_KEY_ID=%s\nS3_SECRET_ACCESS_KEY=%s\n' \
+    "$(tf output -raw ingest_s3_access_key_id)" "$(tf output -raw ingest_s3_secret_access_key)" > "$secrets"
+  wrangler deploy -c "$config" --var "S3_ENDPOINT:$(tf output -raw r2_s3_endpoint)" --secrets-file "$secrets"
+}
+
+case ${2:-} in
+  build)
+    lang=${3:-}
+    if [[ " ${langs[*]} " != *" $lang "* ]]; then
+      echo "deploy-ingest.sh: build takes one of: ${langs[*]}" >&2
+      exit 2
+    fi
+    build_lang "$lang"
+    ;;
+  deploy) deploy ;;
+  "")
+    for lang in "${langs[@]}"; do build_lang "$lang"; done
+    registry=
+    deploy
+    ;;
+  *) echo "usage: deploy-ingest.sh <staging|production> [build <lang> | deploy]" >&2; exit 2 ;;
+esac

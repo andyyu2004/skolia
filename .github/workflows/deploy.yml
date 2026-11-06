@@ -1,8 +1,9 @@
 name: Deploy
 
-# One environment: migrations and Terraform, the ingest containers, and for staging a
-# smoke test. Called by ci.yml. deploy-ingest only builds and pushes an image whose
-# inputs changed, and wrangler leaves an unchanged one as it is.
+# One environment: migrations, Terraform and the skolia Worker; each language's ingest
+# image, built in parallel; then the ingest Worker with those images, and a smoke test.
+# Called by ci.yml. deploy-ingest only builds and pushes an image whose inputs changed,
+# and wrangler leaves an unchanged one as it is.
 
 on:
   workflow_call:
@@ -14,6 +15,11 @@ on:
 permissions:
   contents: read
 
+env:
+  CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
+
 jobs:
   deploy:
     runs-on: ubuntu-24.04
@@ -22,12 +28,9 @@ jobs:
       group: deploy-${{ inputs.env }}
       cancel-in-progress: false
     env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
       AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_ACCESS_KEY }}
-      MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
       TF_IN_AUTOMATION: "1"
       TF_CLI_ARGS_apply: -auto-approve
     steps:
@@ -38,12 +41,42 @@ jobs:
       - uses: ./.github/actions/setup
       - run: mise run deploy ${{ inputs.env }}
 
+  # The images are named by their inputs, not the environment, so a build for one
+  # environment is reused by the other
+  ingest-image:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # The languages in infra/deploy-ingest.sh
+        lang: [pl, en]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
       - uses: docker/setup-buildx-action@v4
-      - name: Deploy ingest
+      - name: Build and push
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: mise run deploy-ingest ${{ inputs.env }}
+        run: infra/deploy-ingest.sh ${{ inputs.env }} build ${{ matrix.lang }}
 
+  ingest:
+    needs: [deploy, ingest-image]
+    runs-on: ubuntu-24.04
+    environment: ${{ inputs.env }}
+    concurrency:
+      group: deploy-ingest-${{ inputs.env }}
+      cancel-in-progress: false
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_ACCESS_KEY }}
+      TF_IN_AUTOMATION: "1"
+    steps:
+      # The tags, for git describe (mise.toml smoke)
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Deploy ingest
+        run: infra/deploy-ingest.sh ${{ inputs.env }} deploy
       - name: Smoke test
-        if: inputs.env == 'staging'
-        run: mise run smoke staging
+        run: mise run smoke ${{ inputs.env }}
