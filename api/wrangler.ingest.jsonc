@@ -20,8 +20,7 @@
     {
       "name": "skolia-ingest-pl",
       "class_name": "IngestPl",
-      "image": "../analysis/Dockerfile",
-      "image_build_context": "..",
+      "image": "../analysis/image/Dockerfile",
       "image_vars": { "SKOLIA_LANG": "pl" },
       // 1 vCPU, 6 GiB: Polish ingest peaked at 4.3 GiB on a 2,800-word text (in Docker)
       "instance_type": "standard-2",
@@ -30,8 +29,7 @@
     {
       "name": "skolia-ingest-en",
       "class_name": "IngestEn",
-      "image": "../analysis/Dockerfile",
-      "image_build_context": "..",
+      "image": "../analysis/image/Dockerfile",
       "image_vars": { "SKOLIA_LANG": "en" },
       // English ingest peaked at 4.7 GiB on the same text; the two
       // languages in one container peaked at 6.7 GiB
@@ -64,8 +62,7 @@
         {
           "name": "skolia-ingest-pl-staging",
           "class_name": "IngestPl",
-          "image": "../analysis/Dockerfile",
-          "image_build_context": "..",
+          "image": "../analysis/image/Dockerfile",
           "image_vars": { "SKOLIA_LANG": "pl" },
           "instance_type": "standard-2",
           "max_instances": 1
@@ -73,8 +70,7 @@
         {
           "name": "skolia-ingest-en-staging",
           "class_name": "IngestEn",
-          "image": "../analysis/Dockerfile",
-          "image_build_context": "..",
+          "image": "../analysis/image/Dockerfile",
           "image_vars": { "SKOLIA_LANG": "en" },
           "instance_type": "standard-2",
           "max_instances": 1

@@ -15,9 +15,9 @@ reader (Vite, :5173) → wrangler dev (:8787): skolia → local queue → skolia
                                               └── local D1, R2 ◄── S3 API ──────────┘
 ```
 
-`wrangler dev` runs both Workers from their configs, with local D1, R2 and Queue in `api/.wrangler/state`, and builds each language's ingest container from `analysis/Dockerfile` with Docker. The container reaches the local bucket through the dev server's S3 endpoint (`api/.env`, which wrangler dev loads for both Workers; `--env-file` would reach only the first config, and an `api/.dev.vars` would replace it).
+`wrangler dev` runs both Workers from their configs, with local D1, R2 and Queue in `api/.wrangler/state`, and runs each language's ingest container in Docker from the image Nix builds (`analysis/flake.nix`), which `mise run images` loads as `skolia-ingest-{lang}:dev` (`analysis/image/Dockerfile` is just that image). The container reaches the local bucket through the dev server's S3 endpoint (`api/.env`, which wrangler dev loads for both Workers; `--env-file` would reach only the first config, and an `api/.dev.vars` would replace it).
 
-Once: install the JavaScript packages and build the lexicon (`mise run data`, see Lexicon below).
+Once: install the JavaScript packages, and Docker. Nix is optional: the images are built by Nix in a container (`analysis/scripts/nix.sh`), or by this machine's Nix on x86-64 Linux or with `SKOLIA_NIX=host` (on a Mac, Determinate Nix's Linux builder, after `cachix use andyyu2004`).
 
 ```fish
 pnpm install                 # from the repo root: api, reader and shared
@@ -26,9 +26,8 @@ mise run e2e                 # fresh local state: import a text, wait until it's
 ```
 
 - `mise run e2e` needs port 8787 free, so stop `mise run dev` first. Its log is `api/.wrangler/e2e.log`.
-- The first build of each ingest image downloads its models (about 2 GB each) and takes a while; later builds reuse Docker's layer cache.
-- The ingest images build natively for `linux/arm64` (Apple Silicon, ARM Linux) and `linux/amd64`. PyPI's `morfeusz2` has a Linux wheel for x86-64 only, so the Dockerfile compiles Morfeusz from SGJP's source and installs SGJP's compiled dictionary from the same release (1.99.15, 2026-06-01). On 16,325 words (PDB dev plus the sample texts) and the 10,971 lemmas they analyse to, its `analyse` and `generate` output is byte-identical to the PyPI wheel's, on both architectures. A 4,700-word text takes about 100 s natively on an M-series Mac.
-- To bump Morfeusz: change `MORFEUSZ_RELEASE` and both SHA-256 values in `analysis/Dockerfile`, and the `morfeusz2` version in `pyproject.toml`, to the same release.
+- `mise run dev` and `mise run e2e` first run `mise run images`, which loads an image into Docker only when Docker doesn't have it under its Nix hash yet. The first build downloads the models (about 2 GB per language) and the lexicon inputs (`scripts/fetch_inputs.sh`, which needs `wrangler login`) and builds the lexicons; in the container, later builds reuse its store (the Docker volume `skolia-nix-store`).
+- The images are `linux/amd64` only, as wrangler dev (4.151.2) builds and pulls containers for amd64, so on Apple Silicon they run under emulation. Morfeusz is PyPI's `morfeusz2` x86-64 wheel, with SGJP's dictionary from the same release (1.99.15, 2026-06-01).
 - On a phone on the same network: `pnpm --filter @skolia/reader dev --host` and open the address it prints.
 - Sign-in is optional: without it you can read, but no flashcards are made. To try sign-in locally, put the dev OAuth client's credentials (infra/README.md) and any 32+ character secret in `api/.env.local` (git-ignored, loaded with `api/.env`): `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Without them `/api/auth` answers 503. Sign in from http://localhost:5173, the origin `BASE_URL` names.
 
@@ -143,11 +142,14 @@ PDB is licensed CC BY-NC-SA 4.0 (non-commercial). Use it for evaluation only; do
 
 ### Lexicon
 
-Large inputs and outputs live in `data/` at the repo root (git-ignored). The lexicon and valency files the images ship are built from the inputs pinned in `inputs.sha256`, kept in R2 (`skolia-tfstate/inputs/{sha256}-{name}.zst`) because kaikki.org overwrites its extract in place. This is what CI runs (needs `wrangler login`):
+Large inputs and outputs live in `data/` at the repo root (git-ignored). The lexicon and valency files the images ship are built by Nix (`flake.nix`) from the inputs pinned in `inputs.sha256`, kept in R2 (`skolia-tfstate/inputs/{sha256}-{name}.zst`) because kaikki.org overwrites its extract in place. `scripts/fetch_inputs.sh` puts them in the Nix store (needs `wrangler login`); `mise run images` and `deploy-ingest` run it. To build one language's files by themselves:
 
 ```fish
-scripts/build_data.sh   # → ../data/lexicon/en.sqlite, pl.sqlite and pl-valency.json
+scripts/fetch_inputs.sh pl
+scripts/nix.sh nix build .#lexicon-pl   # → result/pl.sqlite and pl-valency.json
 ```
+
+When `nix.sh` runs Nix in a container, `result` points into the container's store, so read it there (`scripts/nix.sh cat result/pl-valency.json`).
 
 The lexicon's version names the extract by its hash, so the same extract gives the same version on any machine. To move to a newer extract (this re-bundles every document once):
 
@@ -159,7 +161,7 @@ zstd -19 -T0 -c ../data/kaikki/kaikki.org-dictionary-Polish.jsonl | pnpm --dir .
 # then put $sha on the kaikki line of inputs.sha256
 ```
 
-`wrangler r2 object put` takes at most 300 MiB. The English extract is over that at `zstd -19` (320 MB) and under it at `zstd --ultra -22 --long=27` (281 MB, about 6 minutes); `zstd -d` reads a 2^27 window without any flag, so `build_data.sh` needs none.
+`wrangler r2 object put` takes at most 300 MiB. The English extract is over that at `zstd -19` (320 MB) and under it at `zstd --ultra -22 --long=27` (281 MB, about 6 minutes); `zstd -d` reads a 2^27 window without any flag, so `fetch_inputs.sh` needs none.
 
 Or build from a local extract (about 10 s):
 
@@ -197,7 +199,7 @@ echo "Nie mam czasu." | uv run skolia-analyze --lang pl --data ../data/lexicon -
 
 The parser is strict: a construct or value the model doesn't know is an error, so a new Walenty release fails loudly until `lang/pl/walenty/vocabulary.py` or `model.py` covers it. `tests/pl/test_walenty.py` parses and re-renders the whole release when it's downloaded (every line must come back identical), and skips that test otherwise.
 
-The Polish plugin reads it as `pl-valency.json` in the data directory (`--data`, or `SKOLIA_DATA` for ingest, set in `analysis/Dockerfile`). Coverage and a sample of reasons to read:
+The Polish plugin reads it as `pl-valency.json` in the data directory (`--data`, or `SKOLIA_DATA` for ingest, set in `analysis/flake.nix`). Coverage and a sample of reasons to read:
 
 ```fish
 uv run python scripts/pl/eval_case_reasons.py ~/data/ud_pdb/pl_pdb-ud-dev.conllu --cache ~/data/skolia-parse-cache --valency ../data/lexicon/pl-valency.json

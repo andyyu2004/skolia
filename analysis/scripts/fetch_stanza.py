@@ -1,11 +1,11 @@
 """Download Stanza models for one language at a fixed revision into a Stanza resources
-directory, for the Cloudflare image (analysis/Dockerfile).
+directory, for the Cloudflare image (analysis/flake.nix).
 
   python scripts/fetch_stanza.py DIR LANG REVISION MODEL ...
 
 MODEL is a path under the repo's models/, e.g. pos/combined_electra-large.pt. They land
 in DIR/LANG/, where Stanza looks for them (STANZA_RESOURCES_DIR=DIR). resources.json is
-fetched separately (the Dockerfile pins its hash).
+fetched separately (the flake pins its hash).
 """
 
 import shutil

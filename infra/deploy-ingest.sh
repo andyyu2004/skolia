@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Builds each language's ingest image, pushes it to Cloudflare's registry and deploys the
-# ingest Worker with them:
+# Builds each language's ingest image with Nix (analysis/flake.nix), pushes it to
+# Cloudflare's registry and deploys the ingest Worker with them:
 #   deploy-ingest.sh <env> build <lang>   build and push one language's image (CI runs
 #                                          one per language, in parallel)
 #   deploy-ingest.sh <env> deploy         deploy the ingest Worker with every language's
 #                                          image, which must be in the registry
 #   deploy-ingest.sh <env>                both, every language in turn
 # env is staging, production or pr-N. deploy runs after tf.sh apply (it reads the R2
-# credentials from Terraform). Each image is built on a base (models and dependencies,
-# analysis/Dockerfile) kept in the registry under a tag of its own, so a code change
-# builds and pushes only the code and lexicon layers on top of it.
+# credentials from Terraform). Each image is tagged with its Nix hash, which nix eval
+# gives without building anything, so an image whose inputs are unchanged is neither
+# rebuilt, pushed nor redeployed, and a push sends only the layers the registry lacks.
 set -euo pipefail
 
 env=${1:-}
@@ -24,26 +24,15 @@ wrangler() { "$root/infra/wrangler.sh" "$env" "$@"; }
 # The registry is the account's, whichever environment; a preview's config may not be
 # made yet when its images are built
 registry_wrangler() { "$root/infra/wrangler.sh" account "$@"; }
+nix_sh=$root/analysis/scripts/nix.sh
+cd "$root"
 
 # One image per language, each for its container class in wrangler.ingest.jsonc,
 # Ingest{Lang}: IngestPl. CI's matrix in .github/workflows/deploy.yml lists them too.
 langs=(pl en)
-
-# The images are named by the git trees they're built from (analysis/ and .dockerignore;
-# the lexicons are pinned in analysis/inputs.sha256), so an unchanged image is neither
-# rebuilt nor redeployed, whichever commits came between
-built_from=(analysis .dockerignore)
-# The base is named by the files its stages read
-base_from=(analysis/Dockerfile analysis/pyproject.toml analysis/uv.lock analysis/.python-version
-  analysis/scripts/fetch_model.py analysis/scripts/fetch_stanza.py .dockerignore)
-if [ -n "$(git -C "$root" status --porcelain -- "${built_from[@]}")" ]; then
-  echo "uncommitted changes under ${built_from[*]}: commit them first" >&2
-  exit 1
-fi
-tree_hash() { (cd "$root" && git rev-parse "${@/#/HEAD:}" | git hash-object --stdin | cut -c1-12); }
-version=$(tree_hash "${built_from[@]}")
-base_version=base-$(tree_hash "${base_from[@]}")
 repo=registry.cloudflare.com/$CLOUDFLARE_ACCOUNT_ID
+
+tag_of() { "$nix_sh" nix eval --raw "./analysis#ingest-$1.imageTag"; }
 
 registry=
 in_registry() {
@@ -52,87 +41,45 @@ in_registry() {
     <<<"$registry" >/dev/null
 }
 
-# buildx pushes straight to the registry, with the credentials wrangler containers push
-# would use (user v1), so nothing is loaded into Docker and the base's layers, already
-# in the registry, are neither pulled nor pushed again
-logged_in=
-login() {
-  [ -n "$logged_in" ] && return
-  registry_wrangler containers registries credentials registry.cloudflare.com --push --pull \
-    --expiration-minutes 60 | tail -n1 |
-    docker login --username v1 --password-stdin registry.cloudflare.com
-  logged_in=1
-}
-
-# The full build log goes to a file; the job's log gets one line per Dockerfile step,
-# and the end of the file if the build fails. Cloudflare's registry sometimes times out
-# committing a large layer (on 2026-11-06 a 1 GB model layer failed 3 times, then went
-# through); a retry rebuilds from the builder's cache and pushes what's missing.
-build() {
-  local attempt log
-  log=$(mktemp)
-  for attempt in 1 2 3 4 5; do
-    if docker buildx build --progress=plain --platform linux/amd64 -f "$root/analysis/Dockerfile" \
-      --provenance=false --sbom=false "$@" "$root" 2>&1 | tee "$log" |
-      { grep --line-buffered -E '^#[0-9]+ \[[^]]+\] ' || true; }; then
-      rm -f "$log"
-      return
-    fi
-    tail -n 100 "$log" >&2
-    [ "$attempt" = 5 ] && exit 1
-    echo "build or push failed (attempt $attempt)" >&2
-  done
-}
-
 class_of() { echo "Ingest$(tr '[:lower:]' '[:upper:]' <<<"${1:0:1}")${1:1}"; }
 
 build_lang() {
-  local lang=$1 name tag base push options
+  local lang=$1 name tag
   name=skolia-ingest-$lang
-  tag=$name:$version
-  base=$repo/$name:$base_version
-  if in_registry "$name" "$version"; then
-    echo "$tag is already in the registry"
+  tag=$(tag_of "$lang")
+  if in_registry "$name" "$tag"; then
+    echo "$name:$tag is already in the registry"
     return
   fi
-  "$root/analysis/scripts/build_data.sh" "$lang"
-  login
-  push=(--output type=image,push=true,oci-mediatypes=false)
-
-  if in_registry "$name" "$base_version"; then
-    echo "$name:$base_version is already in the registry"
-  else
-    # Room for the models, on a GitHub runner
-    if [ -n "${GITHUB_ACTIONS:-}" ] && [ -z "${disk_freed:-}" ]; then
-      sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
-      disk_freed=1
-    fi
-    options=()
-    # Higher Hugging Face rate limits for the model downloads; optional
-    if [ -n "${HF_TOKEN:-}" ]; then
-      options+=(--secret id=hf_token,env=HF_TOKEN)
-    fi
-    build --build-arg "SKOLIA_LANG=$lang" --target "base-$lang" -t "$base" "${push[@]}" \
-      ${options[@]+"${options[@]}"}
-    # With the base in the builder, check it has the files the parser loads
-    build --build-arg "SKOLIA_LANG=$lang" --target check
+  "$root/analysis/scripts/fetch_inputs.sh" "$lang"
+  # Fails if the parser needs a model file the image doesn't have
+  "$nix_sh" nix build -L --no-link "./analysis#checks.x86_64-linux.$lang"
+  # With the credentials wrangler containers push would use (user v1), on stdin. Cloudflare's
+  # registry sometimes times out committing a large layer (on 2026-11-06 a 1 GB model layer
+  # failed 3 times, then went through): skopeo retries.
+  registry_wrangler containers registries credentials registry.cloudflare.com --push --pull \
+    --expiration-minutes 60 | tail -n1 |
+    "$nix_sh" sh -c 'exec nix run "./analysis#ingest-$0.copyTo" -- --retry-times 5 \
+      --format v2s2 --dest-creds "v1:$(cat)" "$1"' "$lang" "docker://$repo/$name:$tag"
+  # Everything the next build needs but the models, which would fill the cache
+  if [ -n "${CACHIX_AUTH_TOKEN:-}" ]; then
+    nix build --no-link --print-out-paths "./analysis#cacheable-$lang" | cachix push andyyu2004
   fi
-
-  build --build-arg "SKOLIA_LANG=$lang" --build-arg "BASE=$base" -t "$repo/$tag" "${push[@]}"
 }
 
 deploy() {
-  local lang images=() pair config secrets copies
+  local lang tag images=() pair config secrets copies
   for lang in "${langs[@]}"; do
-    if ! in_registry "skolia-ingest-$lang" "$version"; then
-      echo "skolia-ingest-$lang:$version isn't in the registry: build it first" >&2
+    tag=$(tag_of "$lang")
+    if ! in_registry "skolia-ingest-$lang" "$tag"; then
+      echo "skolia-ingest-$lang:$tag isn't in the registry: build it first" >&2
       exit 1
     fi
-    images+=("$(class_of "$lang")=$repo/skolia-ingest-$lang:$version")
+    images+=("$(class_of "$lang")=$repo/skolia-ingest-$lang:$tag")
   done
 
-  # The committed config builds the Dockerfile (for wrangler dev); deploy the pushed
-  # images, each in place of the Dockerfile under its class_name
+  # The committed config builds analysis/image/Dockerfile (for wrangler dev); deploy the
+  # pushed images, each in its place under its class_name
   config=wrangler.ingest.deploy.jsonc
   secrets=$(mktemp)
   # Expanded now: the trap runs at exit, after deploy's locals are gone
@@ -142,7 +89,7 @@ deploy() {
     [ -f "$root/api/wrangler.ingest.$env.json" ] || "$root/infra/preview.py" config "$env" >&2
     jq --argjson image "$(jq -n '$ARGS.positional | map(split("=") | {(.[0]): .[1]}) | add' --args "${images[@]}")" '
       .containers |= map(
-        if $image[.class_name] then .image = $image[.class_name] | del(.image_build_context, .image_vars)
+        if $image[.class_name] then .image = $image[.class_name] | del(.image_vars)
         else error("no image for container class \(.class_name)") end)
     ' "$root/api/wrangler.ingest.$env.json" > "$root/api/$config"
     copies=1
@@ -150,11 +97,11 @@ deploy() {
     awk -v images="$(IFS=,; echo "${images[*]}")" '
       BEGIN { n = split(images, pairs, ","); for (i = 1; i <= n; i++) { split(pairs[i], kv, "="); image[kv[1]] = kv[2] } }
       match($0, /"class_name": "[^"]+"/) { class = substr($0, RSTART + 15, RLENGTH - 16) }
-      /"image": "\.\.\/analysis\/Dockerfile",/ {
+      /"image": "\.\.\/analysis\/image\/Dockerfile",/ {
         if (!(class in image)) { print "no image for container class " class > "/dev/stderr"; exit 1 }
-        sub(/"\.\.\/analysis\/Dockerfile"/, "\"" image[class] "\"")
+        sub(/"\.\.\/analysis\/image\/Dockerfile"/, "\"" image[class] "\"")
       }
-      /"image_build_context"|"image_vars"/ { next }
+      /"image_vars"/ { next }
       { print }
     ' "$root/api/wrangler.ingest.jsonc" > "$root/api/$config"
     # Production and staging
