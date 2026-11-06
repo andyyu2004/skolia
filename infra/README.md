@@ -1,6 +1,6 @@
 # infra
 
-Terraform for skolia on Cloudflare: R2 bucket, D1 database, queue, the `skolia` Worker (reader + API) on workers.dev and skolia.io, an R2 token for the ingest container, and billing usage alerts. The ingest Worker and its container are deployed with wrangler (the provider has no container resource).
+Terraform for skolia on Cloudflare: R2 bucket, D1 database, queue, the `skolia` Worker (reader + API) on workers.dev and skolia.io, an R2 token for the ingest container, and billing usage alerts. The ingest Worker and its containers are deployed with wrangler (the provider has no container resource).
 
 Account `1d3ca537bca3f2918d2778118d23f0a8`. Secrets in `pass` under `cloudflare/andyyu2004@gmail.com/1d3ca537bca3f2918d2778118d23f0a8/`. Terraform comes from `mise.toml`.
 
@@ -63,7 +63,7 @@ By hand, with the credentials above, the same tasks CI runs:
 ```fish
 mise run plan staging
 mise run deploy staging          # D1 migrations, then terraform apply
-mise run deploy-ingest staging   # build, push and deploy the container
+mise run deploy-ingest staging   # build, push and deploy the containers
 mise run smoke staging
 ```
 

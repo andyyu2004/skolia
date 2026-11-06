@@ -17,14 +17,14 @@ An assisted-reading app built around morphology. Tap a word or select a span. Yo
 Phone or desktop (responsive PWA) ──► skolia (Worker: reader assets + API) ──► D1 (users, cards, quotas, doc metadata)
   │                                      │                                └─► R2 (source texts, analyses, bundles, status)
   │                                      │
-  │                                      └─► Queue ──► skolia-ingest (Worker) ──► Durable Object ──► container (Python) ──► R2
+  │                                      └─► Queue ──► skolia-ingest (Worker) ──► Durable Object ──► container per language (Python) ──► R2
   │
   └─ IndexedDB: cached document bundles
 ```
 
-Locally, `wrangler dev` runs both Workers and the ingest container, with local D1, R2 and Queue. The API reaches them through small interfaces (`api/src/ports.ts`, faked in the tests); ingest reaches R2 over its S3 API, which wrangler dev also serves for the local bucket. Ingest writes `doc/{doc}/status.json` as it goes (queued, analysing, ready, failed), and the API reads it to tell the reader.
+Locally, `wrangler dev` runs both Workers and the ingest containers, with local D1, R2 and Queue. The API reaches them through small interfaces (`api/src/ports.ts`, faked in the tests); ingest reaches R2 over its S3 API, which wrangler dev also serves for the local bucket. Ingest writes `doc/{doc}/status.json` as it goes (queued, analysing, ready, failed), and the API reads it to tell the reader.
 
-On Cloudflare: Terraform (`infra/`) manages R2, D1, the queue, the `skolia` Worker with the reader as static assets, the skolia.io domain and ingest's R2 token. The `skolia-ingest` Worker and its container are deployed with wrangler (`api/wrangler.ingest.jsonc`), as the provider has no container resource. The consumer hands each job to the container over HTTP and acks it once accepted: a consumer may run 15 minutes and an analysis can take longer. The container keeps jobs in memory, sleeps when idle (the Durable Object asks ingest whether it's busy before stopping it), and has the models and lexicon in its image. A job lost with its container is re-queued by the stuck rule below.
+On Cloudflare: Terraform (`infra/`) manages R2, D1, the queue, the `skolia` Worker with the reader as static assets, the skolia.io domain and ingest's R2 token. The `skolia-ingest` Worker and its containers, one per language, are deployed with wrangler (`api/wrangler.ingest.jsonc`), as the provider has no container resource. The consumer hands each job to its language's container over HTTP and acks it once accepted: a consumer may run 15 minutes and an analysis can take longer. The container keeps jobs in memory, sleeps when idle (the Durable Object asks ingest whether it's busy before stopping it), and has the models and lexicon in its image. A job lost with its container is re-queued by the stuck rule below.
 
 | Part | Tech | Responsibility |
 |---|---|---|
