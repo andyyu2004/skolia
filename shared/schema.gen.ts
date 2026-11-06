@@ -14,17 +14,19 @@ export type Case = "Nom" | "Gen" | "Dat" | "Acc" | "Ins" | "Loc" | "Voc";
 
 export type ConjType = "Comp" | "Pred" | "Oper";
 
+export type Definite = "Def" | "Ind";
+
 export type Degree = "Pos" | "Cmp" | "Sup";
 
 export type ExtPos = Upos;
 
 export type Gender = "Masc" | "Fem" | "Neut";
 
-export type Mood = "Ind" | "Imp";
+export type Mood = "Ind" | "Imp" | "Sub";
 
-export type NumForm = "Word" | "Digit" | "Roman";
+export type NumForm = "Word" | "Digit" | "Roman" | "Combi";
 
-export type NumType = "Card" | "Ord" | "Sets";
+export type NumType = "Card" | "Ord" | "Sets" | "Frac" | "Mult";
 
 export type Number = "Sing" | "Plur" | "Ptan";
 
@@ -38,17 +40,19 @@ export type Polite = "Depr";
 
 export type PrepCase = "Pre" | "Npr";
 
-export type PronType = "Prs" | "Dem" | "Rel" | "Int" | "Ind" | "Tot" | "Neg";
+export type PronType = "Prs" | "Dem" | "Rel" | "Int" | "Ind" | "Tot" | "Neg" | "Art" | "Emp" | "Rcp";
 
 export type PunctSide = "Ini" | "Fin";
 
 export type PunctType = "Peri" | "Comm" | "Dash" | "Quot" | "Brck" | "Qest" | "Colo" | "Excl" | "Semi" | "Slsh" | "Elip";
 
+export type Style = "Arch" | "Coll" | "Expr" | "Slng" | "Vrnc";
+
 export type Tense = "Past" | "Pres" | "Fut";
 
 export type Variant = "Short" | "Long";
 
-export type VerbForm = "Fin" | "Inf" | "Part" | "Conv" | "Vnoun";
+export type VerbForm = "Fin" | "Inf" | "Part" | "Conv" | "Ger" | "Vnoun";
 
 export type VerbType = "Quasi" | "Mod";
 
@@ -61,6 +65,7 @@ export interface Feats {
   Aspect?: Aspect;
   Case?: Case;
   ConjType?: ConjType;
+  Definite?: Definite;
   Degree?: Degree;
   ExtPos?: ExtPos;
   Foreign?: Yes;
@@ -81,14 +86,16 @@ export interface Feats {
   PunctSide?: PunctSide;
   PunctType?: PunctType;
   Reflex?: Yes;
+  Style?: Style;
   Tense?: Tense;
+  Typo?: Yes;
   Variant?: Variant;
   VerbForm?: VerbForm;
   VerbType?: VerbType;
   Voice?: Voice;
 }
 
-export type Deprel = "acl" | "acl:cmp" | "acl:relcl" | "advcl" | "advcl:cmp" | "advcl:relcl" | "advmod" | "advmod:arg" | "advmod:cmp" | "advmod:emph" | "advmod:neg" | "amod" | "amod:cmp" | "amod:flat" | "appos" | "aux" | "aux:clitic" | "aux:cnd" | "aux:imp" | "aux:pass" | "case" | "cc" | "cc:preconj" | "ccomp" | "ccomp:cleft" | "ccomp:obj" | "conj" | "cop" | "csubj" | "csubj:pass" | "dep" | "det" | "det:numgov" | "det:nummod" | "det:poss" | "discourse" | "discourse:intj" | "expl:pv" | "fixed" | "flat" | "flat:foreign" | "iobj" | "list" | "mark" | "nmod" | "nmod:arg" | "nmod:cmp" | "nmod:flat" | "nmod:poss" | "nmod:pred" | "nsubj" | "nsubj:pass" | "nummod" | "nummod:flat" | "nummod:gov" | "obj" | "obl" | "obl:agent" | "obl:arg" | "obl:cmp" | "obl:orphan" | "orphan" | "parataxis" | "parataxis:insert" | "parataxis:obj" | "punct" | "reparandum" | "root" | "vocative" | "xcomp" | "xcomp:cleft" | "xcomp:pred" | "xcomp:subj";
+export type Deprel = "acl" | "acl:cmp" | "acl:relcl" | "advcl" | "advcl:cmp" | "advcl:relcl" | "advmod" | "advmod:arg" | "advmod:cmp" | "advmod:emph" | "advmod:neg" | "amod" | "amod:cmp" | "amod:flat" | "appos" | "aux" | "aux:clitic" | "aux:cnd" | "aux:imp" | "aux:pass" | "case" | "cc" | "cc:preconj" | "ccomp" | "ccomp:cleft" | "ccomp:obj" | "compound" | "compound:prt" | "conj" | "cop" | "csubj" | "csubj:outer" | "csubj:pass" | "dep" | "det" | "det:numgov" | "det:nummod" | "det:poss" | "det:predet" | "discourse" | "discourse:intj" | "dislocated" | "expl" | "expl:pv" | "fixed" | "flat" | "flat:foreign" | "goeswith" | "iobj" | "list" | "mark" | "nmod" | "nmod:arg" | "nmod:cmp" | "nmod:desc" | "nmod:flat" | "nmod:poss" | "nmod:pred" | "nmod:unmarked" | "nsubj" | "nsubj:outer" | "nsubj:pass" | "nummod" | "nummod:flat" | "nummod:gov" | "obj" | "obl" | "obl:agent" | "obl:arg" | "obl:cmp" | "obl:orphan" | "obl:unmarked" | "orphan" | "parataxis" | "parataxis:insert" | "parataxis:obj" | "punct" | "reparandum" | "root" | "vocative" | "xcomp" | "xcomp:cleft" | "xcomp:pred" | "xcomp:subj";
 
 export interface Reading {
   lemma: string;

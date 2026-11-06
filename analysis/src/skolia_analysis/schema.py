@@ -1,8 +1,8 @@
 """Shape of the analysis blob JSON. Labels follow Universal Dependencies (UD).
 
-The label sets are the ones used in the UD Polish PDB treebank, which is what the Stanza
-Polish models are trained on, so they are exactly what the parser can output. Extend them
-when adding a language. ud.py checks parser output against these types at runtime.
+The label sets are the union of the treebanks the parsers are trained on: UD Polish PDB
+and UD English EWT, so they are exactly what the parsers can output. Extend them when
+adding a language. ud.py checks parser output against these types at runtime.
 """
 
 from typing import Literal, NotRequired, TypedDict
@@ -54,31 +54,41 @@ type Deprel = Literal[
     "ccomp",  # clausal complement: wiem, że przyjdzie
     "ccomp:cleft",  # clausal complement, cleft: required by the pronoun to
     "ccomp:obj",  # clausal complement, object: a clausal object of a verb
+    "compound",  # compound: ice cream, phone book
+    "compound:prt",  # compound, particle: the particle of a phrasal verb, give up
     "conj",  # conjunct: second and later items of a coordination, ryż i pszenica
     "cop",  # copula: jest in jest lekarzem
     "csubj",  # clausal subject: kto pyta, nie błądzi
+    "csubj:outer",  # clausal subject, outer: the clausal counterpart of nsubj:outer
     "csubj:pass",  # clausal subject, passive: of a passive verb
     "dep",  # unspecified dependency: when nothing else fits
     "det",  # determiner: ten dom
     "det:numgov",  # determiner, numeral governing?: governs the noun's case, wiele osób
     "det:nummod",  # determiner, numeric modifier: a quantifier that agrees with the noun's case
     "det:poss",  # determiner, possessive: mój dom
+    "det:predet",  # determiner, predeterminer: before another determiner, all the books
     "discourse",  # discourse element: outside the sentence's structure
     "discourse:intj",  # discourse element, interjection: och
+    "dislocated",  # dislocated element: a fronted or postposed phrase, that guy, I like him
+    "expl",  # expletive: a word with no meaning of its own, it in it is raining, there is
     "expl:pv",  # expletive, pronominal verb: się that belongs to the verb, bać się
     "fixed",  # fixed multiword expression: w związku z
     "flat",  # flat multiword expression: a name, Jan Kowalski
     "flat:foreign",  # flat multiword expression, foreign: a foreign phrase
+    "goeswith",  # goes with: a word wrongly split in two, with the second part, some times
     "iobj",  # indirect object: dać bratu książkę
     "list",  # list: items without conjunctions
     "mark",  # marker: a subordinating conjunction introducing a clause, że, gdy
     "nmod",  # nominal modifier: a noun modifying another noun
     "nmod:arg",  # nominal modifier, argument: a noun a noun requires
     "nmod:cmp",  # nominal modifier, comparative
+    "nmod:desc",  # nominal modifier, descriptor: a title before a name, Mr. Magoo
     "nmod:flat",  # nominal modifier, flat: a noun inside a name
     "nmod:poss",  # nominal modifier, possessive: jego dom
     "nmod:pred",  # nominal modifier, predicative: after bycie, bycie lekarzem
+    "nmod:unmarked",  # nominal modifier, unmarked: no preposition, any day this week, $5 a share
     "nsubj",  # nominal subject
+    "nsubj:outer",  # nominal subject, outer: of a clause predicate, the thing is to keep calm
     "nsubj:pass",  # nominal subject, passive: dom został zbudowany
     "nummod",  # numeric modifier: a numeral that agrees with the noun, dwa psy
     "nummod:flat",  # numeric modifier, flat: a numeral inside a name
@@ -89,6 +99,7 @@ type Deprel = Literal[
     "obl:arg",  # oblique nominal, argument: one the verb requires, myśleć o tobie
     "obl:cmp",  # oblique nominal, comparative: wyższy od brata
     "obl:orphan",  # oblique nominal, orphan: its noun is left out
+    "obl:unmarked",  # oblique nominal, unmarked: no preposition, I left yesterday
     "orphan",  # orphan: dependent of a left-out head, ja piję kawę, a on herbatę
     "parataxis",  # parataxis: a clause loosely placed next to another
     "parataxis:insert",  # parataxis, insertion?: a parenthetical, moim zdaniem
@@ -147,12 +158,14 @@ type Tense = Literal[
 type Mood = Literal[
     "Ind",  # indicative: robisz
     "Imp",  # imperative: rób
+    "Sub",  # subjunctive: if I were you
 ]
 type VerbForm = Literal[
     "Fin",  # finite: robię
     "Inf",  # infinitive: robić
     "Part",  # participle: robiony, robiący
     "Conv",  # converb: the adverbial participle, robiąc
+    "Ger",  # gerund: the English -ing form used as a noun or participle, swimming is fun
     "Vnoun",  # verbal noun: robienie
 ]
 type Voice = Literal[
@@ -176,6 +189,9 @@ type PronType = Literal[
     "Ind",  # indefinite: ktoś, coś
     "Tot",  # total: wszystko, każdy
     "Neg",  # negative: nic, nikt
+    "Art",  # article: the, a
+    "Emp",  # emphatic: the reflexive used for emphasis, I did it myself
+    "Rcp",  # reciprocal: each other
 ]
 type Variant = Literal[
     "Short",  # short form: w, go, mi
@@ -189,11 +205,14 @@ type NumType = Literal[
     "Card",  # cardinal: pięć
     "Ord",  # ordinal: piąty
     "Sets",  # sets: the collective numeral, dwoje
+    "Frac",  # fraction: half, third
+    "Mult",  # multiplicative: twice, double
 ]
 type NumForm = Literal[
     "Word",  # word: pięć
     "Digit",  # digit: 5
     "Roman",  # Roman: V
+    "Combi",  # combined: digits and a suffix, 5th, 1990s
 ]
 type AdpType = Literal[
     "Prep",  # preposition: before its noun, do domu
@@ -232,6 +251,17 @@ type PunctSide = Literal[
 type Polite = Literal[
     "Depr",  # depreciative: a derogatory form of a masculine human noun
 ]
+type Definite = Literal[
+    "Def",  # definite: the
+    "Ind",  # indefinite: a
+]
+type Style = Literal[
+    "Arch",  # archaic: thee
+    "Coll",  # colloquial: gonna
+    "Expr",  # expressive: emotional or emphatic, sooo
+    "Slng",  # slang
+    "Vrnc",  # vernacular: nonstandard, ain't
+]
 type ExtPos = Upos
 """UPOS of a multi-word unit this word heads, e.g. ADP for "w związku z"."""
 
@@ -244,6 +274,7 @@ Feats = TypedDict(
         "Aspect": Aspect,
         "Case": Case,
         "ConjType": ConjType,
+        "Definite": Definite,
         "Degree": Degree,
         "ExtPos": ExtPos,
         "Foreign": Yes,
@@ -264,7 +295,9 @@ Feats = TypedDict(
         "PunctSide": PunctSide,
         "PunctType": PunctType,
         "Reflex": Yes,
+        "Style": Style,
         "Tense": Tense,
+        "Typo": Yes,
         "Variant": Variant,
         "VerbForm": VerbForm,
         "VerbType": VerbType,
