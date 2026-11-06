@@ -7,4 +7,5 @@ node_modules/
 .wrangler/
 /api/dist/
 .dev.vars
+/api/.env.local
 /api/wrangler.ingest.deploy.jsonc

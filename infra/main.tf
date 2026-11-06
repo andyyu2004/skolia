@@ -42,7 +42,11 @@ resource "cloudflare_workers_script" "skolia" {
     }
   }
 
-  bindings = [
+  # BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set with wrangler
+  # secret put (README.md), so they stay out of the state
+  keep_bindings = ["secret_text"]
+
+  bindings = concat([
     {
       name = "DB"
       type = "d1"
@@ -63,7 +67,13 @@ resource "cloudflare_workers_script" "skolia" {
       type = "plain_text"
       text = tostring(var.max_imports_per_day)
     },
-  ]
+    ], local.hostname == null ? [] : [
+    {
+      name = "BASE_URL"
+      type = "plain_text"
+      text = "https://${local.hostname}"
+    },
+  ])
 }
 
 resource "cloudflare_workers_script_subdomain" "skolia" {

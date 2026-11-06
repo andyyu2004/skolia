@@ -1,6 +1,6 @@
 // What the API needs from its surroundings: D1, R2 and Cloudflare Queues
-// (src/worker/adapters.ts), and fakes in the tests.
-import type { Lang } from "@skolia/shared/api";
+// (src/worker/adapters.ts), Better Auth (src/auth.ts), and fakes in the tests.
+import type { Lang, User } from "@skolia/shared/api";
 import type { IngestJob } from "@skolia/shared/schema";
 
 /** A document's metadata, owned by the API. Its state lives in the status blob. */
@@ -33,4 +33,9 @@ export interface BlobStore {
 
 export interface JobQueue {
   send(job: IngestJob): Promise<void>;
+}
+
+export interface Auth {
+  handle(request: Request): Promise<Response>;
+  user(headers: Headers): Promise<User | null>;
 }

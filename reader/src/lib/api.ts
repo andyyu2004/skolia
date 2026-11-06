@@ -1,6 +1,6 @@
 // skolia-api client. Response shapes are the API's (shared/api.ts) and the Python
 // schemas' (shared/schema.gen.ts); the API is ours, so responses are trusted to match.
-import type { ApiError, DocumentList, DocumentSummary, ImportRequest, ReadingNames } from "@skolia/shared/api";
+import type { ApiError, DocumentList, DocumentSummary, ImportRequest, ReadingNames, User } from "@skolia/shared/api";
 import { BUNDLE_SCHEMA, SCHEMA, type Blob, type Bundle } from "@skolia/shared/schema";
 
 export interface Reading {
@@ -16,6 +16,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(body?.error ?? `${response.status} ${response.statusText}`);
   }
   return (await response.json()) as T;
+}
+
+export async function currentUser(): Promise<User | null> {
+  const response = await fetch("/api/me");
+  if (response.status === 401) return null;
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return (await response.json()) as User;
+}
+
+export async function signIn(): Promise<void> {
+  const { url } = await request<{ url: string }>("/api/auth/sign-in/social", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ provider: "google", callbackURL: location.href }),
+  });
+  location.assign(url);
+}
+
+export async function signOut(): Promise<void> {
+  await request<unknown>("/api/auth/sign-out", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
 }
 
 export async function listDocuments(): Promise<DocumentSummary[]> {
