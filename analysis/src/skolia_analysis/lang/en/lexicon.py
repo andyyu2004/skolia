@@ -85,6 +85,10 @@ SKIPPED_FORM_TAGS = {
     "romanization",
 }
 
+# be's table lists thou art beside you are with the same tags and no archaic one. The few
+# other untagged thou forms (sattest, victualleth) are on rare verbs and left alone.
+UNTAGGED_ARCHAIC_FORMS = {"art", "'rt"}
+
 PERSONS: tuple[Person, ...] = ("1", "2", "3")
 NUMBERS: tuple[Number, ...] = ("Sing", "Plur")
 PERSON_TAGS: Mapping[str, Person] = {"first-person": "1", "second-person": "2", "third-person": "3"}
@@ -222,7 +226,11 @@ def _persons(tags: set[str]) -> Iterator[tuple[Person, Number]]:
 def _is_inflection(form: str, tags: list[str]) -> bool:
     # "more beautiful" and the like: two tokens, never one token's form
     return (
-        bool(form) and " " not in form and form != "-" and not SKIPPED_FORM_TAGS.intersection(tags)
+        bool(form)
+        and " " not in form
+        and form != "-"
+        and form not in UNTAGGED_ARCHAIC_FORMS
+        and not SKIPPED_FORM_TAGS.intersection(tags)
     )
 
 

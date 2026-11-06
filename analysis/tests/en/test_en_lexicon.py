@@ -44,6 +44,7 @@ def test_be_takes_its_persons_from_the_table() -> None:
     be: list[KaikkiForm] = [
         {"form": "am", "tags": ["first-person", "present", "singular"]},
         {"form": "are", "tags": ["present", "second-person", "singular"]},
+        {"form": "art", "tags": ["present", "second-person", "singular"]},
         {"form": "is", "tags": ["present", "singular", "third-person"]},
         {"form": "are", "tags": ["plural", "present"]},
         {"form": "was", "tags": ["first-person", "past", "singular"]},
@@ -57,6 +58,7 @@ def test_be_takes_its_persons_from_the_table() -> None:
         if f["feats"].get("Tense") == "Pres"
     }
     assert ("am", "1", "Sing") in persons and ("is", "3", "Sing") in persons
+    assert not any(form == "art" for form, _, _ in persons)
     # be itself is only the infinitive, imperative and subjunctive, not "I be"
     assert not any(form == "be" for form, _, _ in persons)
     were = forms_of(be, "be", "were")
