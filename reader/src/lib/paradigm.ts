@@ -203,7 +203,10 @@ export class Builder {
       if (same) {
         same.label = this.mergeLabels([...same.label.split("/"), row.label]);
         same.cells = same.cells.map((cell, i) =>
-          cell.map((c) => ({ ...c, current: c.current || (row.cells[i]?.some((x) => x.current) ?? false) })),
+          cell.map((c) => ({
+            ...c,
+            current: c.current || (row.cells[i]?.some((x) => x.text === c.text && x.current) ?? false),
+          })),
         );
       } else {
         rows.push({ ...row });

@@ -78,6 +78,57 @@ test("a curly apostrophe matches the lexicon's straight one", () => {
   assert.deepEqual(current(paradigmTables(BUNDLE, BE, m, english.paradigm)), ["'m"]);
 });
 
+const PAST = (person: "1" | "2" | "3", number: "Sing" | "Plur"): Feats => ({
+  Mood: "Ind",
+  Number: number,
+  Person: person,
+  Tense: "Past",
+  VerbForm: "Fin",
+});
+const PAST_ALL = (["1", "2", "3"] as const).flatMap((p) => [PAST(p, "Sing"), PAST(p, "Plur")]);
+const PART_PAST: Feats = { Tense: "Past", VerbForm: "Part" };
+const PART_PASS: Feats = { Tense: "Past", VerbForm: "Part", Voice: "Pass" };
+
+const BURN: Entry = {
+  lemma: "burn",
+  upos: "VERB",
+  senses: [{ gloss: "to be on fire", tags: [] }],
+  relations: [],
+  frames: [],
+  paradigms: [
+    {
+      homonym: "",
+      forms: [
+        ["burn", [0]],
+        ["burned", [1, 2, 3, 4, 5, 6, 7, 8]],
+        ["burnt", [1, 2, 3, 4, 5, 6, 7, 8]],
+      ],
+    },
+  ],
+};
+
+const BURN_BUNDLE: Bundle = {
+  ...BUNDLE,
+  entries: { "en:burn:VERB": BURN },
+  feats: [{ VerbForm: "Inf" }, ...PAST_ALL, PART_PAST, PART_PASS],
+};
+
+test("in merged rows only the token's own variant is marked", () => {
+  const burned = token("burned", "burn", "VERB", PAST("3", "Plur"));
+  const past = paradigmTables(BURN_BUNDLE, BURN, burned, english.paradigm).find((t) => t.title === "Past");
+  assert.ok(past);
+  assert.deepEqual(current([past]), ["burned"]);
+});
+
+test("a passive participle is marked among the past participles", () => {
+  const burned = token("burned", "burn", "VERB", PART_PASS);
+  const participle = paradigmTables(BURN_BUNDLE, BURN, burned, english.paradigm).find(
+    (t) => t.title === "Past participle",
+  );
+  assert.ok(participle);
+  assert.deepEqual(current([participle]), ["burned"]);
+});
+
 test("features no form has don't stop a match", () => {
   const first = token("first", "first", "ADJ", { Degree: "Pos", NumForm: "Word", NumType: "Ord" });
   assert.deepEqual(current(paradigmTables(BUNDLE, FIRST, first, english.paradigm)), ["first"]);

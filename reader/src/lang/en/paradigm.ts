@@ -59,7 +59,8 @@ function verbTables(builder: Builder, forms: Form[]): Table[] {
     ),
     builder.list(
       "Past participle",
-      forms.filter((f) => f.feats.VerbForm === "Part" && f.feats.Tense === "Past" && f.feats.Voice === undefined),
+      // active (has saved) and passive (was saved) are the same form
+      forms.filter((f) => f.feats.VerbForm === "Part" && f.feats.Tense === "Past"),
     ),
   ]);
 }
