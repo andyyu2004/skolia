@@ -1,7 +1,12 @@
-// skolia-api client. Response shapes are the API's (shared/api.ts) and the Python
-// schemas' (shared/schema.gen.ts); the API is ours, so responses are trusted to match.
-import type { ApiError, DocumentList, DocumentSummary, ImportRequest, ReadingNames, User } from "@skolia/shared/api";
+// skolia-api client, typed by the API's routes (AppType). The analysis and bundle are
+// blobs the API passes through, typed by the Python schemas (shared/schema.gen.ts); the
+// API is ours, so they're trusted to match.
+import { hc } from "hono/client";
+import type { AppType } from "@skolia/api/app";
+import type { ApiError, DocumentSummary, ImportRequest, ReadingNames, User } from "@skolia/shared/api";
 import { BUNDLE_SCHEMA, SCHEMA, type Blob, type Bundle } from "@skolia/shared/schema";
+
+const api = hc<AppType>("/").api;
 
 export interface Reading {
   text: string;
@@ -9,70 +14,67 @@ export interface Reading {
   bundle: Bundle;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, init);
-  if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as ApiError | null;
-    throw new Error(body?.error ?? `${response.status} ${response.statusText}`);
-  }
-  return (await response.json()) as T;
+async function failure(response: Response): Promise<Error> {
+  const body = (await response.json().catch(() => null)) as ApiError | null;
+  return new Error(body?.error ?? `${response.status} ${response.statusText}`);
 }
 
 export async function currentUser(): Promise<User | null> {
-  const response = await fetch("/api/me");
+  const response = await api.me.$get();
   if (response.status === 401) return null;
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-  return (await response.json()) as User;
+  if (!response.ok) throw await failure(response);
+  return response.json();
 }
 
-export async function signIn(): Promise<void> {
-  const { url } = await request<{ url: string }>("/api/auth/sign-in/social", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ provider: "google", callbackURL: location.href }),
-  });
-  location.assign(url);
-}
-
-export async function signOut(): Promise<void> {
-  await request<unknown>("/api/auth/sign-out", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: "{}",
-  });
-}
-
-export async function listDocuments(): Promise<DocumentSummary[]> {
-  return (await request<DocumentList>("/api/documents")).documents;
-}
-
-export function getDocument(id: string): Promise<DocumentSummary> {
-  return request<DocumentSummary>(`/api/documents/${id}`);
-}
-
-export function importDocument(body: ImportRequest): Promise<DocumentSummary> {
-  return request<DocumentSummary>("/api/documents", {
+async function auth(path: string, body: unknown): Promise<Response> {
+  const response = await fetch(`/api/auth/${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+  if (!response.ok) throw await failure(response);
+  return response;
+}
+
+export async function signIn(): Promise<void> {
+  const response = await auth("sign-in/social", { provider: "google", callbackURL: location.href });
+  const { url } = (await response.json()) as { url: string };
+  location.assign(url);
+}
+
+export async function signOut(): Promise<void> {
+  await auth("sign-out", {});
+}
+
+export async function listDocuments(): Promise<DocumentSummary[]> {
+  const response = await api.documents.$get();
+  if (!response.ok) throw await failure(response);
+  return (await response.json()).documents;
+}
+
+export async function getDocument(id: string): Promise<DocumentSummary> {
+  const response = await api.documents[":id"].$get({ param: { id } });
+  if (!response.ok) throw await failure(response);
+  return response.json();
+}
+
+export async function importDocument(body: ImportRequest): Promise<DocumentSummary> {
+  const response = await api.documents.$post({ json: body });
+  if (!response.ok) throw await failure(response);
+  return response.json();
 }
 
 /** The reading by name, or "unsupported" when its shape is one this reader doesn't
  * know (an old analysis, served while a new one is made). */
 export async function loadReading(id: string, names: ReadingNames): Promise<Reading | "unsupported"> {
-  const base = `/api/documents/${id}`;
+  const doc = api.documents[":id"];
   const [text, analysis, bundle] = await Promise.all([
-    fetchText(`${base}/text`),
-    request<Blob>(`${base}/analysis/${names.analysis}`),
-    request<Bundle>(`${base}/bundle/${names.bundle}`),
+    doc.text.$get({ param: { id } }),
+    doc.analysis[":name"].$get({ param: { id, name: names.analysis } }),
+    doc.bundle[":name"].$get({ param: { id, name: names.bundle } }),
   ]);
-  if (analysis.schema !== SCHEMA || bundle.schema !== BUNDLE_SCHEMA) return "unsupported";
-  return { text, analysis, bundle };
-}
-
-async function fetchText(path: string): Promise<string> {
-  const response = await fetch(path);
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-  return response.text();
+  for (const response of [text, analysis, bundle]) if (!response.ok) throw await failure(response);
+  const [a, b] = [(await analysis.json()) as Blob, (await bundle.json()) as Bundle];
+  if (a.schema !== SCHEMA || b.schema !== BUNDLE_SCHEMA) return "unsupported";
+  return { text: await text.text(), analysis: a, bundle: b };
 }

@@ -4,7 +4,9 @@ import { MAX_TEXT_LENGTH, type DocumentList, type DocumentSummary } from "@skoli
 import { docId, partKey, statusKey, versionsKey } from "@skolia/shared/keys";
 import type { IngestJob } from "@skolia/shared/schema";
 import { brotliCompressSync, brotliDecompressSync } from "node:zlib";
+import { hc } from "hono/client";
 import {
+  type AppType,
   STUCK_AFTER_MS,
   acceptsEncoding,
   countWords,
@@ -42,7 +44,7 @@ class MemoryBlobs implements BlobStore {
   async get(key: string): Promise<StoredBlob | null> {
     return this.objects.get(key) ?? null;
   }
-  async put(key: string, body: Uint8Array | string, contentType: string): Promise<void> {
+  async put(key: string, body: Uint8Array<ArrayBuffer> | string, contentType: string): Promise<void> {
     const bytes = typeof body === "string" ? new TextEncoder().encode(body) : body;
     this.objects.set(key, { body: bytes, contentType });
   }
@@ -135,6 +137,24 @@ function importText(app: ReturnType<typeof setup>["app"], text = TEXT) {
     body: JSON.stringify({ title: "", text, lang: "pl" }),
   });
 }
+
+test("the typed client imports, lists and gets a document, and sees a 404 as not ok", async () => {
+  const { app } = setup();
+  const api = hc<AppType>(ORIGIN, { fetch: (input: string | URL | Request, init?: RequestInit) => app.request(input, init) }).api;
+  const imported = await api.documents.$post({ json: { title: "", text: TEXT, lang: "pl" } });
+  assert.equal(imported.status, 202);
+  if (!imported.ok) throw new Error("import failed");
+  const { id } = await imported.json();
+  const listed = await api.documents.$get();
+  assert.ok(listed.ok);
+  assert.deepEqual((await listed.json()).documents.map((d) => d.id), [id]);
+  const got = await api.documents[":id"].$get({ param: { id } });
+  assert.ok(got.ok);
+  assert.equal((await got.json()).id, id);
+  const missing = await api.documents[":id"].$get({ param: { id: "0".repeat(64) } });
+  assert.equal(missing.status, 404);
+  assert.equal(missing.ok, false);
+});
 
 test("import stores the text, queues a job and reports queued", async () => {
   const { app, blobs, queue } = setup();

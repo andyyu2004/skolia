@@ -45,7 +45,7 @@ export class R2Blobs implements BlobStore {
     };
   }
 
-  async put(key: string, body: Uint8Array | string, contentType: string): Promise<void> {
+  async put(key: string, body: Uint8Array<ArrayBuffer> | string, contentType: string): Promise<void> {
     await this.bucket.put(key, body, { httpMetadata: { contentType } });
   }
 }

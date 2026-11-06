@@ -41,10 +41,16 @@ importers:
       '@skolia/shared':
         specifier: workspace:*
         version: link:../shared
+      hono:
+        specifier: 4.13.13
+        version: 4.13.13
       svelte:
         specifier: 5.57.2
         version: 5.57.2
     devDependencies:
+      '@skolia/api':
+        specifier: workspace:*
+        version: link:../api
       '@sveltejs/vite-plugin-svelte':
         specifier: 7.3.1
         version: 7.3.1(svelte@5.57.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2))

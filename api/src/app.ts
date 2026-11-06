@@ -34,22 +34,10 @@ const MAX_TITLE_LENGTH = 200;
 const MAX_BODY_BYTES = MAX_TEXT_LENGTH * 6 + 4 * 1024;
 const JSON_TYPE = "application/json";
 
-export function createApp(deps: Deps): Hono {
+export type AppType = ReturnType<typeof createApp>;
+
+export function createApp(deps: Deps) {
   const now = deps.now ?? (() => new Date());
-  const app = new Hono();
-
-  app.onError((error, c) => {
-    console.error(error);
-    return c.json<ApiError>({ error: "internal error" }, 500);
-  });
-
-  app.on(["GET", "POST"], "/api/auth/*", (c) => deps.auth.handle(c.req.raw));
-
-  app.get("/api/me", async (c) => {
-    const user = await deps.auth.user(c.req.raw.headers);
-    if (!user) return c.json<ApiError>({ error: "not signed in" }, 401);
-    return c.json<User>(user);
-  });
 
   /** The summary, after queueing the document again if ingest now produces other
    * versions, or if its job seems lost. */
@@ -61,75 +49,83 @@ export function createApp(deps: Deps): Hono {
     return summarize(record, status);
   }
 
-  app.get("/api/documents", async (c) => {
-    const records = await deps.documents.list();
-    const versions = versionsOf(deps.blobs);
-    const documents = await Promise.all(records.map((r) => current(r, versions)));
-    return c.json<DocumentList>({ documents });
-  });
-
   // Stop reading an oversized body early instead of parsing it and then refusing it
   const limit = bodyLimit({
     maxSize: MAX_BODY_BYTES,
-    onError: (c) => c.json<ApiError>({ error: `text is longer than ${MAX_TEXT_LENGTH} characters` }, 413),
+    onError: (c) => c.json({ error: `text is longer than ${MAX_TEXT_LENGTH} characters` } satisfies ApiError, 413),
   });
 
-  app.post("/api/documents", limit, async (c) => {
-    const request = parseImport(await c.req.json().catch(() => null));
-    if (typeof request === "string") return c.json<ApiError>({ error: request }, 400);
-    const id = await docId(request.text);
-    const existing = await deps.documents.get(id);
-    if (existing) {
-      const summary = await current(existing, versionsOf(deps.blobs));
-      // A failed import is retried by importing the same text again
-      if (summary.state !== "failed") return c.json<DocumentSummary>(summary, 200);
-    } else {
-      const today = now().toISOString().slice(0, 10);
-      if ((await deps.documents.countImportedSince(today)) >= deps.maxImportsPerDay) {
-        return c.json<ApiError>({ error: "Today's imports are used up. Try again tomorrow." }, 429);
-      }
-      await deps.blobs.put(textKey(id), request.text, "text/plain; charset=utf-8");
-      await deps.documents.add({
-        id,
-        title: request.title,
-        lang: request.lang,
-        imported: now().toISOString(),
-        words: countWords(request.text),
-      });
-    }
-    const record = existing ?? (await deps.documents.get(id));
-    if (!record) throw new Error(`document ${id} vanished after insert`);
-    const queued = await requeue(deps, record, await readStatus(deps.blobs, id), now());
-    return c.json<DocumentSummary>(summarize(record, queued), 202);
-  });
-
-  app.get("/api/documents/:id", async (c) => {
-    const record = await findDocument(deps, c.req.param("id"));
-    if (!record) return notFound(c);
-    return c.json<DocumentSummary>(await current(record, versionsOf(deps.blobs)));
-  });
-
-  app.get("/api/documents/:id/text", async (c) => {
-    const record = await findDocument(deps, c.req.param("id"));
-    if (!record) return notFound(c);
-    // The id is the text's hash, so the text at this URL never changes
-    const blob = await deps.blobs.get(textKey(record.id));
-    if (!blob) return c.json<ApiError>({ error: "missing text" }, 500);
-    return sendBlob(c, blob, undefined);
-  });
-
-  // By name (DocumentSummary.reading): a name is a version, so what's at the URL never
-  // changes, and the reader gets an analysis and bundle that belong together
-  for (const part of ["analysis", "bundle"] as const) {
-    app.get(`/api/documents/:id/${part}/:name`, async (c) => {
-      const record = await findDocument(deps, c.req.param("id"));
-      const name = c.req.param("name");
-      if (!record || !NAME.test(name)) return notFound(c);
-      const blob = await deps.blobs.get(partKey(record.id, part, name));
-      if (!blob) return c.json<ApiError>({ error: `no ${part} ${name}` }, 404);
-      return sendBlob(c, blob, PART_ENCODING);
-    });
+  /** An analysis or bundle by name (DocumentSummary.reading): a name is a version, so
+   * what's at the URL never changes, and the reader gets an analysis and bundle that
+   * belong together. */
+  async function sendPart(c: Context, which: "analysis" | "bundle", id: string, name: string): Promise<Response> {
+    const record = await findDocument(deps, id);
+    if (!record || !NAME.test(name)) return notFound(c);
+    const blob = await deps.blobs.get(partKey(record.id, which, name));
+    if (!blob) return c.json({ error: `no ${which} ${name}` } satisfies ApiError, 404);
+    return sendBlob(c, blob, PART_ENCODING);
   }
+
+  const app = new Hono()
+    .onError((error, c) => {
+      console.error(error);
+      return c.json({ error: "internal error" } satisfies ApiError, 500);
+    })
+    .on(["GET", "POST"], "/api/auth/*", (c) => deps.auth.handle(c.req.raw))
+    .get("/api/me", async (c) => {
+      const user = await deps.auth.user(c.req.raw.headers);
+      if (!user) return c.json({ error: "not signed in" } satisfies ApiError, 401);
+      return c.json(user satisfies User, 200);
+    })
+    .get("/api/documents", async (c) => {
+      const records = await deps.documents.list();
+      const versions = versionsOf(deps.blobs);
+      const documents = await Promise.all(records.map((r) => current(r, versions)));
+      return c.json({ documents } satisfies DocumentList, 200);
+    })
+    .post("/api/documents", limit, async (c) => {
+      const request = parseImport(await c.req.json().catch(() => null));
+      if (typeof request === "string") return c.json({ error: request } satisfies ApiError, 400);
+      const id = await docId(request.text);
+      const existing = await deps.documents.get(id);
+      if (existing) {
+        const summary = await current(existing, versionsOf(deps.blobs));
+        // A failed import is retried by importing the same text again
+        if (summary.state !== "failed") return c.json(summary satisfies DocumentSummary, 200);
+      } else {
+        const today = now().toISOString().slice(0, 10);
+        if ((await deps.documents.countImportedSince(today)) >= deps.maxImportsPerDay) {
+          return c.json({ error: "Today's imports are used up. Try again tomorrow." } satisfies ApiError, 429);
+        }
+        await deps.blobs.put(textKey(id), request.text, "text/plain; charset=utf-8");
+        await deps.documents.add({
+          id,
+          title: request.title,
+          lang: request.lang,
+          imported: now().toISOString(),
+          words: countWords(request.text),
+        });
+      }
+      const record = existing ?? (await deps.documents.get(id));
+      if (!record) throw new Error(`document ${id} vanished after insert`);
+      const queued = await requeue(deps, record, await readStatus(deps.blobs, id), now());
+      return c.json(summarize(record, queued) satisfies DocumentSummary, 202);
+    })
+    .get("/api/documents/:id", async (c) => {
+      const record = await findDocument(deps, c.req.param("id"));
+      if (!record) return notFound(c);
+      return c.json(await current(record, versionsOf(deps.blobs)) satisfies DocumentSummary, 200);
+    })
+    .get("/api/documents/:id/text", async (c) => {
+      const record = await findDocument(deps, c.req.param("id"));
+      if (!record) return notFound(c);
+      // The id is the text's hash, so the text at this URL never changes
+      const blob = await deps.blobs.get(textKey(record.id));
+      if (!blob) return c.json({ error: "missing text" } satisfies ApiError, 500);
+      return sendBlob(c, blob, undefined);
+    })
+    .get("/api/documents/:id/analysis/:name", (c) => sendPart(c, "analysis", c.req.param("id"), c.req.param("name")))
+    .get("/api/documents/:id/bundle/:name", (c) => sendPart(c, "bundle", c.req.param("id"), c.req.param("name")));
 
   return app;
 }
@@ -138,8 +134,8 @@ async function findDocument(deps: Deps, id: string): Promise<DocumentRecord | nu
   return ID.test(id) ? deps.documents.get(id) : null;
 }
 
-function notFound(c: Context): Response {
-  return c.json<ApiError>({ error: "no such document" }, 404);
+function notFound(c: Context) {
+  return c.json({ error: "no such document" } satisfies ApiError, 404);
 }
 
 /** A blob whose URL names its version, so it can be cached forever. encoding: how the
@@ -158,7 +154,7 @@ function sendBlob(c: Context, blob: StoredBlob, encoding: typeof PART_ENCODING |
     const init: ResponseInit & { encodeBody: "manual" } = { headers, encodeBody: "manual" };
     return new Response(blob.body, init);
   }
-  return c.json<ApiError>({ error: `needs Accept-Encoding: ${encoding}` }, 406);
+  return c.json({ error: `needs Accept-Encoding: ${encoding}` } satisfies ApiError, 406);
 }
 
 /** Whether an Accept-Encoding header ("gzip, deflate, br;q=0.8") allows the encoding. */
