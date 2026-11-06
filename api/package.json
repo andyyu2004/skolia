@@ -6,9 +6,8 @@
     "./app": "./src/app.ts"
   },
   "scripts": {
-    "check": "tsc --noEmit && tsc --noEmit -p src/worker",
-    "test": "node --test \"src/**/*.test.ts\"",
-    "user-migrations": "drizzle-kit generate && node scripts/user-migrations.ts"
+    "check": "tsc --noEmit && tsc --noEmit -p src/worker && tsc --noEmit -p tsconfig.workerd-test.json",
+    "test": "node --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@cloudflare/containers": "0.3.7",
