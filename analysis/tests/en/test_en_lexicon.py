@@ -87,6 +87,17 @@ def test_noun_and_adjective_forms() -> None:
     ]
 
 
+def test_possessive_suffix_is_the_particle() -> None:
+    possessive: KaikkiEntry = {
+        "word": "-'s",
+        "pos": "suffix",
+        "senses": [{"glosses": ["A possessive marker"], "tags": ["enclitic", "morpheme"]}],
+    }
+    converted = lexicon_en.Source().convert(possessive)
+    assert converted is not None
+    assert (converted.lemma, converted.upos) == ("'s", ("PART",))
+
+
 def test_inflected_form_entry_is_skipped() -> None:
     went: KaikkiEntry = {
         "word": "went",

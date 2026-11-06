@@ -43,6 +43,10 @@ KAIKKI_POS: dict[str, Upos] = {
 # Left out: affixes, letters, symbols, contractions (the parser splits don't into do +
 # n't); phrases and proverbs become multi-word expressions later.
 
+# Suffixes the parser splits off as words of their own: Wiktionary files the possessive
+# (the dog's bone) under the suffix -'s, UD makes it a particle, lemma 's
+ENCLITICS: dict[str, tuple[str, Upos]] = {"-'s": ("'s", "PART")}
+
 # Tags on a form-of sense that make it an inflected form ("plural of dog", "simple past of
 # go"). The analyser already gives those words the lemma, so these senses add nothing.
 INFLECTION_TAGS = {
@@ -95,6 +99,8 @@ class Source:
     def convert(self, entry: KaikkiEntry) -> Converted | None:
         word, pos = entry.get("word", ""), entry.get("pos", "")
         upos = KAIKKI_POS.get(pos)
+        if pos == "suffix" and word in ENCLITICS:
+            word, upos = ENCLITICS[word]
         if upos is None or not word or " " in word:
             return None
         found = (
