@@ -29,19 +29,22 @@ def parse_lemma_id(value: str) -> tuple[str, str, Upos]:
 
 
 def resolve(lexicon: Lexicon, lemma_id: str) -> tuple[Row | None, Match]:
-    """The entry for a token's lemma_id, falling back to the same lemma under another part
-    of speech, then to the lemma lowercased."""
+    """The entry for a token's lemma_id, falling back to the lemma lowercased under the same
+    part of speech, then to the same lemma under another part of speech, then to the lemma
+    lowercased under any. A capitalised adjective in a name (Old Town) is the adjective,
+    not the proper noun Old."""
     lang, lemma, upos = parse_lemma_id(lemma_id)
     row = lexicon.get(lemma_id)
     if row is not None:
         return row, "exact"
-    same_lemma = lexicon.by_lemma(lemma)
-    if same_lemma:
-        return same_lemma[0], "other-pos"
     if lemma != lemma.lower():
         lowered = lexicon.get(f"{lang}{LEMMA_ID_SEP}{lemma.lower()}{LEMMA_ID_SEP}{upos}")
         if lowered is not None:
             return lowered, "lowercase"
+    same_lemma = lexicon.by_lemma(lemma)
+    if same_lemma:
+        return same_lemma[0], "other-pos"
+    if lemma != lemma.lower():
         any_pos = lexicon.by_lowercase(lemma)
         if any_pos:
             return any_pos[0], "lowercase"

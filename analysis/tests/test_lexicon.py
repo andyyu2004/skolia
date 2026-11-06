@@ -35,6 +35,10 @@ def test_resolve_falls_back(tmp_path: Path) -> None:
         store.Row(
             "pl:krakowski:ADJ", "krakowski", "ADJ", [{"gloss": "of Kraków", "tags": []}], [], []
         ),
+        # the same spelling as a name: the adjective lowercased wins over it
+        store.Row(
+            "pl:Krakowski:PROPN", "Krakowski", "PROPN", [{"gloss": "a surname", "tags": []}], [], []
+        ),
     ]
     store.write(path, rows, {})
     lexicon = store.Lexicon(path)
