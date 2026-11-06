@@ -15,6 +15,8 @@
   // wrangler dev would otherwise rewrite each request's Host to the route's, and the
   // ingest container's S3 requests, signed for localhost:8787, would fail
   "dev": { "host": "localhost:8787" },
+  // mise run deploy overrides it with git describe
+  "define": { "VERSION": "\"dev\"" },
   "assets": {
     "directory": "../reader/dist",
     "not_found_handling": "single-page-application",
@@ -56,6 +58,7 @@
   "env": {
     "staging": {
       "routes": [{ "pattern": "staging.skolia.io", "custom_domain": true }],
+      "define": { "VERSION": "\"dev\"" },
       "d1_databases": [
         {
           "binding": "DB",

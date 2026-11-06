@@ -9,6 +9,9 @@ import type { User } from "./user.ts";
 
 export { User } from "./user.ts";
 
+/** Replaced at build time (wrangler.jsonc define, mise.toml deploy) */
+declare const VERSION: string;
+
 interface Env {
   DB: D1Database;
   USER: DurableObjectNamespace<User>;
@@ -50,6 +53,7 @@ export default {
       users: new DurableObjectUsers(env.USER),
       // Misconfigured: accept none rather than run uncapped
       maxImportsPerDay: maxImportsPerDay ?? 0,
+      version: VERSION,
       documents: new D1Documents(env.DB),
       blobs: new R2Blobs(env.BLOBS),
       queue: new CloudflareQueue(env.INGEST),

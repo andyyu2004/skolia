@@ -68,11 +68,13 @@ run = "infra/tf.sh $usage_env apply -input=false"
 [tasks.deploy]
 description = "Terraform, D1 migrations, then the skolia Worker (reader and API) with wrangler"
 usage = 'arg "<env>" { choices "staging" "production" }'
+# The version /api/version and the reader's footer show
+env = { VITE_VERSION = "{{exec(command='git describe --tags --always --dirty')}}" }
 run = [
   "mise run apply $usage_env",
   "mise run migrate $usage_env",
   "pnpm --filter @skolia/reader build",
-  "infra/wrangler.sh $usage_env deploy",
+  'infra/wrangler.sh $usage_env deploy --define "VERSION:\"$VITE_VERSION\""',
 ]
 
 [tasks.deploy-ingest]

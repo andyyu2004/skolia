@@ -32,6 +32,7 @@ function setup({ maxImportsPerDay = 100, auth = local.auth }: { maxImportsPerDay
     documents: new D1Documents(env.DB),
     blobs: new R2Blobs(env.BLOBS),
     queue: new CloudflareQueue(env.INGEST),
+    version: "v1.2.3",
     now: () => new Date(NOW),
   });
 }
@@ -83,6 +84,12 @@ function publish(v: string): Promise<void> {
 async function summaryOf(app: App, id: string): Promise<DocumentSummary> {
   return (await (await app.request(`/api/documents/${id}`)).json()) as DocumentSummary;
 }
+
+test("the version is the build's", async () => {
+  const res = await setup().request("/api/version");
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { version: "v1.2.3" });
+});
 
 test("the D1 migrations make every table and column Better Auth expects", async () => {
   const { toBeCreated, toBeAdded } = await getMigrations(authOptions(authConfig(local.env.DB)));

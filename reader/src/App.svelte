@@ -21,3 +21,5 @@
 {:else}
   <Library />
 {/if}
+
+<footer class="version muted">{import.meta.env.VITE_VERSION ?? "dev"}</footer>
