@@ -6,7 +6,7 @@ build, so any parser label outside schema.py fails loudly here.
 
 Input is plain text, or a CoNLL-U file (its "# text =" lines are used).
 
-usage: uv run python scripts/eval_parser_in_candidates.py input.txt|input.conllu [--limit N]
+usage: uv run python scripts/pl/eval_parser_in_candidates.py input.txt|input.conllu [--limit N]
 """
 
 import argparse
@@ -14,7 +14,7 @@ from collections import Counter
 from collections.abc import Iterator
 from pathlib import Path
 
-from skolia_analysis import pl
+from skolia_analysis.lang.pl import plugin as pl
 from skolia_analysis.schema import Feats
 
 # Depends on the sentence (heads of multi-word units), never in a dictionary
@@ -43,8 +43,9 @@ def main() -> None:
 
     texts = list(sentences(args.input))[: args.limit]
     model = pl.parser()
-    lookup = pl.MorfeuszCandidates()
-    blob = pl.analyze("\n".join(texts), model, lookup, snap=None)
+    lookup = pl.candidate_lookup()
+    text = "\n".join(texts)
+    blob = pl.assemble(text, model(text), model.name, lookup, snap=None)
 
     total = found = without = 0
     patterns: Counter[str] = Counter()

@@ -32,8 +32,9 @@ export function versionsKey(lang: Lang): string {
   return `versions/${lang}.json`;
 }
 
-/** Document id: sha256 hex of the UTF-8 text, as ingest's doc_id. */
-export async function docId(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+/** Document id: sha256 hex of the UTF-8 "{lang}\n{text}", as ingest's doc_id. The same
+ * text imported in two languages is two documents. */
+export async function docId(lang: Lang, text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${lang}\n${text}`));
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }

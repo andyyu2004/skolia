@@ -3,14 +3,14 @@ Morfeusz candidates and Walenty valency, but no parser model."""
 
 from collections.abc import Sequence
 
-from skolia_analysis import pl
 from skolia_analysis.blob import CandidateLookup
+from skolia_analysis.lang.pl import plugin as pl
+from skolia_analysis.lang.pl.valency import Valency
+from skolia_analysis.lang.pl.walenty.parse import empty_expansions, parse_schema
 from skolia_analysis.parsed import ParsedSentence, ParsedToken, ParsedWord, align
 from skolia_analysis.schema import Blob, Deprel, ExpressionDef, Feats, Token, Upos
-from skolia_analysis.valency import Valency
-from skolia_analysis.walenty.parse import empty_expansions, parse_schema
 
-# As in test_pl_cases.py (tests/ is not a package, so it can't be imported)
+# As in test_pl_cases.py (tests/pl/ is not a package, so it can't be imported)
 VALENCY = Valency(
     {
         "version": "walenty-test",
@@ -225,3 +225,16 @@ def test_an_empty_sentence_is_skipped() -> None:
     text = "Szukam starego psa."
     blob = assemble(text, [ParsedSentence(()), szukam_starego_psa(text)])
     assert [len(s["tokens"]) for s in blob["sentences"]] == [4]
+
+
+def test_participle_belongs_to_the_verb_entry() -> None:
+    assert (
+        pl.entry_upos(
+            {"lemma": "położyć", "upos": "ADJ", "xpos": "ppas:sg:nom:m3:perf:aff", "feats": {}}
+        )
+        == "VERB"
+    )
+    assert (
+        pl.entry_upos({"lemma": "stary", "upos": "ADJ", "xpos": "adj:sg:nom:m3:pos", "feats": {}})
+        == "ADJ"
+    )

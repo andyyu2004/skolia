@@ -50,6 +50,8 @@ class KaikkiEntry(TypedDict, total=False):
     senses: list[KaikkiSense]
     forms: list[KaikkiForm]
     head_templates: list[KaikkiHeadTemplate]
+    etymology_number: int
+    """Set when a word has several etymologies, each its own entry: 1, 2, ..."""
 
 
 def read(path: Path) -> Iterator[KaikkiEntry]:

@@ -9,23 +9,22 @@ Metrics are F1 over aligned words: UPOS, XPOS, UFeats (universal features), AllT
 three right), Lemmas, UAS (right head), LAS (right head and relation), MLAS/BLEX (LAS that
 also requires features/lemma right on content words).
 
-usage: uv run python scripts/eval_ud.py gold.conllu [--model stanza] [--snap none lemma ...]
+usage: uv run python scripts/eval_ud.py gold.conllu --lang pl [--model stanza]
+                                         [--snap none lemma ...]
 """
 
 import argparse
-import hashlib
-import pickle
 import subprocess
 import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import cast
 
-from skolia_analysis import conllu, pl, reconcile
-from skolia_analysis.parsed import ParsedSentence, Parser
-from skolia_analysis.schema import Blob
-from skolia_analysis.valency import Valency
+from skolia_analysis import lang, reconcile
+from skolia_analysis.conllu import write
+from skolia_analysis.parsed import Parser
+from skolia_analysis.plugin import Options
+from skolia_analysis.treebank import CachedParser, gold_text
 
 EVALUATOR = Path(__file__).parent / "vendor" / "conll18_ud_eval.py"
 METRICS = [
@@ -34,12 +33,6 @@ METRICS = [
     *("UAS", "LAS", "MLAS", "BLEX"),
 ]
 NO_SNAP = "none"
-
-
-def gold_text(gold: Path) -> str:
-    prefix = "# text = "
-    lines = gold.read_text(encoding="utf-8").splitlines()
-    return "\n\n".join(line.removeprefix(prefix) for line in lines if line.startswith(prefix))
 
 
 def evaluate(gold: Path, system: Path) -> dict[str, float]:
@@ -57,90 +50,11 @@ def evaluate(gold: Path, system: Path) -> dict[str, float]:
     return scores
 
 
-SHOW_CHANGES = 25
-
-
-def report_case_changes(gold: Path, text: str, before: Blob, after: Blob) -> None:
-    """Words whose Case the valency correction changed, scored against the gold Case.
-    Only sentences the analyser tokenized like the gold (same word forms) are compared."""
-    gold_by_text = {s.text: s for s in conllu.read(gold)}
-    fixed = broken = still_wrong = unmatched = 0
-    examples: list[str] = []
-    for old_sentence, new_sentence in zip(before["sentences"], after["sentences"], strict=True):
-        pairs = list(zip(old_sentence["tokens"], new_sentence["tokens"], strict=True))
-        changed = [
-            (i, old, new)
-            for i, (old, new) in enumerate(pairs)
-            if old["feats"].get("Case") != new["feats"].get("Case")
-        ]
-        if not changed:
-            continue
-        reference = gold_by_text.get(text[old_sentence["start"] : old_sentence["end"]])
-        forms = [t["text"] for t in old_sentence["tokens"]]
-        if reference is None or [w.form for w in reference.words] != forms:
-            unmatched += len(changed)
-            continue
-        for i, old, new in changed:
-            truth = reference.words[i].feats.get("Case")
-            if new["feats"].get("Case") == truth:
-                fixed += 1
-                verdict = "fixed"
-            elif old["feats"].get("Case") == truth:
-                broken += 1
-                verdict = "BROKEN"
-            else:
-                still_wrong += 1
-                verdict = "still wrong"
-            if len(examples) < SHOW_CHANGES:
-                head = new["head"]
-                verb = new_sentence["tokens"][head]["text"] if head is not None else "-"
-                examples.append(
-                    f"    {verdict:11} {new['text']:14} {old['feats'].get('Case')} -> "
-                    f"{new['feats'].get('Case')} (gold {truth}), governed by {verb}"
-                )
-    print(
-        f"valency case changes: {fixed} fixed, {broken} broken, {still_wrong} changed but "
-        f"still wrong, {unmatched} in sentences tokenized differently from the gold",
-        file=sys.stderr,
-    )
-    print("\n".join(examples), file=sys.stderr)
-
-
-class CachedParser:
-    """Keeps a parser's output on disk, keyed by model and input text, so comparing snap
-    policies doesn't re-run slow models."""
-
-    def __init__(self, model: str, cache: Path) -> None:
-        self._model = model
-        self._cache = cache
-        self._parser: Parser | None = None
-
-    def _load(self) -> Parser:
-        if self._parser is None:
-            self._parser = pl.parser(self._model)
-        return self._parser
-
-    @property
-    def name(self) -> str:
-        return self._load().name
-
-    def __call__(self, text: str) -> list[ParsedSentence]:
-        digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:16]
-        path = self._cache / f"{self._model}-{digest}.pickle"
-        if path.exists():
-            with path.open("rb") as f:
-                return cast(list[ParsedSentence], pickle.load(f))
-        parsed = self._load()(text)
-        self._cache.mkdir(parents=True, exist_ok=True)
-        with path.open("wb") as f:
-            pickle.dump(parsed, f)
-        return parsed
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("gold", type=Path)
-    parser.add_argument("--model", default=pl.DEFAULT_MODEL, choices=list(pl.MODELS))
+    parser.add_argument("--lang", choices=lang.LANGS, required=True)
+    parser.add_argument("--model", help="default: the language's")
     parser.add_argument("--cache", type=Path, help="reuse parser output stored here")
     parser.add_argument(
         "--snap", nargs="+", default=[NO_SNAP], choices=[NO_SNAP, *reconcile.POLICIES]
@@ -148,9 +62,16 @@ def main() -> None:
     parser.add_argument("--limit", type=int, help="only the first N sentences")
     parser.add_argument("--out", type=Path, help="keep the system CoNLL-U files here")
     parser.add_argument(
-        "--valency", type=Path, help="also score with case correction from this frames file"
+        "--data",
+        type=Path,
+        help="the language's data directory, to score with what the plugin uses besides the "
+        "parser (Polish: case correction from verb frames)",
     )
     args = parser.parse_args()
+    plugin = lang.plugin(args.lang)
+    model_name: str = args.model or plugin.DEFAULT_MODEL
+    if model_name not in plugin.MODELS:
+        parser.error(f"unknown model {model_name!r}; {args.lang} has {', '.join(plugin.MODELS)}")
 
     gold: Path = args.gold
     text = gold_text(gold)
@@ -161,34 +82,26 @@ def main() -> None:
             gold_file.write(trimmed + "\n\n")
         gold = Path(gold_file.name)
 
-    model: Parser = CachedParser(args.model, args.cache) if args.cache else pl.parser(args.model)
-    lookup = pl.candidate_lookup()
+    model: Parser = (
+        CachedParser(args.lang, model_name, lambda: plugin.parser(model_name), args.cache)
+        if args.cache
+        else plugin.parser(model_name)
+    )
     started = time.perf_counter()
     parsed = model(text)
     seconds = time.perf_counter() - started
-    print(f"{args.model}: parsed {len(parsed)} sentences in {seconds:.0f} s", file=sys.stderr)
+    print(f"{model_name}: parsed {len(parsed)} sentences in {seconds:.0f} s", file=sys.stderr)
 
     out: Path = args.out or Path(tempfile.mkdtemp())
     out.mkdir(parents=True, exist_ok=True)
     rows: list[tuple[str, dict[str, float]]] = []
-    walenty = Valency.load(args.valency) if args.valency else None
     for snap in args.snap:
         policy = None if snap == NO_SNAP else snap
-        blob = pl.assemble(text, parsed, model.name, lookup, snap=policy)
-        system = out / f"{args.model}-snap-{snap}.conllu"
-        system.write_text(conllu.write(blob, text), encoding="utf-8")
+        analyzer = plugin.analyzer(model, Options(policy), args.data)
+        blob = analyzer.assemble(text, parsed)
+        system = out / f"{args.lang}-{model_name}-snap-{snap}.conllu"
+        system.write_text(write(blob, text), encoding="utf-8")
         rows.append((snap, evaluate(gold, system)))
-        if walenty is None:
-            continue
-        # With valency but no correction, then with: the difference is the correction
-        plain = pl.assemble(
-            text, parsed, model.name, lookup, snap=policy, valency=walenty, correct_cases=False
-        )
-        corrected = pl.assemble(text, parsed, model.name, lookup, snap=policy, valency=walenty)
-        system = out / f"{args.model}-snap-{snap}-cases.conllu"
-        system.write_text(conllu.write(corrected, text), encoding="utf-8")
-        rows.append((f"{snap}+cases", evaluate(gold, system)))
-        report_case_changes(gold, text, plain, corrected)
 
     print(f"model {model.name}, gold {args.gold.name}, F1 %")
     print(f"{'snap':12}" + "".join(f"{m:>9}" for m in METRICS))

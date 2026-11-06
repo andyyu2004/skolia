@@ -15,7 +15,7 @@ what a broader version did on PDB and why the treebank undercounts it.
 
 from collections.abc import Sequence
 
-from .schema import Case, CaseReason, Deprel, Feats, Reading, Token, Upos, VerbForm
+from ...schema import Case, CaseReason, Deprel, Feats, Reading, Token, Upos, VerbForm
 from .valency import Requirement, Valency
 
 # Complements whose case the verb decides

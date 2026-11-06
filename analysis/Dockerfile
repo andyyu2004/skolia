@@ -1,11 +1,14 @@
 # syntax=docker/dockerfile:1
 # (1.10+ for secret mounts as environment variables)
-# skolia-ingest, the Cloudflare container (wrangler builds it for wrangler dev;
-# infra/deploy-ingest.sh for staging and production). For linux/amd64 and linux/arm64,
-# from the repo root:
-#   docker build -f analysis/Dockerfile .
+# skolia-ingest, the Cloudflare containers, one image per language (wrangler builds them
+# for wrangler dev; infra/deploy-ingest.sh for staging and production). For linux/amd64
+# and linux/arm64, from the repo root:
+#   docker build -f analysis/Dockerfile --build-arg SKOLIA_LANG=pl .
 # Models and lexicon are in the image, so a container that wakes for a job needs nothing
 # from outside but R2. data/lexicon/ must be built first (mise run data).
+
+# The language the image is for: en or pl
+ARG SKOLIA_LANG
 
 # --- Morfeusz from source ---------------------------------------------------------
 # PyPI's morfeusz2 has a Linux wheel for x86-64 only, so the library and its Python
@@ -53,19 +56,21 @@ RUN sed -i '/add_subdirectory (java)/d' Morfeusz/morfeusz/wrappers/CMakeLists.tx
  && make -C out -j"$(nproc)" package-python3-fatwhl
 
 # --- the models --------------------------------------------------------------------
-# The models the default parser (COMBO) loads, at fixed revisions. Downloaded here, with
-# only huggingface_hub (the version uv.lock has), and copied into the image below ahead
-# of everything else: each model's layer then depends on nothing but its files, so a
-# dependency or code change doesn't make a new 1 GB layer to push. The base model's
-# weights aren't needed: COMBO's checkpoints replace them (combo_parser.py). The optional
+# The models each language's default parser loads, at fixed revisions. Downloaded here,
+# with only huggingface_hub (the version uv.lock has), and copied into the image below
+# ahead of everything else: each model's layer then depends on nothing but its files, so
+# a dependency or code change doesn't make a new 1 GB layer to push. The optional
 # hf_token build secret (--secret id=hf_token,env=HF_TOKEN) raises the Hub's rate
 # limits; it isn't stored in the image and doesn't change the cache key.
 # Each model gets a cache of its own: huggingface_hub keeps large files in the cache's
 # shared blobs/, outside the model's directory, so this keeps them apart for the copy.
-FROM python:3.12.13-slim AS models
-
+FROM python:3.12.13-slim AS fetch
 RUN pip install --no-cache-dir huggingface-hub==2.4.0 hf-xet==1.8.0
 COPY analysis/scripts/fetch_model.py /tmp/
+
+# Polish: COMBO. The base model's weights aren't needed: COMBO's checkpoints replace them
+# (combo_parser.py).
+FROM fetch AS models-pl
 RUN --mount=type=secret,id=hf_token,env=HF_TOKEN \
     HF_HUB_CACHE=/models/xlm-roberta-base python /tmp/fetch_model.py \
       FacebookAI/xlm-roberta-base e73636d4f797dec63c3081bb6ed5c7b0bb3f2089 \
@@ -80,45 +85,79 @@ RUN --mount=type=secret,id=hf_token,env=HF_TOKEN \
     HF_HUB_CACHE=/models/combo-nlp-models python /tmp/fetch_model.py \
       clarin-pl/combo-nlp-models 668b5a5d5f1afb5b57b0d9b04062c5ed3f812005
 
-# --- skolia-ingest ----------------------------------------------------------------
-FROM python:3.12.13-slim AS ingest
+# English: Stanza's default_accurate models for stanza 1.15.0 (the version uv.lock has)
+# and the ELECTRA they're built on, which Stanza loads from the Hub cache. Stanza finds
+# its models through resources.json, pinned here by hash.
+FROM fetch AS models-en
+RUN --mount=type=secret,id=hf_token,env=HF_TOKEN \
+    HF_HUB_CACHE=/models/electra-large python /tmp/fetch_model.py \
+      google/electra-large-discriminator c13c3df7efadc2162f42588bd28eb4e187d602a5 \
+      config.json pytorch_model.bin tokenizer.json tokenizer_config.json vocab.txt
+COPY analysis/scripts/fetch_stanza.py /tmp/
+ARG STANZA_RESOURCES_SHA256=ed01f17735f351e8f08fda331c3208091657d79420a2a10b4f9cfbc685f3d65d
+RUN --mount=type=secret,id=hf_token,env=HF_TOKEN \
+    python /tmp/fetch_stanza.py /models/stanza en 4003b0a5a175588fd8f6cb17fde741350f5fd725 \
+      tokenize/combined_charlm.pt mwt/combined.pt lemma/combined_charlm.pt \
+      pos/combined_electra-large.pt depparse/combined_electra-large.pt \
+      pretrain/conll17.pt forward_charlm/1billion.pt backward_charlm/1billion.pt \
+ && python -c "import urllib.request as u; u.urlretrieve('https://raw.githubusercontent.com/stanfordnlp/stanza-resources/main/resources_1.15.0.json', '/models/stanza/resources.json')" \
+ && echo "$STANZA_RESOURCES_SHA256  /models/stanza/resources.json" | sha256sum -c -
 
-# The model caches merged into one, a layer each: Cloudflare's registry times out
-# committing a single 3 GB layer
-ARG HUB=/root/.cache/huggingface/hub
-COPY --from=models /models/xlm-roberta-base/ $HUB/
-COPY --from=models /models/combo-nlp/ $HUB/
-COPY --from=models /models/combo-seg/ $HUB/
-COPY --from=models /models/combo-nlp-models/ $HUB/
-
+# --- the code and its dependencies, the same for every language -------------------
+FROM python:3.12.13-slim AS app
 COPY --from=ghcr.io/astral-sh/uv:0.12.1 /uv /usr/local/bin/uv
-COPY --from=morfeusz /build/dictionaries/ /usr/local/share/morfeusz2/dictionaries/
 COPY --from=morfeusz /wheels/ /wheels/
-
 WORKDIR /app
 ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 
 # Dependencies first, so code changes don't reinstall PyTorch. morfeusz2 comes from
-# the wheel built above instead of PyPI.
+# the wheel built above instead of PyPI (every image has the binding; only Polish's
+# has the dictionaries it needs to run).
 COPY analysis/pyproject.toml analysis/uv.lock analysis/.python-version ./
 # uv's download cache lives in a build cache mount, not in the image (about 1 GB)
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project --no-install-package morfeusz2
 
 COPY analysis/src ./src
-COPY analysis/typings ./typings
-# uv sync removes packages the lockfile doesn't install, so the wheel goes in last
+# uv sync removes packages the lockfile doesn't install, so the wheel goes in last. The
+# project is installed editable, so a code change leaves .venv as it is.
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-package morfeusz2 \
  && uv pip install --python .venv/bin/python --no-deps /wheels/morfeusz2-*.whl
 
-ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 HF_HUB_OFFLINE=1
-# Fails the build if the parser needs a model file not fetched above
-RUN python -c "from skolia_analysis import pl; pl.parser(pl.DEFAULT_MODEL)"
+# --- one image per language ---------------------------------------------------------
+# Each starts with its models, then the shared .venv (the same layer in every image),
+# then the code and its own lexicon. The model caches merged into one, a layer each:
+# Cloudflare's registry times out committing a single 3 GB layer.
+FROM python:3.12.13-slim AS ingest-pl
+ARG HUB=/root/.cache/huggingface/hub
+COPY --from=models-pl /models/xlm-roberta-base/ $HUB/
+COPY --from=models-pl /models/combo-nlp/ $HUB/
+COPY --from=models-pl /models/combo-seg/ $HUB/
+COPY --from=models-pl /models/combo-nlp-models/ $HUB/
+COPY --from=morfeusz /build/dictionaries/ /usr/local/share/morfeusz2/dictionaries/
+COPY --from=app /app/.venv /app/.venv
+COPY --from=app /app/src /app/src
 COPY data/lexicon/pl.sqlite data/lexicon/pl-valency.json /lexicon/
 
-ENV SKOLIA_HTTP_PORT=8080 \
-    SKOLIA_LEXICON=/lexicon/pl.sqlite \
-    SKOLIA_VALENCY=/lexicon/pl-valency.json
+FROM python:3.12.13-slim AS ingest-en
+ARG HUB=/root/.cache/huggingface/hub
+COPY --from=models-en /models/electra-large/ $HUB/
+COPY --from=models-en /models/stanza/ /models/stanza/
+COPY --from=app /app/.venv /app/.venv
+COPY --from=app /app/src /app/src
+COPY data/lexicon/en.sqlite /lexicon/
+ENV STANZA_RESOURCES_DIR=/models/stanza
+
+# --- the image for SKOLIA_LANG ------------------------------------------------------
+FROM ingest-${SKOLIA_LANG}
+ARG SKOLIA_LANG
+WORKDIR /app
+ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 HF_HUB_OFFLINE=1 \
+    SKOLIA_HTTP_PORT=8080 \
+    SKOLIA_LANGS=$SKOLIA_LANG \
+    SKOLIA_DATA=/lexicon
+# Fails the build if the parser needs a model file not copied above
+RUN python -c "from skolia_analysis import lang; p = lang.plugin('$SKOLIA_LANG'); p.parser(p.DEFAULT_MODEL)"
 EXPOSE 8080
 CMD ["skolia-ingest"]

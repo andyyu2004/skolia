@@ -2,8 +2,8 @@
 
 from typing import Literal, NotRequired, TypedDict
 
+from ..lang.pl.walenty.model import Schema
 from ..schema import Feats, Upos
-from ..walenty.model import Schema
 
 
 class Example(TypedDict):
@@ -42,7 +42,8 @@ class Form(TypedDict):
 
 class Paradigm(TypedDict):
     homonym: str
-    """Morfeusz's homonym label, e.g. Sm1 (pies: cop) vs Sm2 (pies: dog)."""
+    """Tells apart a lemma's tables with different forms, e.g. Morfeusz's Sm1 (pies: cop) vs
+    Sm2 (pies: dog). Empty when the lemma has one table."""
     forms: list[Form]
 
 
@@ -82,6 +83,12 @@ type Match = Literal[
 BUNDLE_SCHEMA = 1
 """The bundle's JSON shape. Bump it when the shape changes, so documents get new bundles
 and the reader can refuse one it doesn't know."""
+
+BUNDLER_VERSION = "2"
+"""The bundle-making code's version (lexicon/bundle.py and the plugins' bundlers). Bump it
+when a change gives different bundles for the same analysis and lexicon (the lookup
+fallbacks, how paradigms are made). It's in every bundle's name, so a bump re-bundles each
+document once; ingest reuses the analysis, so that costs a second or two a document."""
 
 
 class Bundle(TypedDict):

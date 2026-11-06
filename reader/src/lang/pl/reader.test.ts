@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Blob, Bundle, Entry, Feats, Schema, Token } from "@skolia/shared/schema";
+import { layout } from "../../lib/doc.ts";
+import { rankSenses } from "../../lib/lexicon.ts";
+import { paradigmTables } from "../../lib/paradigm.ts";
 import { explainCase } from "./cases.ts";
 import { argumentsOf, describePhrase, frames } from "./frames.ts";
-import { layout } from "./doc.ts";
-import { rankSenses } from "./lexicon.ts";
-import { paradigmTables } from "./paradigm.ts";
+import { polish } from "./index.ts";
 
 function token(start: number, end: number, text: string, extra: Partial<Token> = {}): Token {
   return {
@@ -102,7 +103,7 @@ test("the token's features pick the sense", () => {
 
 test("the declension marks the token's own form and case", () => {
   const psa = token(0, 3, "psa", { lemma: "pies", lemma_id: "pl:pies:NOUN", feats: GEN_SG });
-  const [table] = paradigmTables(BUNDLE, PIES, psa);
+  const [table] = paradigmTables(BUNDLE, PIES, psa, polish.paradigm, polish.mergeLabels);
   assert.ok(table);
   assert.deepEqual(table.columns, ["sg", "pl"]);
   const current = table.rows.flatMap((row) =>

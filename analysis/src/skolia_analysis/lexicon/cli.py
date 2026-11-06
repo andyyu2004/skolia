@@ -4,22 +4,24 @@ import sys
 from pathlib import Path
 from typing import cast
 
+from .. import lang
+from ..plugin import lexicon_path
 from ..schema import Blob
-from ..valency import Valency
-from . import build, bundle
-from . import pl as lexicon_pl
+from . import build
 from .store import Lexicon
 
 
 def build_main() -> None:
     parser = argparse.ArgumentParser(
         prog="skolia-build-lexicon",
-        description="Build the Polish lexicon SQLite file from Kaikki's Wiktionary extract.",
+        description="Build a language's lexicon SQLite file from Kaikki's Wiktionary extract.",
     )
-    parser.add_argument("kaikki", type=Path, help="kaikki.org-dictionary-Polish.jsonl")
+    parser.add_argument("lang", choices=lang.LANGS)
+    parser.add_argument("kaikki", type=Path, help="e.g. kaikki.org-dictionary-Polish.jsonl")
     parser.add_argument("out", type=Path, help="output .sqlite file (replaced)")
     args = parser.parse_args()
-    count, stats = build.build(args.kaikki, args.out)
+    source = lang.plugin(args.lang).lexicon_source()
+    count, stats = build.build(args.lang, source, args.kaikki, args.out)
     print(
         f"{count} lemma entries from {stats.entries} Kaikki entries "
         f"({stats.skipped} skipped: inflected forms, phrases, affixes)",
@@ -32,13 +34,17 @@ def bundle_main() -> None:
         prog="skolia-bundle",
         description="Read an analysis blob on stdin, write the document's lexicon bundle.",
     )
-    parser.add_argument("--lexicon", type=Path, required=True, help="lexicon .sqlite file")
-    parser.add_argument("--valency", type=Path, help="Walenty frames .json (skolia-build-valency)")
+    parser.add_argument(
+        "--data",
+        type=Path,
+        required=True,
+        help="the language's data directory: {lang}.sqlite and the plugin's files",
+    )
     parser.add_argument("--indent", type=int, default=None)
     args = parser.parse_args()
     blob = cast(Blob, json.load(sys.stdin))
-    converter = lexicon_pl.Converter()
-    frames = Valency.load(args.valency).frames if args.valency else bundle.no_frames
-    result = bundle.make(blob, Lexicon(args.lexicon), converter.paradigms, frames)
+    data: Path = args.data
+    lexicon = Lexicon(lexicon_path(data, blob["lang"]))
+    result = lang.plugin(blob["lang"]).bundler(lexicon, data)(blob)
     json.dump(result, sys.stdout, ensure_ascii=False, indent=args.indent)
     sys.stdout.write("\n")

@@ -8,19 +8,25 @@ and converted with the same code the analyser uses.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from importlib.metadata import version
 from typing import TYPE_CHECKING
 
-from .. import pl
-from ..nkjp import tag_class
-from ..schema import Feats, Upos
-from .kaikki import KaikkiEntry, KaikkiSense
-from .schema import Example, Form, Paradigm, Relation, Sense
+from ...lexicon import senses as kaikki_senses
+from ...lexicon.kaikki import KaikkiEntry
+from ...lexicon.schema import Form, Paradigm, Relation
+from ...lexicon.source import Converted
+from ...schema import Feats, Upos
+from .morfeusz import MorfeuszCandidates, interpretation_readings, split_homonym
+from .nkjp import VERB_FORM_CLASSES, tag_class
 
 if TYPE_CHECKING:
     from morfeusz2 import Morfeusz
 
-LANG = pl.LANG
+ATTRIBUTION = (
+    "Meanings from Wiktionary (https://en.wiktionary.org) via kaikki.org, CC BY-SA 4.0; "
+    "forms from Morfeusz 2 / SGJP (http://morfeusz.sgjp.pl), BSD 2-clause; "
+    "verb valency from Walenty, IPI PAN (http://zil.ipipan.waw.pl/Walenty), CC BY-SA 4.0"
+)
 
 # Kaikki part of speech -> the UPOS the analyser may give the same word. The first is the
 # fallback when Morfeusz doesn't know the headword.
@@ -89,7 +95,6 @@ ASPECT_TAGS = {"perfective", "imperfective"}
 # Paradigms leave out PronType and ExtPos: the sentence decides them, not the form (jakie
 # is interrogative, PronType=Int, or relative, Rel, depending on use), so the token's
 # form still matches whichever the parser chose.
-MAX_EXAMPLES = 3
 
 # Wiktionary noun gender codes (pl-noun etc.) -> the analyser's features. Codes are
 # gender-animacy with an optional -p for plural-only nouns: m-pr is a masculine person
@@ -117,25 +122,23 @@ HAND_SENSES: dict[tuple[str, Upos], list[str]] = {
 }
 
 
-@dataclass
-class Converted:
-    """One Kaikki entry as the analyser would see it."""
+class Source:
+    """Kaikki's Polish entries, each headword filed under the UPOS Morfeusz gives it."""
 
-    lemma: str
-    upos: tuple[Upos, ...]
-    senses: list[Sense] = field(default_factory=lambda: list[Sense]())
-    relations: list[Relation] = field(default_factory=lambda: list[Relation]())
+    attribution = ATTRIBUTION
 
-
-class Converter:
     def __init__(self) -> None:
-        import morfeusz2
+        self._candidates = MorfeuszCandidates()
 
-        self._morf: Morfeusz = morfeusz2.Morfeusz()
-        self._candidates = pl.MorfeuszCandidates()
+    @property
+    def version(self) -> str:
+        return f"morfeusz-{version('morfeusz2')}"
 
-    def __call__(self, entry: KaikkiEntry) -> Converted | None:
-        """None for entries the analyser never looks up: affixes, phrases, inflected forms."""
+    def hand_entries(self) -> Iterator[Converted]:
+        for (lemma, upos), glosses in HAND_SENSES.items():
+            yield Converted(lemma, (upos,), [{"gloss": g, "tags": []} for g in glosses])
+
+    def convert(self, entry: KaikkiEntry) -> Converted | None:
         word, pos = entry.get("word", ""), entry.get("pos", "")
         if pos not in KAIKKI_POS or not word:
             return None
@@ -149,11 +152,13 @@ class Converter:
         senses = [
             s
             for kaikki_sense in entry.get("senses", [])
-            if (s := _sense(kaikki_sense, gender, extra_tags)) is not None
+            if (s := kaikki_senses.sense(kaikki_sense, INFLECTION_TAGS, gender, extra_tags))
+            is not None
         ]
         if not senses:
             return None
-        relations = list(_derived_from(entry)) + list(_aspect_partners(entry, word))
+        derived = kaikki_senses.derived_from(entry, INFLECTION_TAGS, DERIVATION_TAGS)
+        relations = list(derived) + list(_aspect_partners(entry, word))
         return Converted(word, self._upos(word, pos), senses, relations)
 
     def _upos(self, word: str, pos: str) -> tuple[Upos, ...]:
@@ -164,17 +169,24 @@ class Converter:
         found = {r["upos"] for r in readings if r["lemma"] == word and r["upos"] in allowed}
         return tuple(u for u in allowed if u in found) or allowed[:1]
 
-    def paradigms(self, lemma: str, upos: Upos) -> list[Paradigm]:
+
+class Paradigms:
+    def __init__(self) -> None:
+        import morfeusz2
+
+        self._morf: Morfeusz = morfeusz2.Morfeusz()
+
+    def __call__(self, lemma: str, upos: Upos) -> list[Paradigm]:
         """Every form of the lemma Morfeusz can generate, one paradigm per homonym. A verb's
         paradigm includes its participles and gerunds."""
         by_homonym: dict[str, list[Form]] = {}
         seen: set[tuple[str, str]] = set()
         for interpretation in self._morf.generate(lemma):
             orth, base, _tag, _names, _qualifiers = interpretation
-            base_lemma, homonym = pl.split_homonym(base)
+            base_lemma, homonym = split_homonym(base)
             if base_lemma != lemma:
                 continue
-            for reading in pl.interpretation_readings(interpretation):
+            for reading in interpretation_readings(interpretation):
                 if not _in_paradigm(upos, reading["upos"], reading["xpos"]):
                     continue
                 key = (orth, reading["xpos"])
@@ -191,7 +203,7 @@ class Converter:
 
 def _in_paradigm(entry_upos: Upos, form_upos: Upos, xpos: str) -> bool:
     if entry_upos == "VERB":
-        return form_upos in ("VERB", "AUX") or tag_class(xpos) in pl.VERB_FORM_CLASSES
+        return form_upos in ("VERB", "AUX") or tag_class(xpos) in VERB_FORM_CLASSES
     nominal = {"NOUN", "PROPN"}
     if entry_upos in nominal:
         return form_upos in nominal
@@ -216,56 +228,6 @@ def _gender(entry: KaikkiEntry) -> list[Feats]:
     return found
 
 
-def _sense(sense: KaikkiSense, gender: list[Feats], extra_tags: list[str]) -> Sense | None:
-    glosses = sense.get("glosses", [])
-    tags = sense.get("tags", [])
-    if not glosses:
-        return None
-    is_pointer = bool(sense.get("form_of") or sense.get("alt_of"))
-    if is_pointer and INFLECTION_TAGS.intersection(tags):
-        return None
-    result: Sense = {
-        "gloss": ": ".join(glosses),
-        "tags": [t for t in tags if t != "form-of"] + extra_tags,
-    }
-    if gender:
-        result["when"] = gender
-    examples = list(_examples(sense))
-    if examples:
-        result["examples"] = examples
-    return result
-
-
-def _examples(sense: KaikkiSense) -> Iterator[Example]:
-    for example in sense.get("examples", [])[:MAX_EXAMPLES]:
-        text = example.get("text")
-        if not text:
-            continue
-        result: Example = {"text": text}
-        translation = example.get("translation") or example.get("english")
-        if translation:
-            result["translation"] = translation
-        yield result
-
-
-def _derived_from(entry: KaikkiEntry) -> Iterator[Relation]:
-    seen: set[str] = set()
-    for sense in entry.get("senses", []):
-        tags = sense.get("tags", [])
-        if INFLECTION_TAGS.intersection(tags):
-            continue
-        for target in sense.get("form_of", []):
-            lemma = target.get("word")
-            if not lemma or lemma in seen:
-                continue
-            seen.add(lemma)
-            relation: Relation = {"type": "derived-from", "lemma": lemma}
-            note = next((t for t in DERIVATION_TAGS if t in tags), None)
-            if note:
-                relation["note"] = note
-            yield relation
-
-
 def _aspect_partners(entry: KaikkiEntry, word: str) -> Iterator[Relation]:
     """Wiktionary lists a verb's aspect partner as a form tagged only with its aspect."""
     if entry.get("pos") != "verb":
@@ -275,8 +237,3 @@ def _aspect_partners(entry: KaikkiEntry, word: str) -> Iterator[Relation]:
         tags = set(form.get("tags", []))
         if partner and partner != word and tags and tags <= ASPECT_TAGS:
             yield {"type": "aspect-partner", "lemma": partner, "note": tags.pop()}
-
-
-def hand_entries() -> Iterator[tuple[str, Upos, list[Sense]]]:
-    for (lemma, upos), glosses in HAND_SENSES.items():
-        yield lemma, upos, [{"gloss": g, "tags": []} for g in glosses]

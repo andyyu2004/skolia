@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Local end to end: wrangler dev with both Workers, the ingest container and empty local
+# Local end to end: wrangler dev with both Workers, the ingest containers and empty local
 # D1, R2 and queue, then the smoke test against it. Needs Docker, the reader build and
-# data/lexicon/ (mise run data). Port 8787 must be free: api/.env points the container at it.
+# data/lexicon/ (mise run data). Port 8787 must be free: api/.env points the containers at it.
 set -euo pipefail
 
 api=$(cd "$(dirname "$0")/.." && pwd)

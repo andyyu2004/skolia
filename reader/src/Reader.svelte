@@ -25,7 +25,7 @@
     return doc.pieceOf.get(tokenKey(word.sentence, word.token.head)) ?? null;
   });
 
-  /** The piece holding the word that causes the selected word's case (do, szukać, nie). */
+  /** The piece holding the word that causes the selected word's case (Polish do, szukać, nie). */
   const triggerPiece = $derived.by(() => {
     const word = piece?.words.find((w) => w.token.case_reason?.trigger !== undefined);
     const trigger = word?.token.case_reason?.trigger;
@@ -126,7 +126,7 @@
     {/if}
 
     {#if doc}
-      <article class="text" lang="pl">
+      <article class="text" lang={reading?.lang}>
         {#each doc.pieces as p, i (i)}
           <!-- Words are spans, not buttons: a button is laid out as an inline block, so a
                line could break between a word and the punctuation after it -->
@@ -156,7 +156,14 @@
   {#if piece && reading}
     <!-- Keyed, so a new word starts with its lists folded -->
     {#key selected}
-      <WordSheet bundle={reading.bundle} {piece} {headText} {sentenceTokens} onclose={() => (selected = null)} />
+      <WordSheet
+        lang={reading.lang}
+        bundle={reading.bundle}
+        {piece}
+        {headText}
+        {sentenceTokens}
+        onclose={() => (selected = null)}
+      />
     {/key}
   {/if}
 </div>

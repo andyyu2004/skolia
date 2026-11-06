@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds data/lexicon/pl.sqlite and pl-valency.json from the inputs pinned in
+# Builds data/lexicon/en.sqlite, pl.sqlite and pl-valency.json from the inputs pinned in
 # analysis/inputs.sha256. Each input is kept in R2 as
 # skolia-tfstate/inputs/{sha256}-{name}.zst, since kaikki.org overwrites its extract
 # in place. Needs uv, zstd, unzip, and wrangler credentials (wrangler login, or
@@ -26,5 +26,6 @@ rm -rf "$inputs/walenty"
 unzip -q "$inputs/walenty_20180630-text.zip" -d "$inputs/walenty"
 
 cd "$root/analysis"
-uv run --frozen skolia-build-lexicon "$inputs/kaikki.org-dictionary-Polish.jsonl" "$out/pl.sqlite"
+uv run --frozen skolia-build-lexicon en "$inputs/kaikki.org-dictionary-English.jsonl" "$out/en.sqlite"
+uv run --frozen skolia-build-lexicon pl "$inputs/kaikki.org-dictionary-Polish.jsonl" "$out/pl.sqlite"
 uv run --frozen skolia-build-valency "$inputs/walenty/walenty_20180630-text" "$out/pl-valency.json"

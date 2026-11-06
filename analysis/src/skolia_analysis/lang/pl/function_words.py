@@ -10,7 +10,7 @@ conventions. A lemma with several entries is ambiguous out of context (co: "what
 from collections.abc import Iterator
 from typing import Literal
 
-from .schema import Feats, Upos
+from ...schema import Feats, Upos
 
 type PosFeats = tuple[Upos, Feats]
 

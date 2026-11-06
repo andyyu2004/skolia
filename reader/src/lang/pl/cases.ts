@@ -1,15 +1,7 @@
-// "Why this case?": the analysis's case_reason in plain English.
+// "Why this case?": the analysis's case_reason (lang/pl/cases.py) in plain English.
 import type { Case, Token } from "@skolia/shared/schema";
-
-export const CASE_NAME: Record<Case, string> = {
-  Nom: "nominative",
-  Gen: "genitive",
-  Dat: "dative",
-  Acc: "accusative",
-  Ins: "instrumental",
-  Loc: "locative",
-  Voc: "vocative",
-};
+import { CASE_NAME } from "../../lib/ud.ts";
+import type { CaseExplanation } from "../types.ts";
 
 // Prepositions that take two cases, with what each means
 const TWO_CASE: Partial<Record<string, Partial<Record<Case, string>>>> = {
@@ -26,14 +18,6 @@ const TWO_CASE: Partial<Record<string, Partial<Record<Case, string>>>> = {
 
 /** Agreement and coordination point at another word; follow that far, no further. */
 const MAX_CHAIN = 1;
-
-export interface CaseExplanation {
-  text: string;
-  /** Index in the sentence of the word that causes the case, to mark in the text. */
-  trigger: number | null;
-  /** Where the text names the trigger, so the sheet can mark it the way the text does. */
-  parts: { text: string; trigger: boolean }[];
-}
 
 export function explainCase(tokens: Token[], index: number, depth = 0): CaseExplanation | null {
   const token = tokens[index];

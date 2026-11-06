@@ -111,7 +111,7 @@ export function createApp(deps: Deps) {
     .post("/api/documents", limit, zValidator("json", schemas.ImportRequest, badRequest()), async (c) => {
       const body = c.req.valid("json");
       const request = { ...body, title: body.title?.trim().slice(0, MAX_TITLE_LENGTH) || firstWords(body.text) };
-      const id = await docId(request.text);
+      const id = await docId(request.lang, request.text);
       const existing = await deps.documents.get(id);
       if (existing) {
         const summary = await current(existing, versionsOf(deps.blobs));

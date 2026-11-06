@@ -4,8 +4,12 @@ import type { z } from "zod";
 import type { State, Upos } from "./schema.gen.ts";
 import type * as schemas from "./schemas.ts";
 
-export const LANGS = ["pl"] as const;
+export const LANGS = ["en", "pl"] as const;
 export type Lang = (typeof LANGS)[number];
+
+export function isLang(value: unknown): value is Lang {
+  return LANGS.some((l) => l === value);
+}
 
 /** Longest text accepted by one import, in characters (ingest checks it too). */
 export { MAX_TEXT_LENGTH } from "./schema.gen.ts";
@@ -13,7 +17,8 @@ export { MAX_TEXT_LENGTH } from "./schema.gen.ts";
 export type ImportRequest = z.input<typeof schemas.ImportRequest>;
 
 export interface DocumentSummary {
-  /** sha256 hex of the UTF-8 text: the same text imported twice is one document. */
+  /** sha256 hex of the language and text (docId in keys.ts): the same text imported
+   * twice in one language is one document. */
   id: string;
   title: string;
   lang: Lang;
