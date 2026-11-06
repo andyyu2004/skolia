@@ -1,6 +1,6 @@
 # infra
 
-Terraform for skolia on Cloudflare: R2 bucket, D1 database, queue, the `skolia` Worker (reader + API) on workers.dev and skolia.io, an R2 token for the ingest container, and billing usage alerts. The ingest Worker and its containers are deployed with wrangler (the provider has no container resource).
+Terraform for what wrangler doesn't deploy: R2 bucket, D1 database, queue, an R2 token for the ingest containers, and billing usage alerts. Both Workers are deployed with wrangler: `skolia` (reader + API, on workers.dev and skolia.io) from `api/wrangler.jsonc`, and `skolia-ingest` with its containers from `api/wrangler.ingest.jsonc`. Wrangler applies their Durable Object migrations; the provider resends the first migration on every update, which Cloudflare refuses ([cloudflare/terraform-provider-cloudflare#5701](https://github.com/cloudflare/terraform-provider-cloudflare/issues/5701)).
 
 Account `1d3ca537bca3f2918d2778118d23f0a8`. Secrets in `pass` under `cloudflare/andyyu2004@gmail.com/1d3ca537bca3f2918d2778118d23f0a8/`. Terraform comes from `mise.toml`.
 
@@ -22,7 +22,7 @@ Account `1d3ca537bca3f2918d2778118d23f0a8`. Secrets in `pass` under `cloudflare/
    | `skolia-staging` | `https://staging.skolia.io/api/auth/callback/google` |
    | `skolia` | `https://skolia.io/api/auth/callback/google` |
 
-   Each Worker gets its client's id and secret and its own `BETTER_AUTH_SECRET` (`openssl rand -base64 32`) as secrets: `infra/wrangler.sh <env> secret put GOOGLE_CLIENT_ID`, and the same for `GOOGLE_CLIENT_SECRET` and `BETTER_AUTH_SECRET`. Terraform keeps `secret_text` bindings (`keep_bindings`), so they stay out of the state. Without them sign-in answers 503. Done for `skolia-dev` only.
+   Each Worker gets its client's id and secret and its own `BETTER_AUTH_SECRET` (`openssl rand -base64 32`) as secrets: `infra/wrangler.sh <env> secret put GOOGLE_CLIENT_ID`, and the same for `GOOGLE_CLIENT_SECRET` and `BETTER_AUTH_SECRET`. `wrangler deploy` keeps them. Without them sign-in answers 503. Done for `skolia-dev` only.
 
 ## Environments
 
@@ -50,7 +50,7 @@ set -x AWS_SECRET_ACCESS_KEY (pass show $p/skolia-tfstate-secret-access-key)
 
 ## Deploy
 
-A push to main deploys staging and smoke-tests it (imports a new text and waits until it's ready). Production deploys when the workflow is run by hand with `production` ticked (`gh workflow run ci.yml -f production=true`), after staging passes; GitHub Free has no required reviewers on a private repo (`.github/workflows/ci.yml`, `deploy.yml`). Every deploy runs `deploy-ingest`: each language's image (`skolia-ingest-{lang}`) is tagged with a hash of the git trees it's built from (`analysis/`, `.dockerignore`), so it's built and pushed only when that tag isn't in the registry yet, and wrangler leaves an unchanged image deployed as it is. Pull requests get a production `terraform plan`. GitHub needs:
+A push to main deploys staging and smoke-tests it (imports a new text and waits until it's ready). Production deploys when the workflow is run by hand with `production` ticked (`gh workflow run ci.yml -f production=true`), after staging passes; GitHub Free has no required reviewers on a private repo (`.github/workflows/ci.yml`, `deploy.yml`). Every deploy runs `deploy-ingest`: each language's image (`skolia-ingest-{lang}`) is tagged with a hash of the git trees it's built from (`analysis/`, `.dockerignore`), so it's built and pushed only when that tag isn't in the registry yet, and wrangler leaves an unchanged image deployed as it is. Pull requests get a production `terraform plan` (Terraform's resources only, not the Workers). GitHub needs:
 
 - variable `CLOUDFLARE_ACCOUNT_ID`
 - secrets `CLOUDFLARE_API_TOKEN` (the Terraform token above), `TFSTATE_ACCESS_KEY_ID`, `TFSTATE_SECRET_ACCESS_KEY`, `ALERT_EMAIL`
@@ -62,7 +62,7 @@ By hand, with the credentials above, the same tasks CI runs:
 
 ```fish
 mise run plan staging
-mise run deploy staging          # D1 migrations, then terraform apply
+mise run deploy staging          # terraform apply, D1 migrations, the skolia Worker
 mise run deploy-ingest staging   # build, push and deploy the containers
 mise run smoke staging
 ```
