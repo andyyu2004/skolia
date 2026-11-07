@@ -2,7 +2,7 @@
 
 Terraform for what wrangler doesn't deploy: R2 bucket, D1 database, queue, an R2 token for the ingest containers, and billing usage alerts. Both Workers are deployed with wrangler: `skolia` (reader + API, on workers.dev and skolia.io) from `api/wrangler.jsonc`, and `skolia-ingest` with its containers from `api/wrangler.ingest.jsonc`. Wrangler applies their Durable Object migrations; the provider resends the first migration on every update, which Cloudflare refuses ([cloudflare/terraform-provider-cloudflare#5701](https://github.com/cloudflare/terraform-provider-cloudflare/issues/5701)).
 
-Account `1d3ca537bca3f2918d2778118d23f0a8`. Secrets in `pass` under `cloudflare/andyyu2004@gmail.com/1d3ca537bca3f2918d2778118d23f0a8/`. Terraform comes from `mise.toml`.
+Account `1d3ca537bca3f2918d2778118d23f0a8`. Secrets in `pass` under `cloudflare/andyyu2004@gmail.com/1d3ca537bca3f2918d2778118d23f0a8/`. Terraform comes from `flake.nix` (`nix develop`).
 
 ## One-time setup (done 2026-11-05)
 
@@ -42,7 +42,7 @@ A new environment: add it to the checks in `tf.sh`, `wrangler.sh` and `deploy-in
 
 Each pull request from a branch of this repository gets a preview, `pr-N`, deployed and smoke-tested on every push (`ci.yml`, job `preview`). It is on workers.dev only, with no secrets, so sign-in answers 503, and it accepts 20 imports a day. Its wrangler configs are made by `infra/preview.py config pr-N` from the `env.staging` blocks, with `-pr-N` names, its D1 id and its workers.dev URL; `deploy-infra` makes them after Terraform, and `wrangler.sh` when they're missing. They're gitignored.
 
-Closing the pull request tears the preview down (`mise run teardown pr-N`, `infra/teardown.sh`): the queue's consumer, the ingest Worker, its container applications (which `wrangler delete` leaves), the skolia Worker, the bucket's objects, `terraform destroy`, then the state object. Each step skips what's already gone, so it can be run again. Every night `sweep.yml` runs `infra/sweep.sh`, which finds previews by their resources' and state's names, tears down those whose pull request isn't open, and fails if any are left; `infra/sweep.sh -n` lists them without tearing them down.
+Closing the pull request tears the preview down (`just teardown pr-N`, `infra/teardown.sh`): the queue's consumer, the ingest Worker, its container applications (which `wrangler delete` leaves), the skolia Worker, the bucket's objects, `terraform destroy`, then the state object. Each step skips what's already gone, so it can be run again. Every night `sweep.yml` runs `infra/sweep.sh`, which finds previews by their resources' and state's names, tears down those whose pull request isn't open, and fails if any are left; `infra/sweep.sh -n` lists them without tearing them down.
 
 ## Credentials
 
@@ -68,13 +68,13 @@ These are managed in Terraform in the dotfiles (`~/.dotfiles/terraform/github`),
 By hand, with the credentials above, the same tasks CI runs:
 
 ```fish
-mise run plan staging
-mise run deploy staging          # all of the below, in order
-mise run deploy-infra staging    # terraform apply, D1 migrations
-mise run deploy-ingest staging   # build, push and deploy the containers
-mise run deploy-web staging      # the skolia Worker (reader and API)
-mise run smoke staging
-mise run teardown pr-12          # previews only
+just plan staging
+just deploy staging              # all of the below, in order
+just deploy-infra staging        # terraform apply, D1 migrations
+just deploy-ingest staging       # build, push and deploy the containers
+just deploy-web staging          # the skolia Worker (reader and API)
+just smoke staging
+just teardown pr-12              # previews only
 ```
 
 `deploy-ingest` builds one image per language with Nix (`analysis/flake.nix`, `x86_64-linux`, through `analysis/scripts/nix.sh`): the models (fixed-output, pinned by hash), the venv from `uv.lock` (uv2nix), the lexicon from the inputs pinned in `inputs.sha256` (`fetch_inputs.sh <lang>` puts them in the store), and one layer per model, one for PyTorch, one for the other dependencies and one for the lexicon, as Cloudflare's registry times out committing a single 3 GB layer. Its tag is its Nix hash, which `nix eval` gives without building anything. It runs the parser check (`checks.x86_64-linux.{lang}`, which fails if the parser needs a model file the image doesn't have), pushes the image with skopeo (nix2container) with the credentials `wrangler containers push` would use, retrying, and sending only the layers the registry doesn't have, and deploys the ingest Worker with each image, pinned by the digest the registry gives (`skopeo inspect`), in place of `analysis/image/Dockerfile` under its language's name in the container's `images`. The container uses the `durable_object` scheduling policy: the ingest Worker hands each job to the `Ingester` named after its language's image, which starts a container with that image, so a deploy that changes an image sends new jobs to a new container while the old one finishes its jobs and stops. In CI each language's image is built on its own runner, in parallel (`deploy-ingest.sh <env> build <lang>`), pulling from and pushing to the `andyyu2004` Cachix cache everything but the models (`analysis#cacheable-{lang}`), which it downloads again when an image changes; one job then deploys the ingest Worker with all of them (`deploy-ingest.sh <env> deploy`).

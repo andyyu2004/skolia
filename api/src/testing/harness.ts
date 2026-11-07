@@ -47,7 +47,7 @@ export interface Local {
 }
 
 export async function startLocal(): Promise<Local> {
-  assert.ok(existsSync(`${DIST}main.js`), "api/dist/main.js is missing: mise run build first");
+  assert.ok(existsSync(`${DIST}main.js`), "api/dist/main.js is missing: just build first");
   const server = createTestHarness({
     root: API,
     workers: [

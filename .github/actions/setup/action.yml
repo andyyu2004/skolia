@@ -1,5 +1,9 @@
 name: Setup
-description: pnpm, Node and the JS dependencies, uv, and mise (terraform and the tasks)
+description: pnpm, Node and the JS dependencies, uv, and Nix with terraform and just (flake.nix)
+inputs:
+  nix-conf:
+    description: Extra nix.conf lines for the Nix install
+    default: ""
 runs:
   using: composite
   steps:
@@ -15,4 +19,8 @@ runs:
       with:
         working-directory: analysis
         enable-cache: true
-    - uses: jdx/mise-action@v5
+    - uses: DeterminateSystems/determinate-nix-action@v3
+      with:
+        extra-conf: ${{ inputs.nix-conf }}
+    - run: echo "$(nix build --no-link --print-out-paths .#tools)/bin" >> "$GITHUB_PATH"
+      shell: bash

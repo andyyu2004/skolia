@@ -15,7 +15,6 @@ permissions:
 
 env:
   CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
 
 jobs:
   sweep:

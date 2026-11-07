@@ -1,4 +1,4 @@
 interface ImportMetaEnv {
-  /** git describe of the build (mise.toml deploy) */
+  /** git describe of the build (justfile deploy-web) */
   readonly VITE_VERSION?: string;
 }
