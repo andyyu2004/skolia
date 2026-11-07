@@ -34,7 +34,21 @@ dev: dev-api dev-reader
 dev-api: images env-local
     pnpm exec wrangler d1 migrations apply DB --local --env=''
     pnpm exec wrangler d1 migrations apply LEXICON --local --env=''
+    just lexicon-local
     pnpm exec wrangler dev -c wrangler.jsonc -c wrangler.ingest.jsonc --port 8787
+
+# Load data/lexicon/{lang}.sqlite (DEVELOP.md says how to build them) into wrangler dev's lexicon
+# database for cards' meanings; a language without one is left empty, and an unchanged one is skipped
+lexicon-local:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for lang in pl en; do
+      if [ -f "data/lexicon/$lang.sqlite" ]; then
+        infra/load-lexicon.py local "data/lexicon/$lang.sqlite"
+      else
+        echo "lexicon-local: no data/lexicon/$lang.sqlite; cards in $lang will have no meanings" >&2
+      fi
+    done
 
 # api/.env.local, the dev Google OAuth client, from secrets/dev.env if it's missing. sops finds the
 # age key through .envrc.
