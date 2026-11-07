@@ -2,17 +2,20 @@
   import type { User } from "@skolia/shared/api";
   import Explore from "./Explore.svelte";
   import { currentUser } from "./lib/api.ts";
+  import { clearWords, loadWords } from "./lib/words.svelte.ts";
   import Nav from "./Nav.svelte";
   import Reader from "./Reader.svelte";
   import Review from "./Review.svelte";
+  import Settings from "./Settings.svelte";
   import Upload from "./Upload.svelte";
   import { versionUrl } from "./lib/version.ts";
 
-  type Route = { page: "explore" } | { page: "upload" } | { page: "review" } | { page: "reader"; id: string };
+  type Route = { page: "explore" } | { page: "upload" } | { page: "review" } | { page: "settings" } | { page: "reader"; id: string };
 
   function parse(hash: string): Route {
     if (hash === "#/upload") return { page: "upload" };
     if (hash === "#/review") return { page: "review" };
+    if (hash === "#/settings") return { page: "settings" };
     const match = /^#\/doc\/([0-9a-f]{64})$/.exec(hash);
     return match?.[1] ? { page: "reader", id: match[1] } : { page: "explore" };
   }
@@ -29,6 +32,12 @@
       (u) => (user = u),
       (e: unknown) => (error = e instanceof Error ? e.message : String(e)),
     );
+  });
+
+  // The word sheet's statuses belong to whoever is signed in
+  $effect(() => {
+    if (user) loadWords().catch((e: unknown) => (error = e instanceof Error ? e.message : String(e)));
+    else clearWords();
   });
 </script>
 
@@ -48,6 +57,8 @@
   <Upload {user} />
 {:else if route.page === "review"}
   <Review {user} />
+{:else if route.page === "settings"}
+  <Settings {user} />
 {:else}
   <Explore />
 {/if}

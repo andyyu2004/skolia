@@ -1,27 +1,28 @@
-// The signed-in user's word statuses, loaded once and kept as they're changed.
+// The signed-in user's word statuses. App loads them when someone signs in and clears them
+// on sign-out; the word sheet reads and changes them.
 import type { LemmaId, Word, WordStatus } from "@skolia/shared/api";
 import { listWords, setWord } from "./api.ts";
 
 /** byId is null while loading or when signed out. */
 export const words = $state<{ byId: Record<string, Word> | null }>({ byId: null });
 
-let loading: Promise<void> | undefined;
+/** Bumped by each load and clear, so an older response can't replace a newer state. */
+let generation = 0;
 
-export function loadWords(): Promise<void> {
-  loading ??= listWords().then(
-    (list) => {
-      words.byId = list === null ? null : Object.fromEntries(list.map((w) => [w.lemmaId, w]));
-    },
-    (error: unknown) => {
-      loading = undefined;
-      throw error;
-    },
-  );
-  return loading;
+export async function loadWords(): Promise<void> {
+  const mine = ++generation;
+  const list = await listWords();
+  if (mine === generation) words.byId = list && Object.fromEntries(list.map((w) => [w.lemmaId, w]));
+}
+
+export function clearWords(): void {
+  generation++;
+  words.byId = null;
 }
 
 export async function setStatus(lemmaId: LemmaId, status: WordStatus): Promise<void> {
   await setWord(lemmaId, status);
-  const mature = words.byId?.[lemmaId]?.mature ?? false;
-  words.byId = { ...words.byId, [lemmaId]: { lemmaId, status, mature, updated: new Date().toISOString() } };
+  if (words.byId === null) return;
+  const mature = words.byId[lemmaId]?.mature ?? false;
+  words.byId[lemmaId] = { lemmaId, status, mature, updated: new Date().toISOString() };
 }

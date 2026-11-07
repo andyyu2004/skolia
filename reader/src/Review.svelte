@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { MAX_NEW_PER_DAY, RATINGS, isLang, type Due, type DueCard, type Lang, type Rating, type User } from "@skolia/shared/api";
+  import { tick } from "svelte";
+  import { RATINGS, isLang, type Due, type DueCard, type Lang, type Rating, type User } from "@skolia/shared/api";
   import { LANGUAGES } from "@skolia/shared/lang";
   import { UPOS_LABEL } from "@skolia/shared/ud";
-  import { dueCards, getSettings, review, saveSettings, signIn } from "./lib/api.ts";
+  import { dueCards, review, signIn } from "./lib/api.ts";
+  import { keyTarget, shortcut } from "./lib/review.ts";
 
   let { user }: { user: User | null | undefined } = $props();
 
@@ -14,7 +16,10 @@
   let revealed = $state(false);
   let busy = $state(false);
   let error = $state<string | null>(null);
-  let newPerDay = $state<number | null>(null);
+  let showButton = $state<HTMLButtonElement | null>(null);
+  let goodButton = $state<HTMLButtonElement | null>(null);
+  /** Bumped by each load, so an older response can't replace a newer one. */
+  let generation = 0;
 
   const card = $derived(due?.cards[index]);
   const left = $derived(due ? due.cards.length - index : 0);
@@ -24,21 +29,31 @@
   }
 
   async function load(): Promise<void> {
+    const mine = ++generation;
+    busy = true;
     error = null;
     try {
-      const [next, settings] = await Promise.all([dueCards(), getSettings()]);
+      const next = await dueCards();
+      if (mine !== generation) return;
       due = next;
-      newPerDay = settings.newPerDay;
       index = 0;
       revealed = false;
     } catch (e: unknown) {
-      error = message(e);
+      if (mine === generation) error = message(e);
+    } finally {
+      if (mine === generation) busy = false;
     }
   }
 
   $effect(() => {
     if (user) void load();
   });
+
+  async function reveal(): Promise<void> {
+    revealed = true;
+    await tick();
+    goodButton?.focus();
+  }
 
   async function grade(rating: Rating): Promise<void> {
     if (!card || busy) return;
@@ -53,17 +68,8 @@
     } finally {
       busy = false;
     }
-  }
-
-  async function saveNewPerDay(): Promise<void> {
-    if (newPerDay === null) return;
-    error = null;
-    try {
-      await saveSettings({ newPerDay });
-      await load();
-    } catch (e: unknown) {
-      error = message(e);
-    }
+    await tick();
+    showButton?.focus();
   }
 
   function langOf(c: DueCard): Lang | undefined {
@@ -82,14 +88,14 @@
   }
 
   function onkeydown(event: KeyboardEvent): void {
-    if (!card || event.target instanceof HTMLInputElement) return;
-    if (!revealed && (event.key === " " || event.key === "Enter")) {
-      event.preventDefault();
-      revealed = true;
-    } else if (revealed) {
-      const rating = RATINGS.find((r) => String(r) === event.key);
-      if (rating !== undefined) void grade(rating);
-    }
+    if (!card || busy) return;
+    // KeyboardEvent's fields are getters on its prototype, which a spread wouldn't copy
+    const { key, repeat, altKey, ctrlKey, metaKey } = event;
+    const action = shortcut({ key, repeat, altKey, ctrlKey, metaKey, target: keyTarget(event.target) }, revealed);
+    if (action === null) return;
+    event.preventDefault();
+    if (action.kind === "reveal") void reveal();
+    else void grade(action.rating);
   }
 </script>
 
@@ -100,10 +106,11 @@
 {/snippet}
 
 {#snippet meanings(c: DueCard)}
+  {@const senses = glosses(c)}
   <p class="muted">{UPOS_LABEL[c.entry?.upos ?? "X"]}</p>
-  {#if glosses(c).length > 0}
+  {#if senses.length > 0}
     <ul class="glosses">
-      {#each glosses(c) as sense, i (i)}
+      {#each senses as sense, i (i)}
         <li>{sense.gloss}{#if sense.tags.length > 0} <span class="tags">{sense.tags.join(", ")}</span>{/if}</li>
       {/each}
     </ul>
@@ -117,10 +124,12 @@
   {#if user === null}
     <p class="muted">Sign in to review your words.</p>
     <button type="button" class="primary" onclick={() => void signIn()}>Sign in</button>
-  {:else if due}
-    <p class="counts muted">{left} to go · {due.newLeft} new left today</p>
+  {:else if !due}
+    {#if !error}<p class="muted">Loading…</p>{/if}
+  {:else}
+    <p class="counts muted">{left} to go · {due.newLeft} new left today · <a href="#/settings">Settings</a></p>
     {#if card}
-      <section class="flashcard" aria-live="polite">
+      <section class="flashcard" aria-live="polite" aria-atomic="true">
         {#if card.kind === "recognition"}
           {@render lemma(card)}
         {:else}
@@ -138,31 +147,28 @@
       {#if revealed}
         <div class="grades">
           {#each RATINGS as rating (rating)}
-            <button type="button" class={rating === 3 ? "primary" : "quiet"} disabled={busy} onclick={() => grade(rating)}
-              >{GRADE_LABELS[rating]}</button
-            >
+            {#if rating === 3}
+              <button type="button" class="primary" disabled={busy} aria-keyshortcuts={String(rating)} bind:this={goodButton} onclick={() => grade(rating)}
+                >{GRADE_LABELS[rating]}</button
+              >
+            {:else}
+              <button type="button" class="quiet" disabled={busy} aria-keyshortcuts={String(rating)} onclick={() => grade(rating)}
+                >{GRADE_LABELS[rating]}</button
+              >
+            {/if}
           {/each}
         </div>
+        <p class="muted hint">Keys 1 to 4 grade the card.</p>
       {:else}
-        <button type="button" class="primary" onclick={() => (revealed = true)}>Show answer</button>
+        <button type="button" class="primary" disabled={busy} aria-keyshortcuts="Space Enter" bind:this={showButton} onclick={reveal}
+          >Show answer</button
+        >
+        <p class="muted hint">Space or Enter shows the answer.</p>
       {/if}
     {:else}
       <p>Nothing to review right now. Words you choose to learn in the reader turn into cards here.</p>
-      <button type="button" class="quiet" onclick={() => void load()}>Check again</button>
-    {/if}
-    {#if newPerDay !== null}
-      <form
-        class="settings"
-        onsubmit={(event) => {
-          event.preventDefault();
-          void saveNewPerDay();
-        }}
-      >
-        <label for="new-per-day">New cards a day</label>
-        <input id="new-per-day" type="number" min="0" max={MAX_NEW_PER_DAY} step="1" bind:value={newPerDay} />
-        <button type="submit" class="quiet">Save</button>
-      </form>
+      <button type="button" class="quiet" disabled={busy} onclick={() => void load()}>Check again</button>
     {/if}
   {/if}
-  {#if error}<p class="error">{error}</p>{/if}
+  {#if error}<p class="error" role="alert">{error}</p>{/if}
 </main>

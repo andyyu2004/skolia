@@ -6,7 +6,7 @@
   import type { LemmaId, WordStatus } from "@skolia/shared/api";
   import { entryFor, entryIdFor, pronunciationsOf, rankSenses } from "@skolia/shared/lexicon";
   import { LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
-  import { loadWords, setStatus, words as known } from "./lib/words.svelte.ts";
+  import { setStatus, words as known } from "./lib/words.svelte.ts";
   import { paradigmTables } from "@skolia/shared/paradigm";
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
   import ParadigmTable from "./ParadigmTable.svelte";
@@ -88,18 +88,20 @@
     ["known", "Known"],
     ["ignored", "Ignore"],
   ];
-  let statusError = $state<string | null>(null);
-
-  $effect(() => {
-    loadWords().catch((e: unknown) => (statusError = e instanceof Error ? e.message : String(e)));
-  });
+  /** The word whose status is being saved, and the last failure, by lemma id. */
+  let saving = $state<LemmaId | null>(null);
+  let statusError = $state<{ lemmaId: LemmaId; message: string } | null>(null);
 
   async function mark(lemmaId: LemmaId, status: WordStatus): Promise<void> {
+    if (saving !== null) return;
+    saving = lemmaId;
     statusError = null;
     try {
       await setStatus(lemmaId, status);
     } catch (e: unknown) {
-      statusError = e instanceof Error ? e.message : String(e);
+      statusError = { lemmaId, message: e instanceof Error ? e.message : String(e) };
+    } finally {
+      saving = null;
     }
   }
 </script>
@@ -144,6 +146,7 @@
               type="button"
               class="quiet"
               aria-pressed={current?.status === status}
+              disabled={saving !== null}
               onclick={() => mark(lemmaId, status)}>{label}</button
             >
           {/each}
@@ -151,7 +154,7 @@
             <span class="muted">{current.mature ? "known from your cards" : "learning"}</span>
           {/if}
         </div>
-        {#if statusError}<p class="error">{statusError}</p>{/if}
+        {#if statusError?.lemmaId === lemmaId}<p class="error" role="alert">{statusError.message}</p>{/if}
       {/if}
       <p class="grammar">
         {[word.partOfWord ?? UPOS_LABEL[token.upos], ...featureWords(token.feats)].join(
