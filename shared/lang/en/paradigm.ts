@@ -13,7 +13,7 @@ import {
   type Builder,
   type Form,
   type Table,
-} from "../../lib/paradigm.ts";
+} from "../../paradigm.ts";
 
 function degreeColumn(f: Feats): string | undefined {
   return f.Degree;

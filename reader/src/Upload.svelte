@@ -1,9 +1,16 @@
 <script lang="ts">
   import type { Lang, Licence, User } from "@skolia/shared/api";
-  import { LANGS, LICENCES, MAX_AUTHOR_LENGTH, MAX_SOURCE_LENGTH, MAX_TEXT_LENGTH, isShareable } from "@skolia/shared/api";
-  import { LANGUAGES } from "./lang/index.ts";
+  import {
+    LANGS,
+    LANGUAGE_INFO,
+    LICENCES,
+    LICENCE_INFO,
+    MAX_AUTHOR_LENGTH,
+    MAX_SOURCE_LENGTH,
+    MAX_TEXT_LENGTH,
+    isShareable,
+  } from "@skolia/shared/api";
   import { importDocument, signIn } from "./lib/api.ts";
-  import { LICENCE_INFO } from "./lib/licence.ts";
 
   let { user }: { user: User | null | undefined } = $props();
 
@@ -56,14 +63,14 @@
         <input bind:value={title} placeholder="Title" aria-label="Title" maxlength="200" required />
         <select bind:value={lang} aria-label="Language">
           {#each LANGS as code (code)}
-            <option value={code} lang={code}>{LANGUAGES[code].flag} {LANGUAGES[code].endonym}</option>
+            <option value={code} lang={code}>{LANGUAGE_INFO[code].flag} {LANGUAGE_INFO[code].endonym}</option>
           {/each}
         </select>
       </div>
       <textarea
         bind:value={text}
         {lang}
-        placeholder={`Paste ${LANGUAGES[lang].name} text here`}
+        placeholder={`Paste ${LANGUAGE_INFO[lang].name} text here`}
         rows="14"
         maxlength={MAX_TEXT_LENGTH}
         required

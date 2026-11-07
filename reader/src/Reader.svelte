@@ -1,10 +1,10 @@
 <script lang="ts">
   import type { DocumentSummary, ReadingNames } from "@skolia/shared/api";
+  import { LICENCE_INFO } from "@skolia/shared/api";
   import type { Token } from "@skolia/shared/schema";
   import { getDocument, getText, loadReading, type Reading } from "./lib/api.ts";
-  import { layout, tokenKey, type Layout } from "./lib/doc.ts";
+  import { layout, tokenKey, type Layout } from "@skolia/shared/doc";
   import { afterPoll, notice as noticeFor, retryAfter } from "./lib/reading.ts";
-  import { LICENCE_INFO } from "./lib/licence.ts";
   import WordSheet from "./WordSheet.svelte";
 
   let { id }: { id: string } = $props();

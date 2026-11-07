@@ -1,9 +1,7 @@
 <script lang="ts">
   import type { DocumentSummary, Lang } from "@skolia/shared/api";
-  import { LANGS } from "@skolia/shared/api";
-  import { LANGUAGES } from "./lang/index.ts";
+  import { LANGS, LANGUAGE_INFO, LICENCE_INFO } from "@skolia/shared/api";
   import { listDocuments } from "./lib/api.ts";
-  import { LICENCE_INFO } from "./lib/licence.ts";
   import { badge } from "./lib/reading.ts";
 
   let documents = $state<DocumentSummary[] | null>(null);
@@ -35,7 +33,7 @@
     <select bind:value={lang} aria-label="Language">
       <option value="all">All languages</option>
       {#each LANGS as code (code)}
-        <option value={code} lang={code}>{LANGUAGES[code].flag} {LANGUAGES[code].endonym}</option>
+        <option value={code} lang={code}>{LANGUAGE_INFO[code].flag} {LANGUAGE_INFO[code].endonym}</option>
       {/each}
     </select>
     <input type="search" bind:value={query} placeholder="Search titles" aria-label="Search titles" />
@@ -55,7 +53,7 @@
           <a class="card" href={`#/doc/${doc.id}`}>
             <span class="card-title">{doc.title}</span>
             <span class="muted small">
-              {LANGUAGES[doc.lang].name} · {doc.words.toLocaleString()} {doc.words === 1 ? "word" : "words"} · {doc.importerName} ·
+              {LANGUAGE_INFO[doc.lang].name} · {doc.words.toLocaleString()} {doc.words === 1 ? "word" : "words"} · {doc.importerName} ·
               {dateFormat.format(new Date(doc.imported))} · {LICENCE_INFO[doc.licence].short}
             </span>
             {#if doc.visibility === "private"}

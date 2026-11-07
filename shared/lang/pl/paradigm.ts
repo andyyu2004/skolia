@@ -15,7 +15,7 @@ import {
   type Form,
   type Labels,
   type Table,
-} from "../../lib/paradigm.ts";
+} from "../../paradigm.ts";
 
 const CASE_ORDER = ["Nom", "Gen", "Dat", "Acc", "Ins", "Loc", "Voc"] as const;
 const CASE_SHORT: Record<(typeof CASE_ORDER)[number], string> = {

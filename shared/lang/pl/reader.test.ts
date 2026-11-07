@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Blob, Bundle, Entry, Feats, Schema, Token } from "@skolia/shared/schema";
-import { layout } from "../../lib/doc.ts";
-import { rankSenses } from "../../lib/lexicon.ts";
-import { paradigmTables } from "../../lib/paradigm.ts";
+import { layout } from "../../doc.ts";
+import { rankSenses } from "../../lexicon.ts";
+import { paradigmTables } from "../../paradigm.ts";
 import { explainCase } from "./cases.ts";
 import { argumentsOf, describePhrase, frames } from "./frames.ts";
 import { polish } from "./index.ts";

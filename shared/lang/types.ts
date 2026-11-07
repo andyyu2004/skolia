@@ -1,6 +1,6 @@
 // What the reader needs from a language: everything outside lang/ goes through this.
 import type { Entry, Relation, Token } from "@skolia/shared/schema";
-import type { Layout, MergeLabels } from "../lib/paradigm.ts";
+import type { Layout, MergeLabels } from "../paradigm.ts";
 
 export interface CaseExplanation {
   text: string;
@@ -24,12 +24,6 @@ export interface Use {
 }
 
 export interface Language {
-  /** English name. */
-  name: string;
-  /** The language's name for itself, for language pickers. */
-  endonym: string;
-  /** A flag emoji shown beside the endonym. */
-  flag: string;
   paradigm: Layout;
   /** One label for merged table rows or columns; default: joined with "/". */
   mergeLabels?: MergeLabels;

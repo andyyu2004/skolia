@@ -1,11 +1,11 @@
 <script lang="ts">
   import type { Lang } from "@skolia/shared/api";
   import type { Bundle, Token } from "@skolia/shared/schema";
-  import { LANGUAGES } from "./lang/index.ts";
-  import type { Piece } from "./lib/doc.ts";
-  import { entryFor, rankSenses } from "./lib/lexicon.ts";
-  import { paradigmTables } from "./lib/paradigm.ts";
-  import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "./lib/ud.ts";
+  import { LANGUAGES } from "@skolia/shared/lang";
+  import type { Piece } from "@skolia/shared/doc";
+  import { entryFor, rankSenses } from "@skolia/shared/lexicon";
+  import { paradigmTables } from "@skolia/shared/paradigm";
+  import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
   import ParadigmTable from "./ParadigmTable.svelte";
 
   type WordPiece = Extract<Piece, { kind: "word" }>;
