@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { DocumentSummary, ReadingNames } from "@skolia/shared/api";
   import type { Token } from "@skolia/shared/schema";
-  import { getDocument, loadReading, type Reading } from "./lib/api.ts";
+  import { getDocument, getText, loadReading, type Reading } from "./lib/api.ts";
   import { layout, tokenKey, type Layout } from "./lib/doc.ts";
   import { afterPoll, notice as noticeFor, retryAfter } from "./lib/reading.ts";
   import { LICENCE_INFO } from "./lib/licence.ts";
@@ -11,6 +11,8 @@
 
   let summary = $state<DocumentSummary | null>(null);
   let reading = $state<Reading | null>(null);
+  /** The plain text, shown until a reading is. */
+  let plain = $state<string | null>(null);
   let error = $state<string | null>(null);
   let selected = $state<number | null>(null);
 
@@ -49,6 +51,11 @@
         if (cancelled) return;
         summary = current;
         const step = afterPoll(current, tried);
+        if (step.load === null && reading === null && plain === null) {
+          const text = await getText(id);
+          if (cancelled) return;
+          plain = text;
+        }
         if (step.load !== null) {
           const next = await loadReading(id, step.load);
           if (cancelled) return;
@@ -118,6 +125,9 @@
         </span>
         {#if summary.source}<span><a href={summary.source} rel="noreferrer">source</a></span>{/if}
         {#if summary.visibility === "private"}<span>private</span>{/if}
+        {#if notice.kind === "processing" || notice.kind === "updating"}
+          <em class="processing">{notice.kind === "processing" ? "Processing…" : "Updating…"}</em>
+        {/if}
       </p>
     {/if}
 
@@ -128,10 +138,6 @@
         {notice.previous ? "Updating the analysis failed, so this is the previous one" : "Analysis failed"}:
         {notice.error}
       </p>
-    {:else if notice.kind === "updating"}
-      <p class="muted small">Updating to the latest analysis…</p>
-    {:else if notice.kind === "waiting" && !doc}
-      <p class="muted">{notice.text}</p>
     {/if}
 
     {#if doc}
@@ -159,6 +165,8 @@
       {#if reading}
         <footer class="attribution muted">{reading.bundle.attribution}</footer>
       {/if}
+    {:else if plain !== null}
+      <article class="text" lang={summary?.lang}>{plain}</article>
     {/if}
   </main>
 

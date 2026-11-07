@@ -35,10 +35,11 @@ export function isBusy(summary: DocumentSummary): boolean {
   return summary.state === "queued" || summary.state === "analysing";
 }
 
-/** The line above the text (or instead of it, when there's nothing to show). */
+/** What the page says beside the text. processing: the plain text is shown until the
+ * first reading is ready. updating: a newer reading is on its way. */
 export type Notice =
   | { kind: "none" }
-  | { kind: "waiting"; text: "Loading…" | "Queued…" | "Analysing…" }
+  | { kind: "processing" }
   | { kind: "updating" }
   | { kind: "failed"; error: string; previous: boolean }
   | { kind: "unreachable"; error: string };
@@ -46,13 +47,12 @@ export type Notice =
 /** showing: a reading is on screen. error: the last request failed with this message. */
 export function notice(summary: DocumentSummary | null, showing: boolean, error: string | null): Notice {
   if (error !== null) return { kind: "unreachable", error };
-  if (summary === null) return { kind: "waiting", text: "Loading…" };
+  if (summary === null) return { kind: "none" };
   if (summary.state === "failed") {
     return { kind: "failed", error: summary.error ?? "unknown error", previous: showing };
   }
   if (!isBusy(summary)) return { kind: "none" };
-  if (showing) return { kind: "updating" };
-  return { kind: "waiting", text: summary.state === "analysing" ? "Analysing…" : "Queued…" };
+  return { kind: showing ? "updating" : "processing" };
 }
 
 /** The library's badge for a document, if it needs one. */
@@ -60,5 +60,5 @@ export function badge(summary: DocumentSummary): { text: string; failed: boolean
   if (summary.state === "failed") return { text: "failed", failed: true };
   if (!isBusy(summary)) return null;
   if (summary.reading) return { text: "updating…", failed: false };
-  return { text: summary.state === "analysing" ? "analysing…" : "queued", failed: false };
+  return { text: "processing…", failed: false };
 }

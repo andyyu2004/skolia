@@ -316,6 +316,40 @@ textarea {
   margin-right: 0.4rem;
 }
 
+.processing {
+  font-style: normal;
+  margin-left: 0.25rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: 99px;
+  background: var(--line);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.processing::before {
+  content: "";
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-right: 0.35rem;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 0.05rem;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .processing::before {
+    animation: none;
+  }
+}
+
 .badge {
   font-size: 0.8rem;
   padding: 0.05rem 0.45rem;
