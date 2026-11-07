@@ -21,6 +21,7 @@ interface Flush {
 
 export interface TestEnv {
   DB: D1Database;
+  LEXICON: D1Database;
   USER: DurableObjectNamespace<UserObject>;
   BLOBS: R2Bucket;
   INGEST: Queue<IngestJob | Flush>;
@@ -58,6 +59,7 @@ export async function startLocal(): Promise<Local> {
   await server.listen();
   const worker = server.getWorker<TestEnv>();
   await worker.applyD1Migrations("DB");
+  await worker.applyD1Migrations("LEXICON");
   const env = await worker.getEnv();
   const recorder = await server.getWorker<object, { default: typeof IngestRecorder }>("ingest-recorder").getExport();
   const options = authOptions(authConfig(env.DB));
@@ -96,6 +98,7 @@ export async function startLocal(): Promise<Local> {
         // The system user is the migrations'
         env.DB.prepare(`DELETE FROM "user" WHERE "id" != 'system'`),
       ]);
+      await env.LEXICON.batch([env.LEXICON.prepare("DELETE FROM entry"), env.LEXICON.prepare("DELETE FROM loaded")]);
       const { objects } = await env.BLOBS.list();
       if (objects.length > 0) await env.BLOBS.delete(objects.map((o) => o.key));
       await takeQueued();

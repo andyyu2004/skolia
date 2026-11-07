@@ -1,14 +1,18 @@
 import * as z from "zod";
 import {
+  CARD_KINDS,
   LANGS,
-  LEMMA_STATUSES,
   LICENCES,
   MAX_AUTHOR_LENGTH,
   MAX_LEMMA_LENGTH,
+  MAX_LOOKUP,
+  MAX_NEW_PER_DAY,
   MAX_SOURCE_LENGTH,
   MAX_TEXT_LENGTH,
+  RATINGS,
   UPOS,
   VISIBILITIES,
+  WORD_STATUSES,
   isShareable,
 } from "./api.ts";
 import type { Status as StatusType, Versions as VersionsType } from "./schema.gen.ts";
@@ -19,11 +23,37 @@ export const Visibility = z.enum(VISIBILITIES);
 
 export const LemmaId = z.templateLiteral([Lang, ":", z.string().min(1).max(MAX_LEMMA_LENGTH), ":", z.enum(UPOS)]);
 
-export const LemmaStatus = z.enum(LEMMA_STATUSES);
+export const WordStatus = z.enum(WORD_STATUSES);
 
-export const KnownLemma = z.object({ lemmaId: LemmaId, status: LemmaStatus, updated: z.string() });
+export const Word = z.object({ lemmaId: LemmaId, status: WordStatus, updated: z.string(), mature: z.boolean() });
 
-export const SetLemma = z.object({ status: LemmaStatus });
+export const SetWord = z.object({ status: WordStatus });
+
+export const Settings = z.object({ newPerDay: z.number().int().min(0).max(MAX_NEW_PER_DAY) });
+
+const IsoTime = z.iso.datetime();
+
+/** id: made by the client, so a retried review isn't counted twice. at: when it was
+ * answered. */
+export const ReviewRequest = z.object({
+  id: z.uuid(),
+  cardId: z.uuid(),
+  rating: z.union(RATINGS.map((r) => z.literal(r))),
+  at: IsoTime,
+});
+
+/** The start of the reader's day, for counting today's new cards in its time zone. */
+export const DueQuery = z.object({ dayStart: IsoTime });
+
+export const ScheduledCard = z.object({
+  id: z.uuid(),
+  lemmaId: LemmaId,
+  kind: z.enum(CARD_KINDS),
+  isNew: z.boolean(),
+  dueAt: z.string(),
+});
+
+export const LookupRequest = z.object({ ids: z.array(LemmaId).min(1).max(MAX_LOOKUP) });
 
 export const Licence = z.enum(LICENCES);
 

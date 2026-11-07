@@ -10,19 +10,26 @@ import {
   type ApiError,
   type DocumentList,
   type DocumentSummary,
-  type KnownLemma,
+  MAX_LOOKUP,
+  type Due,
   type Lang,
+  type LemmaId,
+  type LexiconEntry,
+  type Reviewed,
+  type Settings,
   type User,
   type Version,
+  type Word,
 } from "@skolia/shared/api";
 import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { Status, Versions } from "@skolia/shared/schema";
 import * as schemas from "@skolia/shared/schemas";
-import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, Sharing, StoredBlob, StoredDocument, UserData } from "./ports.ts";
+import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, Lexicon, Sharing, StoredBlob, StoredDocument, UserData } from "./ports.ts";
 
 export interface Deps {
   auth: Auth;
   users: UserData;
+  lexicon: Lexicon;
   documents: DocumentStore;
   blobs: BlobStore;
   queue: JobQueue;
@@ -40,6 +47,11 @@ const MAX_TITLE_LENGTH = 200;
 // character limit is checked after parsing.
 const MAX_BODY_BYTES = MAX_TEXT_LENGTH * 6 + 4 * 1024;
 const JSON_TYPE = "application/json";
+/** Most cards one due list has: a session's worth. */
+const MAX_DUE = 200;
+/** How far ahead of the server's clock a review's time may be. */
+const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+const LEMMA_ID_MESSAGE = `lemma id must be {lang}:{lemma}:{upos}, lang one of ${LANGS.join(", ")}`;
 
 export type AppType = ReturnType<typeof createApp>;
 
@@ -88,24 +100,69 @@ export function createApp(deps: Deps) {
       if (!user) return c.json({ error: "not signed in" } satisfies ApiError, 401);
       return c.json(user satisfies User, 200);
     })
-    .get("/api/me/lemmas", async (c) => {
+    .get("/api/me/words", async (c) => {
       const user = await deps.auth.user(c.req.raw.headers);
-      if (!user) return c.json({ error: "not signed in" } satisfies ApiError, 401);
-      return c.json((await deps.users.lemmas(user.id)) satisfies KnownLemma[], 200);
+      if (!user) return signInFirst(c);
+      return c.json((await deps.users.words(user.id)) satisfies Word[], 200);
     })
     .put(
-      "/api/me/lemmas/:lemmaId",
-      zValidator("param", z.object({ lemmaId: schemas.LemmaId }), badRequest(`lemma id must be {lang}:{lemma}:{upos}, lang one of ${LANGS.join(", ")}`)),
-      zValidator("json", schemas.SetLemma, badRequest()),
+      "/api/me/words/:lemmaId",
+      zValidator("param", z.object({ lemmaId: schemas.LemmaId }), badRequest(LEMMA_ID_MESSAGE)),
+      zValidator("json", schemas.SetWord, badRequest()),
       async (c) => {
         const user = await deps.auth.user(c.req.raw.headers);
-        if (!user) return c.json({ error: "not signed in" } satisfies ApiError, 401);
+        if (!user) return signInFirst(c);
         const { lemmaId } = c.req.valid("param");
         const { status } = c.req.valid("json");
-        await deps.users.setLemma(user.id, lemmaId, status, now().toISOString());
+        await deps.users.setWord(user.id, lemmaId, status, now().toISOString());
         return c.body(null, 204);
       },
     )
+    .get("/api/me/cards/due", zValidator("query", schemas.DueQuery, badRequest("dayStart must be an ISO time")), async (c) => {
+      const user = await deps.auth.user(c.req.raw.headers);
+      if (!user) return signInFirst(c);
+      const { dayStart } = c.req.valid("query");
+      const { cards, newLeft } = await deps.users.due(user.id, now().toISOString(), dayStart, MAX_DUE);
+      const entries = new Map<LemmaId, LexiconEntry>();
+      const ids = [...new Set(cards.map((card) => card.lemmaId))];
+      for (let i = 0; i < ids.length; i += MAX_LOOKUP) {
+        for (const entry of await deps.lexicon.entries(ids.slice(i, i + MAX_LOOKUP))) entries.set(entry.lemmaId, entry);
+      }
+      const due = cards.map((card) => ({ ...card, entry: entries.get(card.lemmaId) ?? null }));
+      return c.json({ cards: due, newLeft } satisfies Due, 200);
+    })
+    .post("/api/me/reviews", zValidator("json", schemas.ReviewRequest, badRequest()), async (c) => {
+      const user = await deps.auth.user(c.req.raw.headers);
+      if (!user) return signInFirst(c);
+      const request = c.req.valid("json");
+      if (Date.parse(request.at) > now().getTime() + MAX_CLOCK_SKEW_MS) {
+        return c.json({ error: "review is in the future" } satisfies ApiError, 400);
+      }
+      const outcome = await deps.users.review(user.id, request);
+      switch (outcome.kind) {
+        case "reviewed":
+          return c.json({ cardId: outcome.cardId, dueAt: outcome.dueAt } satisfies Reviewed, 200);
+        case "no-card":
+          return c.json({ error: "no such card" } satisfies ApiError, 404);
+        case "out-of-order":
+          return c.json({ error: "review is older than the card's last review" } satisfies ApiError, 409);
+      }
+    })
+    .get("/api/me/settings", async (c) => {
+      const user = await deps.auth.user(c.req.raw.headers);
+      if (!user) return signInFirst(c);
+      return c.json((await deps.users.settings(user.id)) satisfies Settings, 200);
+    })
+    .put("/api/me/settings", zValidator("json", schemas.Settings, badRequest()), async (c) => {
+      const user = await deps.auth.user(c.req.raw.headers);
+      if (!user) return signInFirst(c);
+      await deps.users.setSettings(user.id, c.req.valid("json"));
+      return c.body(null, 204);
+    })
+    .post("/api/lexicon/entries", zValidator("json", schemas.LookupRequest, badRequest()), async (c) => {
+      const { ids } = c.req.valid("json");
+      return c.json((await deps.lexicon.entries(ids)) satisfies LexiconEntry[], 200);
+    })
     .get("/api/documents", async (c) => {
       const viewer = await deps.auth.user(c.req.raw.headers);
       const records = await deps.documents.list(viewer?.id ?? null);
@@ -177,6 +234,10 @@ export function createApp(deps: Deps) {
 
 async function findDocument(deps: Deps, id: string): Promise<StoredDocument | null> {
   return ID.test(id) ? deps.documents.get(id) : null;
+}
+
+function signInFirst(c: Context) {
+  return c.json({ error: "not signed in" } satisfies ApiError, 401);
 }
 
 function notFound(c: Context) {

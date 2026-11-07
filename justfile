@@ -33,6 +33,7 @@ dev: dev-api dev-reader
 [working-directory('api')]
 dev-api: images env-local
     pnpm exec wrangler d1 migrations apply DB --local --env=''
+    pnpm exec wrangler d1 migrations apply LEXICON --local --env=''
     pnpm exec wrangler dev -c wrangler.jsonc -c wrangler.ingest.jsonc --port 8787
 
 # api/.env.local, the dev Google OAuth client, from secrets/dev.env if it's missing. sops finds the
@@ -65,9 +66,20 @@ images:
 plan env:
     infra/tf.sh {{ env }} plan -input=false
 
-# Apply D1 migrations
+# Apply D1 migrations; the lexicon's too, except on a preview, which reads staging's
 migrate env:
     infra/wrangler.sh {{ env }} d1 migrations apply DB --remote
+    case {{ env }} in pr-*) ;; *) infra/wrangler.sh {{ env }} d1 migrations apply LEXICON --remote ;; esac
+
+# The Nix store path must be readable here: Linux, or SKOLIA_NIX=host (analysis/scripts/nix.sh).
+# Load each language's lexicon into the lexicon database (staging, production or local), from the ingest images' Nix build
+load-lexicon env:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for lang in pl en; do
+      out=$(analysis/scripts/nix.sh nix build --no-link --print-out-paths "./analysis#lexicon-$lang")
+      infra/load-lexicon.py {{ env }} "$out/$lang.sqlite"
+    done
 
 # Terraform: storage, queue, ingest's R2 token, billing alerts
 apply env:

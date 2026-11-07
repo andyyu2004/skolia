@@ -4,7 +4,7 @@ import type { IngestJob } from "@skolia/shared/schema";
 import { createApp, parseImportCap } from "../app.ts";
 import { NO_AUTH, createAuth } from "../auth.ts";
 import type { Auth } from "../ports.ts";
-import { CloudflareQueue, D1Documents, DurableObjectUsers, R2Blobs } from "./adapters.ts";
+import { CloudflareQueue, D1Documents, D1Lexicon, DurableObjectUsers, R2Blobs } from "./adapters.ts";
 import type { User } from "./user.ts";
 
 export { User } from "./user.ts";
@@ -14,6 +14,7 @@ declare const VERSION: string;
 
 interface Env {
   DB: D1Database;
+  LEXICON: D1Database;
   USER: DurableObjectNamespace<User>;
   BLOBS: R2Bucket;
   INGEST: Queue<IngestJob>;
@@ -54,6 +55,7 @@ export default {
     const app = createApp({
       auth: authFor(env),
       users: new DurableObjectUsers(env.USER),
+      lexicon: new D1Lexicon(env.LEXICON),
       // Misconfigured: accept none rather than run uncapped
       maxImportsPerDay: maxImportsPerDay ?? 0,
       version: VERSION,

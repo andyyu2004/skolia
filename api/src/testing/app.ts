@@ -4,7 +4,7 @@ import type { DocumentList, DocumentSummary } from "@skolia/shared/api";
 import { partKey, statusKey, versionsKey } from "@skolia/shared/keys";
 import { createApp } from "../app.ts";
 import type { Auth } from "../ports.ts";
-import { CloudflareQueue, D1Documents, DurableObjectUsers, R2Blobs } from "../worker/adapters.ts";
+import { CloudflareQueue, D1Documents, D1Lexicon, DurableObjectUsers, R2Blobs } from "../worker/adapters.ts";
 import { ORIGIN, startLocal, type Local } from "./harness.ts";
 
 export let local: Local;
@@ -32,6 +32,7 @@ export function setup({ maxImportsPerDay = 100, auth = local.auth }: { maxImport
   return createApp({
     auth,
     users: new DurableObjectUsers(env.USER),
+    lexicon: new D1Lexicon(env.LEXICON),
     maxImportsPerDay,
     documents: new D1Documents(env.DB),
     blobs: new R2Blobs(env.BLOBS),
@@ -47,14 +48,39 @@ export function putJson(key: string, value: unknown): Promise<void> {
   return new R2Blobs(local.env.BLOBS).put(key, JSON.stringify(value), "application/json");
 }
 
-export function putLemma(app: App, headers: Headers | undefined, lemmaId: string, body: unknown) {
+function send(app: App, method: string, path: string, headers: Headers | undefined, body: unknown) {
   const allHeaders = new Headers(headers);
   allHeaders.set("content-type", "application/json");
-  return app.request(`${ORIGIN}/api/me/lemmas/${encodeURIComponent(lemmaId)}`, {
-    method: "PUT",
-    headers: allHeaders,
-    body: JSON.stringify(body),
-  });
+  return app.request(`${ORIGIN}${path}`, { method, headers: allHeaders, body: JSON.stringify(body) });
+}
+
+export function putWord(app: App, headers: Headers | undefined, lemmaId: string, body: unknown) {
+  return send(app, "PUT", `/api/me/words/${encodeURIComponent(lemmaId)}`, headers, body);
+}
+
+export function postReview(app: App, headers: Headers | undefined, body: unknown) {
+  return send(app, "POST", "/api/me/reviews", headers, body);
+}
+
+export function putSettings(app: App, headers: Headers | undefined, body: unknown) {
+  return send(app, "PUT", "/api/me/settings", headers, body);
+}
+
+export function lookUp(app: App, body: unknown) {
+  return send(app, "POST", "/api/lexicon/entries", undefined, body);
+}
+
+/** Lexicon rows as infra/load-lexicon.py loads them, and the version that serves. */
+export async function loadLexicon(lang: string, version: string, entries: { lemmaId: string; lemma: string; upos: string; gloss: string }[]): Promise<void> {
+  const db = local.env.LEXICON;
+  await db.batch([
+    ...entries.map((e) =>
+      db
+        .prepare("INSERT INTO entry (lemma_id, version, lang, lemma, upos, senses, relations) VALUES (?, ?, ?, ?, ?, ?, '[]')")
+        .bind(e.lemmaId, version, lang, e.lemma, e.upos, JSON.stringify([{ gloss: e.gloss, tags: [] }])),
+    ),
+    db.prepare("INSERT INTO loaded (lang, version) VALUES (?, ?) ON CONFLICT (lang) DO UPDATE SET version = excluded.version").bind(lang, version),
+  ]);
 }
 
 export function importText(

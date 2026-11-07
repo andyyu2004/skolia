@@ -1,10 +1,22 @@
-// The ports on Cloudflare: D1 for document metadata, R2 for blobs, Queues for jobs, a
-// Durable Object per user for their own data.
+// The ports on Cloudflare: D1 for document metadata and the lexicon, R2 for blobs, Queues
+// for jobs, a Durable Object per user for their own data.
 import * as z from "zod";
-import type { KnownLemma, LemmaId, LemmaStatus } from "@skolia/shared/api";
-import type { IngestJob } from "@skolia/shared/schema";
-import { DocumentRow } from "@skolia/shared/schemas";
-import type { BlobStore, DocumentRecord, DocumentStore, JobQueue, Sharing, StoredBlob, StoredDocument, UserData } from "../ports.ts";
+import { UPOS, type LemmaId, type LexiconEntry, type ReviewRequest, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
+import type { IngestJob, Relation, Sense } from "@skolia/shared/schema";
+import { DocumentRow, LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
+import type {
+  BlobStore,
+  DocumentRecord,
+  DocumentStore,
+  DueCards,
+  JobQueue,
+  Lexicon,
+  ReviewOutcome,
+  Sharing,
+  StoredBlob,
+  StoredDocument,
+  UserData,
+} from "../ports.ts";
 import type { User } from "./user.ts";
 
 export class DurableObjectUsers implements UserData {
@@ -14,12 +26,63 @@ export class DurableObjectUsers implements UserData {
     this.users = users;
   }
 
-  async lemmas(userId: string): Promise<KnownLemma[]> {
-    return this.users.getByName(userId).lemmas();
+  async words(userId: string): Promise<Word[]> {
+    return this.users.getByName(userId).words();
   }
 
-  async setLemma(userId: string, lemmaId: LemmaId, status: LemmaStatus, updated: string): Promise<void> {
-    await this.users.getByName(userId).setLemma(lemmaId, status, updated);
+  async setWord(userId: string, lemmaId: LemmaId, status: WordStatus, now: string): Promise<void> {
+    await this.users.getByName(userId).setWord(lemmaId, status, now);
+  }
+
+  async due(userId: string, now: string, dayStart: string, limit: number): Promise<DueCards> {
+    return this.users.getByName(userId).due(now, dayStart, limit);
+  }
+
+  async review(userId: string, request: ReviewRequest): Promise<ReviewOutcome> {
+    return this.users.getByName(userId).review(request);
+  }
+
+  async settings(userId: string): Promise<Settings> {
+    return this.users.getByName(userId).settings();
+  }
+
+  async setSettings(userId: string, settings: Settings): Promise<void> {
+    await this.users.getByName(userId).setSettings(settings);
+  }
+}
+
+const LexiconRow = z.object({
+  lemmaId: LemmaIdSchema,
+  lemma: z.string(),
+  upos: z.enum(UPOS),
+  senses: z.string(),
+  relations: z.string(),
+});
+
+/** The lexicon database (skolia-lexicon), loaded by infra/load-lexicon.py from the
+ * same build as the ingest images: each language's loaded version. Its JSON is ours, so
+ * it's trusted to match. */
+export class D1Lexicon implements Lexicon {
+  private readonly db: D1Database;
+
+  constructor(db: D1Database) {
+    this.db = db;
+  }
+
+  async entries(ids: readonly LemmaId[]): Promise<LexiconEntry[]> {
+    if (ids.length === 0) return [];
+    const { results } = await this.db
+      .prepare(
+        `SELECT entry.lemma_id AS lemmaId, entry.lemma, entry.upos, entry.senses, entry.relations
+         FROM entry JOIN loaded ON loaded.lang = entry.lang AND loaded.version = entry.version
+         WHERE entry.lemma_id IN (${ids.map(() => "?").join(", ")})`,
+      )
+      .bind(...ids)
+      .all();
+    return results.map((row) => {
+      const { senses, relations, ...rest } = LexiconRow.parse(row);
+      return { ...rest, senses: JSON.parse(senses) as Sense[], relations: JSON.parse(relations) as Relation[] };
+    });
   }
 }
 

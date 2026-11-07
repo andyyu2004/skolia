@@ -1,7 +1,20 @@
 // What the API needs from its surroundings: D1, R2, Cloudflare Queues and a Durable
 // Object per user (src/worker/adapters.ts), Better Auth (src/auth.ts), and fakes in the
 // tests.
-import type { KnownLemma, Lang, LemmaId, Licence, LemmaStatus, User, Visibility } from "@skolia/shared/api";
+import type {
+  Lang,
+  LemmaId,
+  LexiconEntry,
+  Licence,
+  Reviewed,
+  ReviewRequest,
+  ScheduledCard,
+  Settings,
+  User,
+  Visibility,
+  Word,
+  WordStatus,
+} from "@skolia/shared/api";
 import type { IngestJob } from "@skolia/shared/schema";
 
 /** A document's metadata, owned by the API. Its state lives in the status blob. */
@@ -55,9 +68,27 @@ export interface JobQueue {
   send(job: IngestJob): Promise<void>;
 }
 
+export interface DueCards {
+  cards: ScheduledCard[];
+  newLeft: number;
+}
+
+/** out-of-order: answered before the card's last review. */
+export type ReviewOutcome = ({ kind: "reviewed" } & Reviewed) | { kind: "no-card" } | { kind: "out-of-order" };
+
+/** A user's words, cards and settings, in their own Durable Object. */
 export interface UserData {
-  lemmas(userId: string): Promise<KnownLemma[]>;
-  setLemma(userId: string, lemmaId: LemmaId, status: LemmaStatus, updated: string): Promise<void>;
+  words(userId: string): Promise<Word[]>;
+  setWord(userId: string, lemmaId: LemmaId, status: WordStatus, now: string): Promise<void>;
+  due(userId: string, now: string, dayStart: string, limit: number): Promise<DueCards>;
+  review(userId: string, request: ReviewRequest): Promise<ReviewOutcome>;
+  settings(userId: string): Promise<Settings>;
+  setSettings(userId: string, settings: Settings): Promise<void>;
+}
+
+/** The lexicon, without paradigms. Ids it doesn't have are left out. */
+export interface Lexicon {
+  entries(ids: readonly LemmaId[]): Promise<LexiconEntry[]>;
 }
 
 export interface Auth {

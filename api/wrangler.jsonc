@@ -27,6 +27,11 @@
       "binding": "DB",
       "database_name": "skolia",
       "migrations_dir": "migrations"
+    },
+    {
+      "binding": "LEXICON",
+      "database_name": "skolia-lexicon",
+      "migrations_dir": "lexicon-migrations"
     }
   ],
   "r2_buckets": [
@@ -63,6 +68,12 @@
           "binding": "DB",
           "database_name": "skolia-staging",
           "migrations_dir": "migrations"
+        },
+        {
+          "binding": "LEXICON",
+          "database_name": "skolia-lexicon-staging",
+          // Previews use it too (infra/preview.py)
+          "migrations_dir": "lexicon-migrations"
         }
       ],
       "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "skolia-staging" }],

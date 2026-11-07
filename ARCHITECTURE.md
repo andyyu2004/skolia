@@ -30,8 +30,9 @@ On Cloudflare: Terraform (`infra/`) manages what wrangler doesn't: R2, D1, the q
 |---|---|---|
 | Client | PWA, Svelte 5 + TypeScript; one layout for phone (bottom sheet) and desktop (side panel) | Reader, word/span sheet, paradigm tables, review sessions (FSRS in JS), local state with background sync |
 | API | Cloudflare Workers (TypeScript) | Auth, sync, import job submission, explain proxy + cache, quotas |
-| User data | D1 | Users, document metadata, known lemmas, cards, overrides, explanation cache |
-| Blobs | R2 | Lexicon files per language, source texts, analysis blobs |
+| User data | D1, a Durable Object per user | D1: users, document metadata, overrides, explanation cache. Durable Object: words, cards, reviews |
+| Lexicon | D1 (`skolia-lexicon`) | Senses and relations by lemma id, for flashcards; loaded from the same build as the ingest images |
+| Blobs | R2 | Source texts, analysis blobs, bundles |
 | Analysis | Python on Cloudflare Containers, fed from Cloudflare Queues by a consumer Worker | Segment, analyze, match lexicon, write blob |
 | Lexicon build | Offline Python scripts | Kaikki/Wiktionary + Morfeusz → per-language lexicon files |
 
@@ -120,16 +121,16 @@ start, end, text, lemma, lemma_id, upos, xpos?, feats, head, deprel, candidates?
 
 Expressions per sentence: `{ "from": 2, "to": 4, "id": "pl:dać sobie radę" }`, matched by lemma sequence. Contiguous only at first.
 
-## User data (D1)
+## User data
 
 ```
 user_document(user_id, doc_hash, title, added_at)
-known_lemma(user_id, lemma_id, status)                   -- new / learning / known / ignored
 lookup(user_id, doc_hash, char_start, char_end, at)
-card(id, user_id, lemma_id?, expression_id?, doc_hash, char_start, char_end, fsrs_state, due)
 override(user_id, doc_hash, char_start, char_end, lemma_id, feats)
 explanation_cache(key, text, model, created_at)          -- key = hash(sentence, char_start, char_end)
 ```
+
+Each user's words, flashcards and reviews live in their own Durable Object (`api/src/worker/user.ts`), scheduled with ts-fsrs. The review log is the source of truth, and the cards' scheduling state is rebuilt from it. Cards hold lemma ids, and their dictionary entries come from the lexicon in D1. Details: `docs/adr/0001-flashcards.md`.
 
 After a re-analysis, overrides are re-applied by character offset. If a token boundary has moved, the override is flagged rather than guessed.
 

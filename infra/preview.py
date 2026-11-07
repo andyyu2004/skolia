@@ -7,8 +7,8 @@
   preview.py config pr-12   writes api/wrangler.pr-12.json and api/wrangler.ingest.pr-12.json
   preview.py url pr-12      prints its workers.dev URL
 Each config is the committed config's env.staging block at the top level, with -pr-12
-for -staging in the names, and no routes: a preview is on workers.dev only. Needs
-CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN.
+for -staging in the names (but staging's lexicon), and no routes: a preview is on
+workers.dev only. Needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN.
 """
 
 import json
@@ -86,15 +86,27 @@ def url(env: str) -> str:
     return f"https://{name}-{env}.{subdomain}.workers.dev"
 
 
+# Previews read staging's lexicon rather than load one each
+STAGING_LEXICON = "skolia-lexicon-staging"
+
+
 def config(env: str) -> None:
     web = promote("wrangler.jsonc", env)
     web["workers_dev"] = True
     web["preview_urls"] = False
+    databases = web.get("d1_databases")
+    if not isinstance(databases, list):
+        raise SystemExit("wrangler.jsonc: no d1_databases")
+    # LEXICON stays staging's, which promote renamed
+    for database in databases:
+        binding = as_object(database, "d1_databases")
+        if binding.get("binding") == "LEXICON":
+            binding["database_name"] = STAGING_LEXICON
     web["vars"] = {**as_object(web.get("vars"), "vars"), "MAX_IMPORTS_PER_DAY": MAX_IMPORTS_PER_DAY, "BASE_URL": url(env)}
     configs = {f"wrangler.{env}.json": web, f"wrangler.ingest.{env}.json": promote("wrangler.ingest.jsonc", env)}
     for file, content in configs.items():
         text = json.dumps(content, indent=2)
-        if "staging" in text:
+        if "staging" in text.replace(STAGING_LEXICON, ""):
             raise SystemExit(f"{file}: still names staging")
         (API / file).write_text(f"{text}\n")
         print(f"api/{file}")
