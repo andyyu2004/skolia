@@ -9,7 +9,7 @@ import type { User } from "./user.ts";
 
 export { User } from "./user.ts";
 
-/** Replaced at build time (wrangler.jsonc define, mise.toml deploy) */
+/** Replaced at build time (wrangler.jsonc define, justfile deploy-web) */
 declare const VERSION: string;
 
 interface Env {

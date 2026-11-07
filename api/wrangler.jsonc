@@ -15,7 +15,7 @@
   // wrangler dev would otherwise rewrite each request's Host to the route's, and the
   // ingest container's S3 requests, signed for localhost:8787, would fail
   "dev": { "host": "localhost:8787" },
-  // mise run deploy overrides it with git describe
+  // just deploy-web overrides it with git describe
   "define": { "VERSION": "\"dev\"" },
   "assets": {
     "directory": "../reader/dist",

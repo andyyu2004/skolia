@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local end to end: wrangler dev with both Workers, the ingest containers and empty local
 # D1, R2 and queue, then the smoke test against it. Needs Docker, the reader build and
-# the ingest images (mise run images). Port 8787 must be free: api/.env points the
+# the ingest images (just images). Port 8787 must be free: api/.env points the
 # containers at it.
 set -euo pipefail
 

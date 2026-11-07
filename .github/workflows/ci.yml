@@ -4,7 +4,7 @@ name: CI
 # and a preview environment, pr-<number>, deployed and smoke-tested on each push and torn
 # down when the pull request closes (sweep.yml catches any left). main: deploy staging
 # and smoke-test it. A v* tag on a commit in main: staging, then production. The steps
-# are mise tasks (mise.toml), so a deploy by hand runs the same commands.
+# are just recipes (justfile), so a deploy by hand runs the same commands.
 
 on:
   push:
@@ -19,7 +19,6 @@ permissions:
 
 env:
   CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
 
 jobs:
   check:
@@ -28,8 +27,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      - run: mise run check
-      - run: mise run test
+      - run: just check
+      - run: just test
 
   plan:
     if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
@@ -49,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      - run: mise run plan ${{ matrix.env }}
+      - run: just plan ${{ matrix.env }}
 
   # Pull requests from forks get neither: they'd need the secrets. The group is held for
   # the whole deploy (all of deploy.yml's jobs), so a teardown waits for a deploy, and a
@@ -83,7 +82,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.ref }}
       - uses: ./.github/actions/setup
-      - run: mise run teardown pr-${{ github.event.number }}
+      - run: just teardown pr-${{ github.event.number }}
 
   staging:
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))

@@ -15,18 +15,19 @@ reader (Vite, :5173) → wrangler dev (:8787): skolia → local queue → skolia
                                               └── local D1, R2 ◄── S3 API ──────────┘
 ```
 
-`wrangler dev` runs both Workers from their configs, with local D1, R2 and Queue in `api/.wrangler/state`, and runs each language's ingest container in Docker from the image Nix builds (`analysis/flake.nix`), which `mise run images` loads as `skolia-ingest-{lang}:dev` (`analysis/image/Dockerfile` is just that image). The container reaches the local bucket through the dev server's S3 endpoint (`api/.env`, which wrangler dev loads for both Workers; `--env-file` would reach only the first config, and an `api/.dev.vars` would replace it).
+`wrangler dev` runs both Workers from their configs, with local D1, R2 and Queue in `api/.wrangler/state`, and runs each language's ingest container in Docker from the image Nix builds (`analysis/flake.nix`), which `just images` loads as `skolia-ingest-{lang}:dev` (`analysis/image/Dockerfile` is just that image). The container reaches the local bucket through the dev server's S3 endpoint (`api/.env`, which wrangler dev loads for both Workers; `--env-file` would reach only the first config, and an `api/.dev.vars` would replace it).
 
-Once: install the JavaScript packages, and Docker. Nix is optional: the images are built by Nix in a container (`analysis/scripts/nix.sh`), or by this machine's Nix on x86-64 Linux or with `SKOLIA_NIX=host` (on a Mac, Determinate Nix's Linux builder, after `cachix use andyyu2004`).
+Once: install Nix, the JavaScript packages and Docker. `nix develop` puts `just` and terraform on PATH (`flake.nix`). The images are built by Nix in a container (`analysis/scripts/nix.sh`), or by this machine's Nix on x86-64 Linux or with `SKOLIA_NIX=host` (on a Mac, Determinate Nix's Linux builder, after `cachix use andyyu2004`).
 
 ```fish
+nix develop                  # just and terraform
 pnpm install                 # from the repo root: api, reader and shared
-mise run dev                 # http://localhost:5173 (Vite), or :8787 for the built reader
-mise run e2e                 # fresh local state: import a text, wait until it's ready
+just dev                     # http://localhost:5173 (Vite), or :8787 for the built reader
+just e2e                     # fresh local state: import a text, wait until it's ready
 ```
 
-- `mise run e2e` needs port 8787 free, so stop `mise run dev` first. Its log is `api/.wrangler/e2e.log`.
-- `mise run dev` and `mise run e2e` first run `mise run images`, which loads an image into Docker only when Docker doesn't have it under its Nix hash yet. The first build downloads the models (about 2 GB per language) and the lexicon inputs (`scripts/fetch_inputs.sh`, which needs `wrangler login`) and builds the lexicons; in the container, later builds reuse its store (the Docker volume `skolia-nix-store`).
+- `just e2e` needs port 8787 free, so stop `just dev` first. Its log is `api/.wrangler/e2e.log`.
+- `just dev` and `just e2e` first run `just images`, which loads an image into Docker only when Docker doesn't have it under its Nix hash yet. The first build downloads the models (about 2 GB per language) and the lexicon inputs (`scripts/fetch_inputs.sh`, which needs `wrangler login`) and builds the lexicons; in the container, later builds reuse its store (the Docker volume `skolia-nix-store`).
 - The images are `linux/amd64` only, as wrangler dev (4.151.2) builds and pulls containers for amd64, so on Apple Silicon they run under emulation. Morfeusz is PyPI's `morfeusz2` x86-64 wheel, with SGJP's dictionary from the same release (1.99.15, 2026-06-01).
 - On a phone on the same network: `pnpm --filter @skolia/reader dev --host` and open the address it prints.
 - Sign-in is optional: without it you can read, but no flashcards are made. To try sign-in locally, put the dev OAuth client's credentials (infra/README.md) and any 32+ character secret in `api/.env.local` (git-ignored, loaded with `api/.env`): `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Without them `/api/auth` answers 503. Sign in from http://localhost:5173, the origin `BASE_URL` names.
@@ -35,10 +36,10 @@ mise run e2e                 # fresh local state: import a text, wait until it's
 
 ```fish
 pnpm -r check                # tsc (api), svelte-check (reader)
-pnpm -r test                 # node --test; mise run build first, for api/dist
+pnpm -r test                 # node --test; just build first, for api/dist
 ```
 
-Nothing is faked. The `*.workerd.test.ts` files load the built Worker (`api/dist`, what wrangler deploys) into wrangler's test harness (`api/src/testing/harness.ts`), which runs it in workerd with local D1, R2, queue and Durable Objects. The route tests call the app with the real adapters over those bindings and Better Auth on the local D1. A test-only Worker (`api/src/testing/ingest-recorder.ts`) consumes the local queue so the tests can see what was queued. `mise run test` builds first. The `*.workerd.test.ts` files need both Node and Workers types, so they have their own `tsconfig.workerd-test.json`.
+Nothing is faked. The `*.workerd.test.ts` files load the built Worker (`api/dist`, what wrangler deploys) into wrangler's test harness (`api/src/testing/harness.ts`), which runs it in workerd with local D1, R2, queue and Durable Objects. The route tests call the app with the real adapters over those bindings and Better Auth on the local D1. A test-only Worker (`api/src/testing/ingest-recorder.ts`) consumes the local queue so the tests can see what was queued. `just test` builds first. The `*.workerd.test.ts` files need both Node and Workers types, so they have their own `tsconfig.workerd-test.json`.
 
 Each user's data lives in their own Durable Object (`api/src/worker/user.ts`), addressed by their user id, with plain SQL written where it's used. To change the schema, add the next numbered file to `api/src/user/migrations/` exporting `up` and `down` SQL, and list it in `index.ts` with its version and name; never edit, rename or remove a migration that has been deployed.
 
@@ -142,7 +143,7 @@ PDB is licensed CC BY-NC-SA 4.0 (non-commercial). Use it for evaluation only; do
 
 ### Lexicon
 
-Large inputs and outputs live in `data/` at the repo root (git-ignored). The lexicon and valency files the images ship are built by Nix (`flake.nix`) from the inputs pinned in `inputs.sha256`, kept in R2 (`skolia-tfstate/inputs/{sha256}-{name}.zst`) because kaikki.org overwrites its extract in place. `scripts/fetch_inputs.sh` puts them in the Nix store (needs `wrangler login`); `mise run images` and `deploy-ingest` run it. To build one language's files by themselves:
+Large inputs and outputs live in `data/` at the repo root (git-ignored). The lexicon and valency files the images ship are built by Nix (`flake.nix`) from the inputs pinned in `inputs.sha256`, kept in R2 (`skolia-tfstate/inputs/{sha256}-{name}.zst`) because kaikki.org overwrites its extract in place. `scripts/fetch_inputs.sh` puts them in the Nix store (needs `wrangler login`); `just images` and `deploy-ingest` run it. To build one language's files by themselves:
 
 ```fish
 scripts/fetch_inputs.sh pl

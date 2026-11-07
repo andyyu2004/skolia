@@ -20,7 +20,6 @@ permissions:
 env:
   CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-  MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}
 
 jobs:
   infra:
@@ -38,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      - run: mise run deploy-infra ${{ inputs.env }}
+      - run: just deploy-infra ${{ inputs.env }}
 
   # The images are named by their inputs, not the environment, so a build for one
   # environment is reused by the other
@@ -51,11 +50,10 @@ jobs:
         lang: [pl, en]
     steps:
       - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup
       # The model downloads read HF_TOKEN (impureEnvVars) from the daemon, not this job
-      - uses: DeterminateSystems/determinate-nix-action@v3
+      - uses: ./.github/actions/setup
         with:
-          extra-conf: |
+          nix-conf: |
             extra-experimental-features = configurable-impure-env
             impure-env = HF_TOKEN=${{ secrets.HF_TOKEN }}
       # deploy-ingest pushes to it
@@ -82,8 +80,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      # For the images' tags (nix eval); nothing is built
-      - uses: DeterminateSystems/determinate-nix-action@v3
       - run: infra/deploy-ingest.sh ${{ inputs.env }} deploy
 
   web:
@@ -100,11 +96,11 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_ACCESS_KEY }}
       TF_IN_AUTOMATION: "1"
     steps:
-      # The tags, for git describe (mise.toml deploy-web and smoke)
+      # The tags, for git describe (justfile deploy-web and smoke)
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
-      - run: mise run deploy-web ${{ inputs.env }}
+      - run: just deploy-web ${{ inputs.env }}
       - name: Smoke test
-        run: mise run smoke ${{ inputs.env }}
+        run: just smoke ${{ inputs.env }}
