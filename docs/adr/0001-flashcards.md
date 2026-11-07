@@ -40,8 +40,8 @@ review(id, card_id, rating, review_time)      -- append-only
 - `lemma_id` is the entry's id after the bundle's fallback lookup (`bundle.lookup`), so it matches a lexicon row exactly. *Old* in "Old Town" is filed under `en:old:ADJ`.
 - Only the lemma for now. Practising its forms and cases is a later extension.
 - There are two kinds of card:
-  - `recognition`: the lemma on the front, the English glosses on the back.
-  - `production`: the glosses on the front, with hints that pin down one answer (aspect, sense tags), and the lemma on the back.
+  - `recognition`: the lemma on the front, its meanings on the back.
+  - `production`: the English word on the front (the first sense's translations without their definitions, `clue` in `reader/src/lib/review.ts`) with the part of speech and aspect, and the lemma and its meanings on the back. Form-of glosses ("verbal noun of dopracować") make poor clues.
 - Adding a word from the reader creates the word and both cards. If they already exist, it does nothing. The two cards are scheduled independently, with no special handling of siblings.
 - `known` or `ignored` takes a word's cards out of reviews without deleting them or their history, and `active` brings them back. Marking a word known needs no cards. Known words aren't rated Easy, because Easy brings them back after 54 and 234 days, and those ratings would end up in the review log.
 - Each language is reviewed on its own, like an Anki deck per language, with its own daily allowance of new cards. `card.lang` is generated from the lemma id, and every card index starts with it.
