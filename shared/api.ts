@@ -1,7 +1,7 @@
 // Requests and responses of skolia-api. The analysis and bundle shapes come from the
 // Python schemas (schema.gen.ts); these are the API's own.
 import type { z } from "zod";
-import type { Relation, Sense, State, Upos } from "./schema.gen.ts";
+import type { BundleParadigm, Feats, Pronunciation, Relation, Sense, State, Upos } from "./schema.gen.ts";
 import type * as schemas from "./schemas.ts";
 
 export const LANGS = ["en", "pl"] as const;
@@ -197,13 +197,27 @@ export type Settings = z.output<typeof schemas.Settings>;
 
 export type ReviewRequest = z.output<typeof schemas.ReviewRequest>;
 
-/** A lexicon entry, without paradigms: what a card shows. */
+/** A lexicon entry: what a card shows. Its paradigms' forms point into feature sets,
+ * ["psa", [50, 51]], which the response carries (FeatureSets). */
 export interface LexiconEntry {
   lemmaId: LemmaId;
   lemma: string;
   upos: Upos;
   senses: Sense[];
   relations: Relation[];
+  /** How the lemma is said */
+  pronunciations: Pronunciation[];
+  paradigms: BundleParadigm[];
+}
+
+/** The feature sets a response's paradigms use, by id: { "50": { Case: "Gen", ... } }. An
+ * id means something only within its language's loaded lexicon. */
+export type FeatureSets = Record<string, Feats>;
+
+/** Entries by lemma id, and the feature sets their paradigms use, by language. */
+export interface Lookup {
+  entries: LexiconEntry[];
+  featureSets: Partial<Record<Lang, FeatureSets>>;
 }
 
 /** A card to review. entry is null if the lexicon doesn't have the lemma. */
@@ -217,6 +231,8 @@ export type ScheduledCard = z.output<typeof schemas.ScheduledCard>;
 export interface Due {
   cards: DueCard[];
   newLeft: number;
+  /** The feature sets the cards' paradigms use, in the cards' language */
+  featureSets: FeatureSets;
 }
 
 /** A language's cards due now, and new cards it would show today. */

@@ -2,7 +2,9 @@
   import { tick } from "svelte";
   import { LANGUAGE_INFO, RATINGS, isLang, type CardCounts, type Due, type DueCard, type Lang, type Rating, type User } from "@skolia/shared/api";
   import { LANGUAGES } from "@skolia/shared/lang";
+  import { lemmaTables, type Table } from "@skolia/shared/paradigm";
   import { UPOS_LABEL } from "@skolia/shared/ud";
+  import ParadigmTable from "./ParadigmTable.svelte";
   import { cardCounts, dueCards, review, signIn } from "./lib/api.ts";
   import { clue, keyTarget, shortcut } from "./lib/review.ts";
 
@@ -118,6 +120,14 @@
     return [UPOS_LABEL[c.entry?.upos ?? "X"], ...(first?.tags.filter((t) => ASPECTS.has(t)) ?? [])].join(" · ");
   }
 
+  function tablesOf(c: DueCard): Table[] {
+    const lang = langOf(c);
+    if (!lang || !c.entry || !due) return [];
+    const sets = due.featureSets;
+    const language = LANGUAGES[lang];
+    return lemmaTables((id) => sets[String(id)], c.entry, language.paradigm, language.mergeLabels);
+  }
+
   function lemmaOf(c: DueCard): string {
     return c.entry?.lemma ?? c.lemmaId.split(":")[1] ?? c.lemmaId;
   }
@@ -147,6 +157,28 @@
     <p class="muted">{hintOf(c)}</p>
   {:else}
     <p class="muted">No dictionary meaning yet, so this card has no clue.</p>
+  {/if}
+{/snippet}
+
+{#snippet answer(c: DueCard)}
+  {@const lang = langOf(c)}
+  {@const said = c.entry?.pronunciations ?? []}
+  {#if said.length > 0}
+    <p class="pronunciation">
+      {#each said as p (p.ipa)}
+        <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
+      {/each}
+    </p>
+  {/if}
+  {@render meanings(c)}
+  {@const tables = tablesOf(c)}
+  {#if lang && tables.length > 0}
+    <details class="forms">
+      <summary>Forms</summary>
+      {#each tables as table (table.title)}
+        <ParadigmTable {lang} {table} />
+      {/each}
+    </details>
   {/if}
 {/snippet}
 
@@ -197,7 +229,7 @@
         {#if revealed}
           <hr />
           {#if card.kind === "production"}{@render lemma(card)}{/if}
-          {@render meanings(card)}
+          {@render answer(card)}
         {/if}
       </section>
       {#if revealed}

@@ -5,7 +5,7 @@ import type {
   CardCounts,
   Lang,
   LemmaId,
-  LexiconEntry,
+  Lookup,
   Licence,
   Reviewed,
   ReviewRequest,
@@ -91,7 +91,7 @@ export interface UserData {
 
 /** The lexicon, without paradigms. Ids it doesn't have are left out. */
 export interface Lexicon {
-  entries(ids: readonly LemmaId[]): Promise<LexiconEntry[]>;
+  entries(ids: readonly LemmaId[]): Promise<Lookup>;
 }
 
 export interface Auth {

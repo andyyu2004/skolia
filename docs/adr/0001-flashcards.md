@@ -59,21 +59,57 @@ review(id, card_id, rating, review_time)      -- append-only
 
 ### Lexicon in D1
 
-The lexicon SQLite is built by Nix (`analysis/flake.nix`, `lexicon`) and only exists inside the ingest images, so the API Worker can't read it. It goes into a separate D1 database, `skolia-lexicon`:
+The lexicon SQLite is built by Nix (`analysis/flake.nix`, `lexicon`) and only exists inside the ingest images, so the API Worker can't read it. Cards also need what a document's bundle has and the lexicon doesn't: the lemma's pronunciations, and Polish paradigms, which Morfeusz generates during ingest. So `skolia-build-cards` (`analysis/src/skolia_analysis/lexicon/cards.py`) builds a cards lexicon from it, the Nix output `cards-lexicon-{lang}`, which isn't in the images. That goes into a separate D1 database, `skolia-lexicon` (`api/lexicon-migrations`). Each environment has its own, previews included.
 
-- The columns are `lemma_id, version, lang, lemma, upos, senses, relations`, without paradigms (`api/lexicon-migrations`). Each environment has its own, previews included. Every deploy runs `just load-lexicon` (`deploy.yml`, job `load-lexicon`), from the Nix build the images' job put in Cachix; a preview loads only the English entries for wordfreq's 3,000 most common words (`--sample`): 6,028 entries, about 12,000 rows written with the primary key's index, against D1's 50 million a month included.
-- Sizes of the local lexicons (`data/lexicon/`):
+```sql
+entry(lemma_id, version, lang, lemma, upos, senses, relations, pronunciations, paradigms)
+featureset(lang, version, id, feature, value)
+loaded(lang, version)          -- the version each language serves
+```
 
-  | | entries | senses + relations | paradigms |
-  |---|---|---|---|
-  | pl | 98,917 | 19.8 MB | 0.2 MB |
-  | en | 745,660 | 196.6 MB | 140.9 MB |
+A paradigm lists each spelling once, with the feature sets it has, by id. Morfeusz's
 
-- `just load-lexicon <env>` loads it from the same Nix output the image uses (`analysis#lexicon-{lang}`), through `infra/load-lexicon.py`. It's keyed by the lexicon version in the SQLite's `meta` table:
+```json
+{"form": "psa", "xpos": "subst:sg:gen:m2", "feats": {"Animacy": "Nhum", "Case": "Gen", "Gender": "Masc", "Number": "Sing"}}
+{"form": "psa", "xpos": "subst:sg:acc:m2", "feats": {"Animacy": "Nhum", "Case": "Acc", "Gender": "Masc", "Number": "Sing"}}
+```
+
+is `["psa", [50, 51]]` in `entry.paradigms`:
+
+```json
+[{"homonym": "Sm2", "forms": [["pies", [49]], ["psa", [50, 51]], ["psu", [52]], ...]}]
+```
+
+and sets 50 and 51 are rows of `featureset`, one per UD feature:
+
+```
+lang  version  id  feature  value
+pl    …        50  Animacy  Nhum
+pl    …        50  Case     Gen
+pl    …        50  Gender   Masc
+pl    …        50  Number   Sing
+pl    …        51  Case     Acc
+…
+```
+
+- It's the bundle's compact form (`compact` and `FeatsTable` in `bundle.py`): repeated feature objects and Morfeusz's `xpos` take most of the room, so all of Polish is 45 MB this way and about 889 MB as Morfeusz gives it (extrapolated from 3,000 lemmas).
+- Feature sets are rows, not a column per feature: languages use different features (Polish 24, among them Variant, PrepCase and the layered `Number[psor]`; English 7), and UD lets a language add its own. A set's id only means something within its language and version, since a rebuild can number them differently.
+- `entry.pronunciations` is the lemma's, with the bundle's fallbacks: `[{"ipa": "/ˈpjɛs/"}]`.
+- Paradigms stay JSON rather than a row per form: a card shows a lemma's whole table. A row per form would be about 6.4 million rows (Polish about 5.0 million, extrapolated; English 1,420,877), about 13 million rows written per full load against D1's 50 million a month included. Practising cases, or checking a typed answer against any form, would be the reason to change that.
+- Sizes of the local cards lexicons (`data/lexicon/*.cards.sqlite`):
+
+  | | entries | senses + relations | pronunciations | paradigms | feature sets (rows) |
+  |---|---|---|---|---|---|
+  | pl | 98,917 | 18.8 MB | 2.3 MB | 45.3 MB | 1,834 (10,921) |
+  | en | 745,660 | 191.5 MB | 7.8 MB | 25.5 MB | 35 (136) |
+
+- `just load-lexicon <env>` loads it through `infra/load-lexicon.py`, and every deploy runs it (`deploy.yml`, job `load-lexicon`). It's keyed by the cards lexicon's version, the lexicon's with `+cards1` (`CARDS_VERSION`):
   - An unchanged version is skipped.
   - A new version's rows go in beside the old ones, then `loaded` points at it, and the old rows are deleted 50,000 at a time. A load that stops part way leaves the old version serving. Every run deletes any old rows left over, even when the version hasn't changed.
-  - Loading Polish into wrangler's local D1 took about 5 s for 30 MB of SQL, and gave all 98,917 entries.
-- `POST /api/lexicon/entries { ids }` returns the entries for up to 100 ids. The due list carries its cards' entries, so a review session needs one request. Caching them in IndexedDB for offline review is for later.
+  - A preview loads only the English entries for wordfreq's 3,000 most common words (`--sample`): 6,028 entries, about 12,000 rows written with the primary key's index.
+  - Locally (`just lexicon-local`, which rebuilds `{lang}.cards.sqlite` when the lexicon is newer), loading both took about 75 s: 80 MB of SQL for Polish, 301 MB for English.
+- `POST /api/lexicon/entries { ids }` returns the entries for up to 100 ids and the feature sets their paradigms use, by language. The due list carries its cards' entries and their feature sets, so a review session needs one request. Caching them in IndexedDB for offline review is for later.
+- With pronunciations and paradigms in D1, most of a document's bundle repeats it. The bundle could shrink to what's the document's own (`lookup`, how each token resolves to a lemma id) once D1 also has frames, idioms and the pronunciations of inflected forms; then a lexicon update reaches old documents without re-bundling them.
 
 ### Routes
 
@@ -96,9 +132,9 @@ These replace `/api/me/lemmas`. `dayStart` is the start of the reader's local da
 - The ts-fsrs state is stored as JSON on each card, with its due time, schedule status and interval as generated columns for the queries. It's a cache of the review log, and keeping it as JSON means a ts-fsrs upgrade doesn't need a migration.
 - ts-fsrs adds about 65 KB minified to the Worker (17 KiB gzipped). About 16 KB of that is the FSRS-3 to FSRS-5 models, which `DefaultScheduler` bundles though it uses FSRS-7.
 - `known_lemma` was a test table, so it's dropped, not migrated.
-- D1's limit is 10 GB per database, well above the lexicons' ~220 MB.
+- D1's limit is 10 GB per database, well above the cards lexicons' ~300 MB.
 
 ## Open
 
-- How long a remote load takes. Only a local load of Polish has been tried. D1's limits page allows 100 bound parameters per query (the lookup takes at most 100 ids), 100,000-byte statements (the loader keeps them under 90,000), and a 5 GB file per `d1 execute`.
+- How long a full remote load takes. Only previews' sample has been loaded remotely. D1's limits page allows 100 bound parameters per query (the lookup takes at most 100 ids), 100,000-byte statements (the loader keeps them under 90,000), and a 5 GB file per `d1 execute`.
 - Showing words in the reader by status (new, learning, known), and offline review.

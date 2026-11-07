@@ -98,7 +98,7 @@ export async function startLocal(): Promise<Local> {
         // The system user is the migrations'
         env.DB.prepare(`DELETE FROM "user" WHERE "id" != 'system'`),
       ]);
-      await env.LEXICON.batch([env.LEXICON.prepare("DELETE FROM entry"), env.LEXICON.prepare("DELETE FROM loaded")]);
+      await env.LEXICON.batch([env.LEXICON.prepare("DELETE FROM entry"), env.LEXICON.prepare("DELETE FROM featureset"), env.LEXICON.prepare("DELETE FROM loaded")]);
       const { objects } = await env.BLOBS.list();
       if (objects.length > 0) await env.BLOBS.delete(objects.map((o) => o.key));
       await takeQueued();

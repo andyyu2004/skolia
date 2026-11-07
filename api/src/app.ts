@@ -13,9 +13,11 @@ import {
   type DocumentSummary,
   MAX_LOOKUP,
   type Due,
+  type FeatureSets,
   type Lang,
   type LemmaId,
   type LexiconEntry,
+  type Lookup,
   type Reviewed,
   type Settings,
   type User,
@@ -133,12 +135,15 @@ export function createApp(deps: Deps) {
       const dayStart = new Date(c.req.valid("query").dayStart).toISOString();
       const { cards, newLeft } = await deps.users.due(user.id, lang, now().toISOString(), dayStart, MAX_DUE);
       const entries = new Map<LemmaId, LexiconEntry>();
+      const featureSets: FeatureSets = {};
       const ids = [...new Set(cards.map((card) => card.lemmaId))];
       for (let i = 0; i < ids.length; i += MAX_LOOKUP) {
-        for (const entry of await deps.lexicon.entries(ids.slice(i, i + MAX_LOOKUP))) entries.set(entry.lemmaId, entry);
+        const found = await deps.lexicon.entries(ids.slice(i, i + MAX_LOOKUP));
+        for (const entry of found.entries) entries.set(entry.lemmaId, entry);
+        Object.assign(featureSets, found.featureSets[lang]);
       }
       const due = cards.map((card) => ({ ...card, entry: entries.get(card.lemmaId) ?? null }));
-      return c.json({ cards: due, newLeft } satisfies Due, 200);
+      return c.json({ cards: due, newLeft, featureSets } satisfies Due, 200);
     })
     .post("/api/me/reviews", zValidator("json", schemas.ReviewRequest, badRequest()), async (c) => {
       const user = await deps.auth.user(c.req.raw.headers);
@@ -172,7 +177,7 @@ export function createApp(deps: Deps) {
     })
     .post("/api/lexicon/entries", zValidator("json", schemas.LookupRequest, badRequest()), async (c) => {
       const { ids } = c.req.valid("json");
-      return c.json((await deps.lexicon.entries(ids)) satisfies LexiconEntry[], 200);
+      return c.json((await deps.lexicon.entries(ids)) satisfies Lookup, 200);
     })
     .get("/api/documents", async (c) => {
       const viewer = await deps.auth.user(c.req.raw.headers);

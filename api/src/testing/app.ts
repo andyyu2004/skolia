@@ -71,13 +71,38 @@ export function lookUp(app: App, body: unknown) {
 }
 
 /** Lexicon rows as infra/load-lexicon.py loads them, and the version that serves. */
-export async function loadLexicon(lang: string, version: string, entries: { lemmaId: string; lemma: string; upos: string; gloss: string }[]): Promise<void> {
+export interface TestEntry {
+  lemmaId: string;
+  lemma: string;
+  upos: string;
+  gloss: string;
+  pronunciations?: unknown[];
+  /** Compact, as in D1: [{ homonym, forms: [["psa", [0, 1]]] }] */
+  paradigms?: unknown[];
+}
+
+/** Loads a lexicon version with its feature sets, by id, and makes it the one served. */
+export async function loadLexicon(lang: string, version: string, entries: TestEntry[], featureSets: Record<string, string>[] = []): Promise<void> {
   const db = local.env.LEXICON;
   await db.batch([
     ...entries.map((e) =>
       db
-        .prepare("INSERT INTO entry (lemma_id, version, lang, lemma, upos, senses, relations) VALUES (?, ?, ?, ?, ?, ?, '[]')")
-        .bind(e.lemmaId, version, lang, e.lemma, e.upos, JSON.stringify([{ gloss: e.gloss, tags: [] }])),
+        .prepare("INSERT INTO entry (lemma_id, version, lang, lemma, upos, senses, relations, pronunciations, paradigms) VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?)")
+        .bind(
+          e.lemmaId,
+          version,
+          lang,
+          e.lemma,
+          e.upos,
+          JSON.stringify([{ gloss: e.gloss, tags: [] }]),
+          JSON.stringify(e.pronunciations ?? []),
+          JSON.stringify(e.paradigms ?? []),
+        ),
+    ),
+    ...featureSets.flatMap((set, id) =>
+      Object.entries(set).map(([feature, value]) =>
+        db.prepare("INSERT INTO featureset (lang, version, id, feature, value) VALUES (?, ?, ?, ?, ?)").bind(lang, version, id, feature, value),
+      ),
     ),
     db.prepare("INSERT INTO loaded (lang, version) VALUES (?, ?) ON CONFLICT (lang) DO UPDATE SET version = excluded.version").bind(lang, version),
   ]);

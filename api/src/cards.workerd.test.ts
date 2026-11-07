@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { CardCounts, Due, Lang, LexiconEntry, Reviewed, Settings, Word } from "@skolia/shared/api";
+import type { CardCounts, Due, Lang, Lookup, Reviewed, Settings, Word } from "@skolia/shared/api";
 import { ALICE, NOW, loadLexicon, local, lookUp, postReview, putSettings, putWord, setup, useLocal, type App } from "./testing/app.ts";
 import { ORIGIN } from "./testing/harness.ts";
 
@@ -35,12 +35,18 @@ function answer(cardId: string, rating: number, at = NOW) {
 test("an active word gets a recognition and a production card, new and due now, with its lexicon entry", async () => {
   const app = setup();
   const headers = await signedIn();
-  await loadLexicon("pl", "lex/1", [{ lemmaId: "pl:pies:NOUN", lemma: "pies", upos: "NOUN", gloss: "dog" }]);
+  await loadLexicon(
+    "pl",
+    "lex/1",
+    [{ lemmaId: "pl:pies:NOUN", lemma: "pies", upos: "NOUN", gloss: "dog", paradigms: [{ homonym: "", forms: [["psa", [1]]] }] }],
+    [{ Case: "Nom" }, { Case: "Gen" }],
+  );
   assert.equal((await putWord(app, headers, "pl:pies:NOUN", { status: "active" })).status, 204);
   assert.equal((await putWord(app, headers, "pl:pies:NOUN", { status: "active" })).status, 204);
   assert.equal((await putWord(app, headers, "pl:kot:NOUN", { status: "active" })).status, 204);
-  const { cards, newLeft } = await due(app, headers, "pl");
+  const { cards, newLeft, featureSets } = await due(app, headers, "pl");
   assert.equal(newLeft, 20);
+  assert.deepEqual(featureSets, { "1": { Case: "Gen" } });
   assert.deepEqual(
     cards.map((c) => [c.lemmaId, c.kind, c.isNew, c.entry?.senses[0]?.gloss ?? null]),
     [
@@ -95,7 +101,7 @@ test("a review schedules the card, a retried review is counted once, and the day
   assert.ok(reviewed.dueAt > NOW);
   assert.deepEqual(await (await postReview(app, headers, good)).json(), reviewed);
   const after = await due(app, headers, "pl");
-  assert.deepEqual(after, { cards: [], newLeft: 0 });
+  assert.deepEqual(after, { cards: [], newLeft: 0, featureSets: {} });
   // The next day's allowance
   assert.equal((await due(app, headers, "pl", "2026-11-04T00:00:00.001Z")).cards.length, 1);
   // A day start without milliseconds is the same time: compared as strings, "00Z" sorts after "00.000Z"
@@ -191,11 +197,26 @@ test("words, cards and settings need a session and valid input", async () => {
 test("a lexicon lookup gives each language's loaded version, leaving out ids it doesn't have", async () => {
   const app = setup();
   await loadLexicon("pl", "lex/1", [{ lemmaId: "pl:pies:NOUN", lemma: "pies", upos: "NOUN", gloss: "dog (old)" }]);
-  await loadLexicon("pl", "lex/2", [{ lemmaId: "pl:pies:NOUN", lemma: "pies", upos: "NOUN", gloss: "dog" }]);
+  await loadLexicon("pl", "lex/1", [], [{ Case: "Nom" }, { Case: "Gen" }]);
+  await loadLexicon(
+    "pl",
+    "lex/2",
+    [
+      {
+        lemmaId: "pl:pies:NOUN",
+        lemma: "pies",
+        upos: "NOUN",
+        gloss: "dog",
+        pronunciations: [{ ipa: "/ˈpjɛs/" }],
+        paradigms: [{ homonym: "", forms: [["pies", [0]], ["psa", [1, 2]]] }],
+      },
+    ],
+    [{ Case: "Nom", Number: "Sing" }, { Case: "Gen", Number: "Sing" }, { Case: "Acc", Number: "Sing" }, { Case: "Dat", Number: "Sing" }],
+  );
   await loadLexicon("en", "lex/1", [{ lemmaId: "en:dog:NOUN", lemma: "dog", upos: "NOUN", gloss: "a domesticated canid" }]);
   const response = await lookUp(app, { ids: ["pl:pies:NOUN", "en:dog:NOUN", "pl:kot:NOUN"] });
   assert.equal(response.status, 200);
-  const entries = (await response.json()) as LexiconEntry[];
+  const { entries, featureSets } = (await response.json()) as Lookup;
   assert.deepEqual(
     entries.map((e) => [e.lemmaId, e.senses[0]?.gloss]).sort(),
     [
@@ -203,6 +224,13 @@ test("a lexicon lookup gives each language's loaded version, leaving out ids it 
       ["pl:pies:NOUN", "dog"],
     ],
   );
+  const pies = entries.find((e) => e.lemmaId === "pl:pies:NOUN");
+  assert.deepEqual(pies?.pronunciations, [{ ipa: "/ˈpjɛs/" }]);
+  assert.deepEqual(pies?.paradigms, [{ homonym: "", forms: [["pies", [0]], ["psa", [1, 2]]] }]);
+  // Only the sets the paradigms use, from the served version; dog has no paradigm
+  assert.deepEqual(featureSets, {
+    pl: { "0": { Case: "Nom", Number: "Sing" }, "1": { Case: "Gen", Number: "Sing" }, "2": { Case: "Acc", Number: "Sing" } },
+  });
   assert.equal((await lookUp(app, { ids: [] })).status, 400);
   assert.equal((await lookUp(app, { ids: Array.from({ length: 101 }, (_, i) => `pl:w${i}:NOUN`) })).status, 400);
   assert.equal((await lookUp(app, { ids: Array.from({ length: 100 }, (_, i) => `pl:w${i}:NOUN`) })).status, 200);

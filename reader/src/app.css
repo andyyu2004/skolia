@@ -868,6 +868,16 @@ textarea {
   gap: 1rem;
 }
 
+.flashcard .forms {
+  margin-top: 0.75rem;
+  text-align: left;
+}
+
+.flashcard .forms summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
 .review-langs {
   display: flex;
   flex-wrap: wrap;
