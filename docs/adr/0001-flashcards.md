@@ -19,7 +19,7 @@ Checked by running it under Node 24.18.1:
 - `Rating` is `Manual 0, Again 1, Hard 2, Good 3, Easy 4`.
 - A card's fields are `cardId, stability, stabilityFast, difficulty, state, scheduleStatus, dueAt, lastReviewAt, reps, lapses, scheduledDays, learningStep`.
 - `Reschedule` (imported from `ts-fsrs/reschedule`, not the package root) rebuilt a card from `[{ rating, reviewTime }]`. The result was identical, field for field, to the card from the live `review()` calls.
-- Fuzz is seeded by `cardId`, so replay reproduces fuzzed intervals when our card id is used as `cardId`.
+- Fuzz is off by default (`enableFuzz = false` in its `dist/index.mjs`). We turn it on, so words added together don't all come due on the same day. It's seeded by `cardId`, so replay reproduces fuzzed intervals when our card id is used as `cardId`.
 - `dueAt` and `lastReviewAt` must be `Date` objects. A card passed back after a JSON round-trip throws `SRSSchemaError: Expected valid Date fields`.
 - On a new card:
   - Good went straight to a 6-day interval.
@@ -46,7 +46,8 @@ review(id, card_id, rating, review_time)      -- append-only
 - `known` or `ignored` takes a word's cards out of reviews without deleting them or their history, and `active` brings them back. Marking a word known needs no cards. Known words aren't rated Easy, because Easy brings them back after 54 and 234 days, and those ratings would end up in the review log.
 - Reviews have four buttons, Again, Hard, Good and Easy, which are ts-fsrs's ratings 1 to 4.
 - The `review` table is the source of truth. The ts-fsrs fields on `card` are a cache that `Reschedule` can rebuild. It is also what a per-user FSRS weight fit (`@open-spaced-repetition/binding`) would be trained on later.
-- The client makes each review's `id` (a UUID), and the server ignores an id it already has, so a retried request isn't counted twice.
+- The client makes each review's `id` (a UUID), and the server ignores an id it already has for that card, so a retried request isn't counted twice. The same id sent for another card gets a 409.
+- A review's time comes from the client, for offline review later. It may not be before the card was made or its last review (409), or more than 5 minutes ahead of the server (400).
 - The reader shows a word as:
   - `known` or `ignored` if the user marked it;
   - otherwise known once its recognition card is mature (an interval of at least 21 days, Anki's definition);
@@ -68,7 +69,7 @@ The lexicon SQLite is built by Nix (`analysis/flake.nix`, `lexicon`) and only ex
 
 - `just load-lexicon <env>` loads it from the same Nix output the image uses (`analysis#lexicon-{lang}`), through `infra/load-lexicon.py`. It's keyed by the lexicon version in the SQLite's `meta` table:
   - An unchanged version is skipped.
-  - A new version's rows go in beside the old ones, then `loaded` points at it and the old rows are deleted. A load that stops part way leaves the old version serving.
+  - A new version's rows go in beside the old ones, then `loaded` points at it, and the old rows are deleted 50,000 at a time. A load that stops part way leaves the old version serving. Every run deletes any old rows left over, even when the version hasn't changed.
   - Loading Polish into wrangler's local D1 took about 5 s for 30 MB of SQL, and gave all 98,917 entries.
 - `POST /api/lexicon/entries { ids }` returns the entries for up to 100 ids. The due list carries its cards' entries, so a review session needs one request. Caching them in IndexedDB for offline review is for later.
 
@@ -84,7 +85,7 @@ PUT  /api/me/settings                 { newPerDay }
 POST /api/lexicon/entries             { ids }
 ```
 
-These replace `/api/me/lemmas`. `dayStart` is the start of the reader's local day, so the day's new cards are counted in the user's time zone. A card counts as new on the day it was first answered. The Durable Object runs `review()`, appends to `review` and updates `card` in one transaction. Review is online at first. The log and the client-made ids leave room for an offline queue that syncs later.
+These replace `/api/me/lemmas`. `dayStart` is the start of the reader's local day, so the day's new cards are counted in the user's time zone. A card counts against the day the server first recorded an answer for it (`card.first_reviewed`), so a review's client time can't move it to another day. The Durable Object runs `review()`, appends to `review` and updates `card` in one transaction. Review is online at first. The log and the client-made ids leave room for an offline queue that syncs later.
 
 ### Other decisions
 
@@ -96,7 +97,6 @@ These replace `/api/me/lemmas`. `dayStart` is the start of the reader's local da
 
 ## Open
 
-- How many ids a D1 query can bind. The lookup takes at most 100, which needs checking against D1's limit.
-- D1's import limits for English's ~200 MB, and how long a remote load takes. Only a local load of Polish has been tried.
+- How long a remote load takes. Only a local load of Polish has been tried. D1's limits page allows 100 bound parameters per query (the lookup takes at most 100 ids), 100,000-byte statements (the loader keeps them under 90,000), and a 5 GB file per `d1 execute`.
 - Loading the lexicon in CI: `just load-lexicon` needs the Nix build, which the deploy jobs don't have.
 - Showing words in the reader by status (new, learning, known), and offline review.

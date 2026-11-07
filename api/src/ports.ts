@@ -73,15 +73,16 @@ export interface DueCards {
   newLeft: number;
 }
 
-/** out-of-order: answered before the card's last review. */
-export type ReviewOutcome = ({ kind: "reviewed" } & Reviewed) | { kind: "no-card" } | { kind: "out-of-order" };
+/** out-of-order: answered before the card was made or before its last review.
+ * id-reused: the review id is another card's. */
+export type ReviewOutcome = ({ kind: "reviewed" } & Reviewed) | { kind: "no-card" } | { kind: "out-of-order" } | { kind: "id-reused" };
 
 /** A user's words, cards and settings, in their own Durable Object. */
 export interface UserData {
   words(userId: string): Promise<Word[]>;
   setWord(userId: string, lemmaId: LemmaId, status: WordStatus, now: string): Promise<void>;
   due(userId: string, now: string, dayStart: string, limit: number): Promise<DueCards>;
-  review(userId: string, request: ReviewRequest): Promise<ReviewOutcome>;
+  review(userId: string, request: ReviewRequest, now: string): Promise<ReviewOutcome>;
   settings(userId: string): Promise<Settings>;
   setSettings(userId: string, settings: Settings): Promise<void>;
 }

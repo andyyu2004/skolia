@@ -79,16 +79,11 @@ export class User extends DurableObject<object> {
   }
 
   /** Active words' cards due by now, soonest first, then new cards in the order their
-   * words were added, up to what's left of the day's allowance. A card is counted
-   * against the day it was first answered on, from dayStart. */
+   * words were added, up to what's left of the day's allowance. A card counts against
+   * the day the server first had an answer for it, from dayStart. */
   due(now: string, dayStart: string, limit: number): DueCards {
     const { newPerDay } = this.settings();
-    const introduced = this.sql
-      .exec(
-        `SELECT count(*) AS n FROM (SELECT min(review_time) AS first FROM review GROUP BY card_id) WHERE first >= ?`,
-        dayStart,
-      )
-      .one()["n"];
+    const introduced = this.sql.exec(`SELECT count(*) AS n FROM card WHERE first_reviewed >= ?`, dayStart).one()["n"];
     const newLeft = Math.max(0, newPerDay - Number(introduced));
     const select = `SELECT card.id, card.lemma_id AS "lemmaId", card.kind, card.schedule_status = 'new' AS "isNew", card.due_at AS "dueAt"
       FROM card JOIN word ON word.lemma_id = card.lemma_id AND word.status = 'active'`;
@@ -99,20 +94,25 @@ export class User extends DurableObject<object> {
     return { cards: rows.slice(0, limit).map((row) => schemas.ScheduledCard.parse({ ...row, isNew: row["isNew"] === 1 })), newLeft };
   }
 
-  /** Once per review id: a retry gets the card as it is. */
-  async review({ id, cardId, rating, at }: ReviewRequest): Promise<ReviewOutcome> {
+  /** Once per review id: a retry gets the card as it is. now: the server's time, which
+   * dates a card's first review for the daily allowance, whatever the client says. */
+  async review({ id, cardId, rating, at }: ReviewRequest, now: string): Promise<ReviewOutcome> {
     const s = await fsrs();
     return this.ctx.storage.transactionSync((): ReviewOutcome => {
-      const row = this.sql.exec(`SELECT fsrs FROM card WHERE id = ?`, cardId).toArray()[0];
+      const row = this.sql.exec(`SELECT fsrs, created FROM card WHERE id = ?`, cardId).toArray()[0];
       if (row === undefined) return { kind: "no-card" };
       const card = fromJson(String(row["fsrs"]));
-      const seen = this.sql.exec(`SELECT 1 FROM review WHERE id = ?`, id).toArray().length > 0;
-      if (seen) return { kind: "reviewed", cardId, dueAt: card.dueAt.toISOString() };
+      const seen = this.sql.exec(`SELECT card_id FROM review WHERE id = ?`, id).toArray()[0];
+      if (seen !== undefined) {
+        return seen["card_id"] === cardId ? { kind: "reviewed", cardId, dueAt: card.dueAt.toISOString() } : { kind: "id-reused" };
+      }
       const when = new Date(at);
-      if (card.lastReviewAt !== null && when < card.lastReviewAt) return { kind: "out-of-order" };
+      if (when < new Date(String(row["created"])) || (card.lastReviewAt !== null && when < card.lastReviewAt)) {
+        return { kind: "out-of-order" };
+      }
       const next = review(s, card, rating, when);
       this.sql.exec(`INSERT INTO review (id, card_id, rating, review_time) VALUES (?, ?, ?, ?)`, id, cardId, rating, when.toISOString());
-      this.sql.exec(`UPDATE card SET fsrs = ? WHERE id = ?`, toJson(next), cardId);
+      this.sql.exec(`UPDATE card SET fsrs = ?, first_reviewed = coalesce(first_reviewed, ?) WHERE id = ?`, toJson(next), now, cardId);
       return { kind: "reviewed", cardId, dueAt: next.dueAt.toISOString() };
     });
   }

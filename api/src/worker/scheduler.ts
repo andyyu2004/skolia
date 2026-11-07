@@ -6,9 +6,11 @@ export type FsrsCard = DefaultSchedulerCard;
 
 let scheduler: Promise<DefaultScheduler> | undefined;
 
-/** One per isolate: making it loads the model's weights. */
+/** One per isolate: making it loads the model's weights. Fuzz (off by default) spreads
+ * out cards added together; it's seeded by the card's id, so a replay gives the same
+ * intervals. */
 export function fsrs(): Promise<DefaultScheduler> {
-  return (scheduler ??= DefaultScheduler());
+  return (scheduler ??= DefaultScheduler({ enableFuzz: true }));
 }
 
 /** A new card under our id, which also seeds its fuzz. */

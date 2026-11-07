@@ -121,7 +121,8 @@ export function createApp(deps: Deps) {
     .get("/api/me/cards/due", zValidator("query", schemas.DueQuery, badRequest("dayStart must be an ISO time")), async (c) => {
       const user = await deps.auth.user(c.req.raw.headers);
       if (!user) return signInFirst(c);
-      const { dayStart } = c.req.valid("query");
+      // Stored times are toISOString()'s, compared as strings
+      const dayStart = new Date(c.req.valid("query").dayStart).toISOString();
       const { cards, newLeft } = await deps.users.due(user.id, now().toISOString(), dayStart, MAX_DUE);
       const entries = new Map<LemmaId, LexiconEntry>();
       const ids = [...new Set(cards.map((card) => card.lemmaId))];
@@ -138,14 +139,16 @@ export function createApp(deps: Deps) {
       if (Date.parse(request.at) > now().getTime() + MAX_CLOCK_SKEW_MS) {
         return c.json({ error: "review is in the future" } satisfies ApiError, 400);
       }
-      const outcome = await deps.users.review(user.id, request);
+      const outcome = await deps.users.review(user.id, request, now().toISOString());
       switch (outcome.kind) {
         case "reviewed":
           return c.json({ cardId: outcome.cardId, dueAt: outcome.dueAt } satisfies Reviewed, 200);
         case "no-card":
           return c.json({ error: "no such card" } satisfies ApiError, 404);
         case "out-of-order":
-          return c.json({ error: "review is older than the card's last review" } satisfies ApiError, 409);
+          return c.json({ error: "review is older than the card or its last review" } satisfies ApiError, 409);
+        case "id-reused":
+          return c.json({ error: "review id is another card's" } satisfies ApiError, 409);
       }
     })
     .get("/api/me/settings", async (c) => {

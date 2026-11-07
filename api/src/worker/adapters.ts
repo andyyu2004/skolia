@@ -38,8 +38,8 @@ export class DurableObjectUsers implements UserData {
     return this.users.getByName(userId).due(now, dayStart, limit);
   }
 
-  async review(userId: string, request: ReviewRequest): Promise<ReviewOutcome> {
-    return this.users.getByName(userId).review(request);
+  async review(userId: string, request: ReviewRequest, now: string): Promise<ReviewOutcome> {
+    return this.users.getByName(userId).review(request, now);
   }
 
   async settings(userId: string): Promise<Settings> {

@@ -8,8 +8,8 @@
 sqlite is analysis's {lang}.sqlite (skolia-build-lexicon, or the Nix output
 analysis#lexicon-{lang}); its meta table gives the language and version. Skipped if D1
 already serves that version. The new version's rows go in beside the old ones, then
-loaded points at it and the old rows are deleted (api/lexicon-migrations), so a load that
-stops part way leaves the old version serving and can be run again. local is wrangler
+loaded points at it and the old rows are deleted in batches (api/lexicon-migrations), so a
+load that stops part way leaves the old version serving and can be run again. local is wrangler
 dev's database. Needs the credentials infra/wrangler.sh needs.
 """
 
@@ -24,6 +24,8 @@ from typing import cast
 WRANGLER = Path(__file__).resolve().parent / "wrangler.sh"
 # D1's longest statement is 100 KB; the longest row is 35 KB (English)
 MAX_STATEMENT_BYTES = 90_000
+# Old rows deleted per statement, so no one statement deletes a whole language
+CLEAN_BATCH = 50_000
 
 
 def wrangler(env: str, *args: str) -> str:
@@ -84,8 +86,28 @@ def statements(db: sqlite3.Connection, lang: str, version: str) -> list[str]:
         f"INSERT INTO loaded (lang, version) VALUES ({quote(lang)}, {quote(version)}) "
         "ON CONFLICT (lang) DO UPDATE SET version = excluded.version;"
     )
-    out.append(f"DELETE FROM entry WHERE lang = {quote(lang)} AND version != {quote(version)};")
     return out
+
+
+def clean(env: str, lang: str, version: str) -> None:
+    """Deletes the language's rows of other versions, in batches. Run on every load, so a
+    load that stopped after repointing loaded is cleaned up by the next."""
+    old = f"FROM entry WHERE lang = {quote(lang)} AND version != {quote(version)}"
+    batch = f"SELECT lemma_id, version {old} LIMIT {CLEAN_BATCH}"
+    delete = f"DELETE FROM entry WHERE (lemma_id, version) IN ({batch})"
+    # wrangler's local output doesn't count a delete's changes, so ask what's left
+    count = f"SELECT count(*) AS n {old}"
+    while (left := remaining(env, count)) > 0:
+        print(f"{env}: deleting {left} old {lang} rows")
+        wrangler(env, "--command", delete)
+
+
+def remaining(env: str, count: str) -> int:
+    results = cast(
+        list[dict[str, list[dict[str, int]]]],
+        json.loads(wrangler(env, "--json", "--command", count)),
+    )
+    return results[0]["results"][0]["n"]
 
 
 def main() -> None:
@@ -96,6 +118,7 @@ def main() -> None:
     lang, version = meta(db)
     if serving(env, lang) == version:
         print(f"{env}: {lang} already serves {version}")
+        clean(env, lang, version)
         return
     with tempfile.TemporaryDirectory() as scratch:
         sql = Path(scratch) / f"lexicon-{lang}.sql"
@@ -105,6 +128,7 @@ def main() -> None:
     if serving(env, lang) != version:
         raise SystemExit(f"{env}: {lang} doesn't serve {version} after loading it")
     print(f"{env}: {lang} serves {version}")
+    clean(env, lang, version)
 
 
 if __name__ == "__main__":

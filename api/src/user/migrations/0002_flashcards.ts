@@ -18,9 +18,12 @@ CREATE TABLE card (
   schedule_status TEXT GENERATED ALWAYS AS (fsrs ->> '$.scheduleStatus') STORED NOT NULL
     CHECK (schedule_status IN ('new', 'learning', 'review')),
   scheduled_days REAL GENERATED ALWAYS AS (fsrs ->> '$.scheduledDays') STORED NOT NULL,
+  first_reviewed TEXT CHECK (first_reviewed IS NULL OR first_reviewed IS strftime('%Y-%m-%dT%H:%M:%fZ', first_reviewed)),
   UNIQUE (lemma_id, kind)
 ) STRICT, WITHOUT ROWID;
-CREATE INDEX card_due ON card (due_at);
+CREATE INDEX card_due ON card (due_at) WHERE schedule_status != 'new';
+CREATE INDEX card_new ON card (created, lemma_id, kind DESC) WHERE schedule_status = 'new';
+CREATE INDEX card_first_reviewed ON card (first_reviewed) WHERE first_reviewed IS NOT NULL;
 CREATE TABLE review (
   id TEXT NOT NULL PRIMARY KEY,
   card_id TEXT NOT NULL REFERENCES card (id),

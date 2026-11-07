@@ -92,6 +92,8 @@ test("a review schedules the card, a retried review is counted once, and the day
   assert.deepEqual(after, { cards: [], newLeft: 0 });
   // The next day's allowance
   assert.equal((await due(app, headers, "2026-11-04T00:00:00.001Z")).cards.length, 1);
+  // A day start without milliseconds is the same time: compared as strings, "00Z" sorts after "00.000Z"
+  assert.equal((await due(app, headers, "2026-11-04T00:00:00Z")).newLeft, 0);
 });
 
 test("Easy on a new card makes it mature, and its word shows as such", async () => {
@@ -119,8 +121,13 @@ test("a review needs a session, the user's card, a grade, and a time that isn't 
   assert.equal((await postReview(app, headers, answer(card.id, 5))).status, 400);
   assert.equal((await postReview(app, headers, { ...answer(card.id, 3), id: "1" })).status, 400);
   assert.equal((await postReview(app, headers, answer(card.id, 3, "2026-11-04T01:00:00.000Z"))).status, 400);
-  assert.equal((await postReview(app, headers, answer(card.id, 3))).status, 200);
+  assert.equal((await postReview(app, headers, answer(card.id, 3, "2026-11-03T23:59:59.999Z"))).status, 409);
+  const first = answer(card.id, 3);
+  assert.equal((await postReview(app, headers, first)).status, 200);
   assert.equal((await postReview(app, headers, answer(card.id, 3, "2026-11-03T00:00:00.000Z"))).status, 409);
+  const other = (await due(app, headers)).cards.find((c) => c.id !== card.id);
+  assert.ok(other);
+  assert.equal((await postReview(app, headers, { ...first, cardId: other.id })).status, 409);
   const bob = await local.signIn((await local.signUp({ name: "Bob", email: "bob@example.com" })).id);
   assert.equal((await postReview(app, bob, answer(card.id, 3))).status, 404);
 });
