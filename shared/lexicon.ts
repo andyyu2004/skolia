@@ -14,7 +14,7 @@ export function entryFor(bundle: Bundle, token: Token): Entry | undefined {
 /** How a token's text or an entry's lemma is said, keyed as pronunciation_key in
  * analysis/src/skolia_analysis/lexicon/schema.py. */
 export function pronunciationsOf(bundle: Bundle, word: string, upos: Upos): Pronunciation[] {
-  return bundle.pronunciations[`${word}:${upos}`] ?? [];
+  return bundle.pronunciations?.[`${word}:${upos}`] ?? [];
 }
 
 /** Every feature the token has (bar contextual ones) has the same value in feats. */
