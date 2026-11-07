@@ -1,5 +1,5 @@
 // Looking a token up in its document's bundle.
-import type { Bundle, Entry, Feats, Sense, Token } from "@skolia/shared/schema";
+import type { Bundle, Entry, Feats, Pronunciation, Sense, Token, Upos } from "@skolia/shared/schema";
 
 /** The sentence decides these, not the form, so paradigms leave them out (see the
  * BundleParadigm docstring in analysis/src/skolia_analysis/lexicon/schema.py). */
@@ -9,6 +9,12 @@ export function entryFor(bundle: Bundle, token: Token): Entry | undefined {
   if (token.lemma_id === null) return undefined;
   const id = bundle.lookup[token.lemma_id] ?? token.lemma_id;
   return bundle.entries[id];
+}
+
+/** How a token's text or an entry's lemma is said, keyed as pronunciation_key in
+ * analysis/src/skolia_analysis/lexicon/schema.py. */
+export function pronunciationsOf(bundle: Bundle, word: string, upos: Upos): Pronunciation[] {
+  return bundle.pronunciations[`${word}:${upos}`] ?? [];
 }
 
 /** Every feature the token has (bar contextual ones) has the same value in feats. */

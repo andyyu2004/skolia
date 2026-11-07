@@ -5,7 +5,16 @@ from collections.abc import Callable
 from .. import ud
 from ..lang.pl.walenty.model import Schema
 from ..schema import Blob, Feats, Upos
-from .schema import BUNDLE_SCHEMA, Bundle, BundleParadigm, Entry, Match, Paradigm
+from .schema import (
+    BUNDLE_SCHEMA,
+    Bundle,
+    BundleParadigm,
+    Entry,
+    Match,
+    Paradigm,
+    Pronunciation,
+    pronunciation_key,
+)
 from .store import Lexicon, Row
 
 LEMMA_ID_SEP = ":"
@@ -84,10 +93,19 @@ def make(
         "lookup": {},
         "match": {},
         "feats": [],
+        "pronunciations": {},
     }
     feats = FeatsTable(bundle["feats"])
+
+    def add_pronunciation(word: str, upos: Upos) -> None:
+        key = pronunciation_key(word, upos)
+        if key not in bundle["pronunciations"] and (found := pronounce(lexicon, word, upos)):
+            bundle["pronunciations"][key] = found
+
     for sentence in blob["sentences"]:
         for token in sentence["tokens"]:
+            if token["upos"] != "PUNCT":
+                add_pronunciation(token["text"], token["upos"])
             token_id = token["lemma_id"]
             if token_id is None or token_id in bundle["match"]:
                 continue
@@ -97,8 +115,27 @@ def make(
             if entry_id != token_id:
                 bundle["lookup"][token_id] = entry_id
             if entry_id not in bundle["entries"]:
-                bundle["entries"][entry_id] = _entry(entry_id, row, paradigms, frames, feats)
+                entry = _entry(entry_id, row, paradigms, frames, feats)
+                bundle["entries"][entry_id] = entry
+                add_pronunciation(entry["lemma"], entry["upos"])
     return bundle
+
+
+def pronounce(lexicon: Lexicon, word: str, upos: Upos) -> list[Pronunciation]:
+    """Falls back like resolve: the word lowercased (a sentence's first word), then the
+    closest other part of speech (be as AUX is Wiktionary's verb)."""
+    for spelling in dict.fromkeys([word, word.lower()]):
+        by_upos = lexicon.pronunciations(spelling)
+        if upos in by_upos:
+            return by_upos[upos]
+        for other in CLOSEST_UPOS.get(upos, ()):
+            if other in by_upos:
+                return by_upos[other]
+    for spelling in dict.fromkeys([word, word.lower()]):
+        by_upos = lexicon.pronunciations(spelling)
+        if by_upos:
+            return next(iter(by_upos.values()))
+    return []
 
 
 class FeatsTable:

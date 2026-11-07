@@ -441,6 +441,13 @@ export interface Entry {
 
 export type Match = "exact" | "other-pos" | "lowercase" | "none";
 
+export type Accent = "UK" | "US";
+
+export interface Pronunciation {
+  ipa: string;
+  accents?: Accent[];
+}
+
 export interface Bundle {
   schema: number;
   lang: string;
@@ -450,6 +457,7 @@ export interface Bundle {
   lookup: Record<string, string>;
   match: Record<string, Match>;
   feats: Feats[];
+  pronunciations: Record<string, Pronunciation[]>;
 }
 
 export interface IngestJob {
@@ -477,5 +485,5 @@ export interface Versions {
 }
 
 export const SCHEMA = 2;
-export const BUNDLE_SCHEMA = 1;
+export const BUNDLE_SCHEMA = 2;
 export const MAX_TEXT_LENGTH = 20000;

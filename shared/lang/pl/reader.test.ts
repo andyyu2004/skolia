@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Blob, Bundle, Entry, Feats, Schema, Token } from "@skolia/shared/schema";
 import { layout } from "../../doc.ts";
-import { rankSenses } from "../../lexicon.ts";
+import { pronunciationsOf, rankSenses } from "../../lexicon.ts";
 import { paradigmTables } from "../../paradigm.ts";
 import { explainCase } from "./cases.ts";
 import { argumentsOf, describePhrase, frames } from "./frames.ts";
@@ -81,7 +81,7 @@ const PIES: Entry = {
 };
 
 const BUNDLE: Bundle = {
-  schema: 1,
+  schema: 2,
   lang: "pl",
   lexicon: "t",
   attribution: "",
@@ -89,7 +89,13 @@ const BUNDLE: Bundle = {
   lookup: {},
   match: {},
   feats: [NOM_SG, GEN_SG, ACC_SG, NOM_PL],
+  pronunciations: { "psa:NOUN": [{ ipa: "/ˈpsa/" }], "pies:NOUN": [{ ipa: "/ˈpjɛs/" }] },
 };
+
+test("a word is pronounced by its text and part of speech", () => {
+  assert.deepEqual(pronunciationsOf(BUNDLE, "psa", "NOUN"), [{ ipa: "/ˈpsa/" }]);
+  assert.deepEqual(pronunciationsOf(BUNDLE, "psa", "VERB"), []);
+});
 
 test("the token's features pick the sense", () => {
   assert.deepEqual(

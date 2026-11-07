@@ -8,10 +8,11 @@ from pathlib import Path
 from ..blob import lemma_id
 from ..schema import Upos
 from . import kaikki, store
-from .schema import Paradigm, Relation, Sense
+from .pronunciation import merge as merge_pronunciations
+from .schema import Paradigm, Pronunciation, Relation, Sense
 from .source import Converted, LexiconSource
 
-LEXICON_VERSION = "2"
+LEXICON_VERSION = "3"
 
 
 @dataclass
@@ -27,6 +28,8 @@ class Merged:
 class Stats:
     entries: int = 0
     skipped: int = 0
+    pronounced: int = 0
+    """Words with a pronunciation, by part of speech."""
 
 
 def merge(converted: Iterable[Converted]) -> dict[tuple[str, Upos], Merged]:
@@ -75,10 +78,27 @@ def _drop_uninformative_when(senses: list[Sense]) -> None:
             sense.pop("when", None)
 
 
-def rows(lang: str, source: LexiconSource, path: Path, stats: Stats) -> Iterator[store.Row]:
+type Pronunciations = dict[tuple[str, Upos], list[Pronunciation]]
+
+
+def rows(
+    lang: str,
+    source: LexiconSource,
+    path: Path,
+    stats: Stats,
+    pronunciations: Pronunciations | None = None,
+) -> Iterator[store.Row]:
+    """Fills pronunciations, if given, on the way: inflected forms have them too."""
+
     def converted() -> Iterator[Converted]:
         for entry in kaikki.read(path):
             stats.entries += 1
+            if pronunciations is not None and (said := source.pronounce(entry)) is not None:
+                for upos in said.upos:
+                    key = (said.word, upos)
+                    pronunciations[key] = merge_pronunciations(
+                        pronunciations.get(key, []), said.pronunciations
+                    )
             result = source.convert(entry)
             if result is None:
                 stats.skipped += 1
@@ -107,7 +127,17 @@ def build(lang: str, source: LexiconSource, kaikki_path: Path, out: Path) -> tup
     if source.version:
         lexicon_version += f"+{source.version}"
     meta = {"lang": lang, "version": lexicon_version, "attribution": source.attribution}
-    count = store.write(out, rows(lang, source, kaikki_path, stats), meta)
+    pronunciations: Pronunciations = {}
+    count = store.write(
+        out,
+        rows(lang, source, kaikki_path, stats, pronunciations),
+        meta,
+        lambda: (
+            store.PronunciationRow(word, upos, said)
+            for (word, upos), said in sorted(pronunciations.items())
+        ),
+    )
+    stats.pronounced = len(pronunciations)
     return count, stats
 
 

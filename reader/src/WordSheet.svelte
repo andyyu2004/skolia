@@ -3,7 +3,7 @@
   import type { Bundle, Token } from "@skolia/shared/schema";
   import { LANGUAGES } from "@skolia/shared/lang";
   import type { Piece } from "@skolia/shared/doc";
-  import { entryFor, rankSenses } from "@skolia/shared/lexicon";
+  import { entryFor, pronunciationsOf, rankSenses } from "@skolia/shared/lexicon";
   import { paradigmTables } from "@skolia/shared/paradigm";
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
   import ParadigmTable from "./ParadigmTable.svelte";
@@ -61,6 +61,9 @@
         return {
           ref: w,
           entry,
+          said: pronunciationsOf(bundle, w.token.text, w.token.upos),
+          lemmaSaid:
+            entry && entry.lemma !== w.token.text ? pronunciationsOf(bundle, entry.lemma, entry.upos) : [],
           partOfWord,
           role: role && head ? { role, head } : null,
           caseWhy: language.explainCase(tokens, w.index),
@@ -92,6 +95,21 @@
           <span class="lemma">(<span {lang}>{word.entry?.lemma ?? token.lemma}</span>)</span>
         {/if}
       </h2>
+      {#if word.said.length > 0 || word.lemmaSaid.length > 0}
+        <p class="pronunciation">
+          {#each word.said as p (p.ipa)}
+            <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
+          {/each}
+          {#if word.lemmaSaid.length > 0 && word.entry}
+            <span class="muted"
+              ><span {lang}>{word.entry.lemma}</span>
+              {#each word.lemmaSaid as p (p.ipa)}
+                <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
+              {/each}</span
+            >
+          {/if}
+        </p>
+      {/if}
       <p class="grammar">
         {[word.partOfWord ?? UPOS_LABEL[token.upos], ...featureWords(token.feats)].join(
           " · ",

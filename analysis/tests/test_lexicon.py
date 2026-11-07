@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from skolia_analysis.lang.pl.walenty.parse import parse_schema
-from skolia_analysis.lexicon import build, bundle, store
-from skolia_analysis.lexicon.schema import Form, Paradigm, Sense
+from skolia_analysis.lexicon import build, bundle, pronunciation, store
+from skolia_analysis.lexicon.schema import Form, Paradigm, Pronunciation, Sense
 from skolia_analysis.lexicon.source import Converted
 from skolia_analysis.schema import Blob, Feats, Token, Upos
 
@@ -113,3 +113,53 @@ def test_bundle_shares_feature_sets_and_groups_forms(tmp_path: Path) -> None:
         lambda lemma, upos: [strach] if (lemma, upos) == ("pies", "NOUN") else [],
     )
     assert with_frames["entries"]["pl:pies:NOUN"]["frames"] == [strach]
+
+
+def test_bundle_pronounces_tokens_and_lemmas(tmp_path: Path) -> None:
+    path = tmp_path / "en.sqlite"
+    said = [
+        store.PronunciationRow("lead", "NOUN", [{"ipa": "/lɛd/"}]),
+        store.PronunciationRow("lead", "VERB", [{"ipa": "/liːd/"}]),
+        store.PronunciationRow("led", "VERB", [{"ipa": "/lɛd/"}]),
+        store.PronunciationRow("be", "VERB", [{"ipa": "/biː/"}]),
+    ]
+    store.write(path, [], {"version": "test/1"}, lambda: said)
+    lexicon = store.Lexicon(path)
+    assert bundle.pronounce(lexicon, "Lead", "NOUN") == [{"ipa": "/lɛd/"}]
+    assert bundle.pronounce(lexicon, "lead", "VERB") == [{"ipa": "/liːd/"}]
+    assert bundle.pronounce(lexicon, "be", "AUX") == [{"ipa": "/biː/"}]
+    assert bundle.pronounce(lexicon, "xyzzy", "NOUN") == []
+
+    token: Token = {
+        "start": 0,
+        "end": 3,
+        "text": "led",
+        "lemma": "lead",
+        "lemma_id": "en:lead:VERB",
+        "upos": "VERB",
+        "xpos": None,
+        "feats": {},
+        "head": None,
+        "deprel": "root",
+    }
+    blob: Blob = {
+        "schema": 2,
+        "analyzer": "test",
+        "lang": "en",
+        "hash": "",
+        "sentences": [{"start": 0, "end": 3, "tokens": [token], "expressions": []}],
+    }
+    assert bundle.make(blob, lexicon)["pronunciations"] == {
+        "led:VERB": [{"ipa": "/lɛd/"}],
+        "lead:VERB": [{"ipa": "/liːd/"}],
+    }
+
+
+def test_pronunciations_merge_accents() -> None:
+    uk: Pronunciation = {"ipa": "/ɹiːd/", "accents": ["UK"]}
+    us: Pronunciation = {"ipa": "/ɹiːd/", "accents": ["US"]}
+    assert pronunciation.merge([uk], [us, {"ipa": "/ɹɛd/"}]) == [
+        {"ipa": "/ɹiːd/", "accents": ["UK", "US"]},
+        {"ipa": "/ɹɛd/"},
+    ]
+    assert pronunciation.merge([uk], [{"ipa": "/ɹiːd/"}]) == [{"ipa": "/ɹiːd/"}]

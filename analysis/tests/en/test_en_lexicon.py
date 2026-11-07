@@ -159,3 +159,29 @@ def test_etymologies_share_their_fullest_table() -> None:
     assert [sorted(f["form"] for f in p["forms"]) for p in entry.paradigms] == [
         ["acacia", "acaciae", "acacias"]
     ]
+
+
+def test_pronunciations_keep_uk_and_us() -> None:
+    entry: KaikkiEntry = {
+        "word": "tomato",
+        "pos": "noun",
+        "sounds": [
+            {"tags": ["Australia", "Received-Pronunciation"], "ipa": "/təˈmɑː.təʊ/"},
+            {"tags": ["US"], "ipa": "/təˈmeɪ.toʊ/"},
+            {"tags": ["Canada"], "ipa": "[tʰəˈmeɪ̯ɾo]"},
+            {"tags": ["Scotland"], "ipa": "/təˈmɑto/"},
+            {"tags": ["Early", "Modern", "UK"], "ipa": "/təˈmɑːtoː/"},
+            {"note": "Received Pronunciation, General American, CA]", "ipa": "/x/"},
+            {"note": "Dublin", "ipa": "/y/"},
+            {"note": "weak form", "ipa": "/z/"},
+            {"tags": ["rhymes"]},
+        ],
+    }
+    said = lexicon_en.Source().pronounce(entry)
+    assert said is not None and said.upos == ("NOUN",)
+    assert said.pronunciations == [
+        {"ipa": "/təˈmɑː.təʊ/", "accents": ["UK"]},
+        {"ipa": "/təˈmeɪ.toʊ/", "accents": ["US"]},
+        {"ipa": "/x/", "accents": ["UK", "US"]},
+        {"ipa": "/z/"},
+    ]

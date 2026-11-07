@@ -43,11 +43,21 @@ class KaikkiHeadTemplate(TypedDict, total=False):
     args: dict[str, str]
 
 
+class KaikkiSound(TypedDict, total=False):
+    ipa: str
+    """/ˈpjɛs/ (phonemic) or [ˈpjɛs] (phonetic). Other sounds carry audio, rhymes, ..."""
+    tags: list[str]
+    """Accent or period: Received-Pronunciation, General-American, Middle Polish, ..."""
+    note: str
+    """Free text, e.g. a region ("Kuyavia"), "normal speech" or "prescriptive"."""
+
+
 class KaikkiEntry(TypedDict, total=False):
     word: str
     pos: str
     """noun, verb, adj, name (proper noun), ..."""
     senses: list[KaikkiSense]
+    sounds: list[KaikkiSound]
     forms: list[KaikkiForm]
     head_templates: list[KaikkiHeadTemplate]
     etymology_number: int
