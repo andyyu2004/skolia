@@ -5,8 +5,9 @@ name: CI
 # and a preview environment, pr-<number>, deployed and smoke-tested on each push and torn
 # down when the pull request closes (sweep.yml catches any left); the smoke job gates
 # merging on it.
-# main: deploy staging and smoke-test it. A v* tag on a commit in main: staging, then production. The steps
-# are just recipes (justfile), so a deploy by hand runs the same commands.
+# main: deploy staging and smoke-test it. A v* tag on a commit in main: staging, then production. The ingest
+# images are built once, before any deploy. The steps are just recipes (justfile) and
+# infra/deploy-ingest.sh, so a deploy by hand runs the same commands.
 
 on:
   push:
@@ -33,7 +34,38 @@ jobs:
       - run: just check
       - run: just test
 
-  plan:
+  # Before any deploy, for all of them: the images are named by their inputs, not the
+  # environment. Only builds and pushes an image whose inputs changed. Runs wherever
+  # deploy-preview or deploy-staging does.
+  build-ingest-image:
+    if: >-
+      (github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository)
+      || (github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
+    needs: check
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # The languages in infra/deploy-ingest.sh
+        lang: [pl, en]
+    steps:
+      - uses: actions/checkout@v7
+      # The model downloads read HF_TOKEN (impureEnvVars) from the daemon, not this job
+      - uses: ./.github/actions/setup
+        with:
+          nix-conf: |
+            extra-experimental-features = configurable-impure-env
+            impure-env = HF_TOKEN=${{ secrets.HF_TOKEN }}
+      # deploy-ingest.sh pushes to it
+      - uses: cachix/cachix-action@v17
+        with:
+          name: andyyu2004
+          skipPush: true
+      - run: infra/deploy-ingest.sh build ${{ matrix.lang }}
+        env:
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+  plan-infra:
     if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     needs: check
     runs-on: ubuntu-24.04
@@ -57,9 +89,9 @@ jobs:
   # the whole deploy (all of deploy.yml's jobs), so a teardown waits for a deploy, and a
   # push waits for the last push's deploy instead of cancelling it part way; a pending
   # deploy is replaced by a newer one, or by the teardown.
-  preview:
+  deploy-preview:
     if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
-    needs: check
+    needs: build-ingest-image
     concurrency:
       group: preview-pr-${{ github.event.number }}
       cancel-in-progress: false
@@ -74,15 +106,15 @@ jobs:
   # preview and skips this, which counts as passing.
   smoke:
     if: always() && (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository))
-    needs: preview
+    needs: deploy-preview
     runs-on: ubuntu-24.04
     steps:
-      - if: github.event_name == 'pull_request' && needs.preview.result != 'success'
+      - if: github.event_name == 'pull_request' && needs.deploy-preview.result != 'success'
         run: |
-          echo "the preview's deploy or smoke test didn't pass: ${{ needs.preview.result }}" >&2
+          echo "the preview's deploy or smoke test didn't pass: ${{ needs.deploy-preview.result }}" >&2
           exit 1
 
-  preview-teardown:
+  teardown-preview:
     if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
     concurrency:
@@ -101,15 +133,15 @@ jobs:
       - uses: ./.github/actions/setup
       - run: just teardown pr-${{ github.event.number }}
 
-  staging:
+  deploy-staging:
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
-    needs: check
+    needs: build-ingest-image
     uses: ./.github/workflows/deploy.yml
     with:
       env: staging
     secrets: inherit
 
-  tag-on-main:
+  check-tag-on-main:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     steps:
@@ -118,9 +150,9 @@ jobs:
           fetch-depth: 0
       - run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
 
-  production:
+  deploy-production:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [staging, tag-on-main]
+    needs: [deploy-staging, check-tag-on-main]
     uses: ./.github/workflows/deploy.yml
     with:
       env: production
