@@ -10,6 +10,11 @@ from .parsed import ParsedSentence, ParsedToken, ParsedWord
 from .schema import Blob, ExpressionDef, ExpressionMatch, Reading, Sentence, Token, Upos
 
 SCHEMA = 2
+"""The analysis blob's JSON shape. Documents keep their analysis until ingest redoes them,
+so the reader has to read every schema still stored. Add a field as NotRequired, without
+a bump. Bump it only when the shape changes, and keep reading the older schema in the
+reader until a batch re-ingest retires it. 1 -> 2: each candidate has its own xpos, and
+a token may have parser (both unused by the reader)."""
 
 NO_LEMMA_ID: set[Upos] = {"PUNCT", "SYM"}
 
