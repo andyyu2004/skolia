@@ -113,7 +113,7 @@
         {#each documents as doc (doc.id)}
           <li>
             <a href={`#/doc/${doc.id}`}>{doc.title}</a>
-            <span class="muted">{LANGUAGES[doc.lang].name} · {doc.words} words</span>
+            <span class="muted">{LANGUAGES[doc.lang].name} · {doc.words} words · {doc.importerName}</span>
             {#if badge(doc)}
               {@const shown = badge(doc)}
               <span class="badge" class:failed={shown?.failed}>{shown?.text}</span>

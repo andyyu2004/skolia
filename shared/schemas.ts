@@ -51,4 +51,5 @@ export const DocumentRow = z.object({
   words: z.number().int(),
   importer: z.string(),
   visibility: Visibility,
+  importerName: z.string(),
 });

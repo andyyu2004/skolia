@@ -32,6 +32,8 @@ export interface DocumentSummary {
   imported: string;
   words: number;
   visibility: Visibility;
+  /** The display name of the user who first imported it. */
+  importerName: string;
   state: State;
   /** The analysis and bundle to show, by name (GET .../analysis/{name}): the current
    * ones, or while newer ones are queued or analysing (or failed), the previous ones.

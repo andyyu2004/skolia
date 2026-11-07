@@ -18,7 +18,7 @@ import {
 import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { Status, Versions } from "@skolia/shared/schema";
 import * as schemas from "@skolia/shared/schemas";
-import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob, UserData } from "./ports.ts";
+import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob, StoredDocument, UserData } from "./ports.ts";
 
 export interface Deps {
   auth: Auth;
@@ -48,7 +48,7 @@ export function createApp(deps: Deps) {
 
   /** The summary, after queueing the document again if ingest now produces other
    * versions, or if its job seems lost. */
-  async function current(record: DocumentRecord, versions: VersionsOf): Promise<DocumentSummary> {
+  async function current(record: StoredDocument, versions: VersionsOf): Promise<DocumentSummary> {
     const status = await readStatus(deps.blobs, record.id);
     if (status !== null && (isStuck(status, now()) || isOutdated(status, await versions(record.lang)))) {
       return summarize(record, await requeue(deps, record, status, now()));
@@ -168,7 +168,7 @@ export function createApp(deps: Deps) {
   return app;
 }
 
-async function findDocument(deps: Deps, id: string): Promise<DocumentRecord | null> {
+async function findDocument(deps: Deps, id: string): Promise<StoredDocument | null> {
   return ID.test(id) ? deps.documents.get(id) : null;
 }
 
@@ -282,7 +282,7 @@ export function parseVersions(raw: string): Versions | null {
   return parseJson(schemas.Versions, raw);
 }
 
-function summarize({ importer: _, ...record }: DocumentRecord, status: Status | null): DocumentSummary {
+function summarize({ importer: _, ...record }: StoredDocument, status: Status | null): DocumentSummary {
   const summary: DocumentSummary = { ...record, state: status?.state ?? "failed" };
   const analysis = nameOf(status?.analysis);
   const bundle = nameOf(status?.bundle);

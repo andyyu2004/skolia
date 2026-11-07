@@ -387,6 +387,7 @@ test("the importer is recorded, and a private text is in only its importer's lib
   assert.equal(response.status, 202);
   const summary = (await response.json()) as DocumentSummary;
   assert.equal(summary.visibility, "private");
+  assert.equal(summary.importerName, "Ivy");
   assert.equal("importer" in summary, false);
   const row = await local.env.DB.prepare("select importer, visibility from document where id = ?").bind(summary.id).first();
   assert.deepEqual(row, { importer: (await local.auth.user(importer))?.id, visibility: "private" });

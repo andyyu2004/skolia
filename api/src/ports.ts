@@ -16,10 +16,15 @@ export interface DocumentRecord {
   visibility: Visibility;
 }
 
+/** A stored document, with its importer's name. */
+export interface StoredDocument extends DocumentRecord {
+  importerName: string;
+}
+
 export interface DocumentStore {
   /** Public documents, and the viewer's own private ones. */
-  list(viewer: string | null): Promise<DocumentRecord[]>;
-  get(id: string): Promise<DocumentRecord | null>;
+  list(viewer: string | null): Promise<StoredDocument[]>;
+  get(id: string): Promise<StoredDocument | null>;
   /** Insert, or keep the existing record if the id is already there. */
   add(record: DocumentRecord): Promise<void>;
   makePublic(id: string): Promise<void>;
