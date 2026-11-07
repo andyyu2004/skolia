@@ -38,6 +38,10 @@ const INSTANCE = "standard-2";
 // How long past its last idle check a container keeps running if no further check
 // comes, e.g. when an alarm fails
 const INACTIVITY_MARGIN_MS = 5 * 60 * 1000;
+// How long an idle container gets to exit on SIGTERM before it's killed; under
+// blockConcurrencyWhile's 30 s
+const STOP_TIMEOUT_MS = 10 * 1000;
+const SIGTERM = 15;
 
 /** What became of a job handed to the container */
 type Outcome = "accepted" | "malformed" | "failed";
@@ -61,6 +65,8 @@ function milliseconds(duration: string): number {
  */
 export class Ingester extends DurableObject<Env> {
   private readonly sleepAfterMs = milliseconds(this.env.SLEEP_AFTER ?? "5m");
+  /** Settles when the container this object started exits */
+  private exited: Promise<void> | undefined;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -97,12 +103,11 @@ export class Ingester extends DurableObject<Env> {
         },
       });
       console.log("starting ingest:", image);
-      this.ctx.waitUntil(
-        container.monitor().then(
-          () => console.log("ingest exited:", image),
-          (error: unknown) => console.error("ingest failed:", image, error),
-        ),
+      this.exited = container.monitor().then(
+        () => console.log("ingest exited:", image),
+        (error: unknown) => console.error("ingest failed:", image, error),
       );
+      this.ctx.waitUntil(this.exited);
       await container.setInactivityTimeout(this.inactivityTimeoutMs());
     }
     await this.ready(container);
@@ -115,7 +120,8 @@ export class Ingester extends DurableObject<Env> {
   override async alarm(): Promise<void> {
     const container = this.ctx.container;
     if (!container?.running) return;
-    // So that no job is handed over between the check and the stop
+    // So that no job is handed over between the check and the container's exit: a job
+    // that arrives meanwhile waits, then starts a new container
     await this.ctx.blockConcurrencyWhile(async () => {
       if (await this.busy(container)) {
         console.log("ingest is busy; keeping it awake");
@@ -123,7 +129,15 @@ export class Ingester extends DurableObject<Env> {
         return;
       }
       console.log("ingest is idle; stopping it");
-      await container.destroy();
+      // A restarted Durable Object hasn't watched the container yet
+      const exited = this.exited ?? container.monitor().catch(() => undefined);
+      // SIGTERM rather than destroy(), whose SIGKILL makes the exit look like a crash
+      container.signal(SIGTERM);
+      const timeout = scheduler.wait(STOP_TIMEOUT_MS).then(() => "timeout" as const);
+      if ((await Promise.race([exited, timeout])) === "timeout") {
+        console.error(`ingest didn't stop within ${STOP_TIMEOUT_MS} ms; killing it`);
+        await container.destroy();
+      }
     });
   }
 
