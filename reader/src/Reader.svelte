@@ -51,11 +51,6 @@
         if (cancelled) return;
         summary = current;
         const step = afterPoll(current, tried);
-        if (step.load === null && reading === null && plain === null) {
-          const text = await getText(id);
-          if (cancelled) return;
-          plain = text;
-        }
         if (step.load !== null) {
           const next = await loadReading(id, step.load);
           if (cancelled) return;
@@ -65,6 +60,12 @@
             if (reading !== null) selected = null;
             reading = next;
           }
+        }
+        // No reading yet, or only one this reader can't use (an old bundle schema)
+        if (reading === null && plain === null) {
+          const text = await getText(id);
+          if (cancelled) return;
+          plain = text;
         }
         failures = 0;
         error = null;
