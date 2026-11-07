@@ -40,8 +40,11 @@ repo=registry.cloudflare.com/$CLOUDFLARE_ACCOUNT_ID
 tag_of() { "$nix_sh" nix eval --raw "./analysis#ingest-$1.imageTag"; }
 
 registry=
+# Called in if conditions, where set -e doesn't apply: a failed listing exits by itself
 in_registry() {
-  [ -n "$registry" ] || registry=$(registry_wrangler containers images list --json)
+  if [ -z "$registry" ]; then
+    registry=$(registry_wrangler containers images list --json) || exit
+  fi
   jq -e --arg n "$1" --arg v "$2" '.[] | select(.name == $n) | .tags | index($v)' \
     <<<"$registry" >/dev/null
 }
@@ -49,14 +52,20 @@ in_registry() {
 # The durable_object scheduling policy takes images pinned by digest. --no-tags: listing
 # the repository's tags fails (Cloudflare's registry rejects skopeo's request).
 digest_of() {
-  registry_wrangler containers registries credentials registry.cloudflare.com --pull \
-    --expiration-minutes 10 | tail -n1 |
-    "$nix_sh" sh -c 'exec nix run ./analysis#skopeo -- inspect --no-tags --creds "v1:$(cat)" \
-      --format "{{.Digest}}" "$0"' "docker://$repo/$1"
+  local creds
+  creds=$(registry_credentials --pull --expiration-minutes 10) || exit
+  "$nix_sh" sh -c 'exec nix run ./analysis#skopeo -- inspect --no-tags --creds "v1:$(cat)" \
+    --format "{{.Digest}}" "$0"' "docker://$repo/$1" <<<"$creds"
+}
+
+# Fetched before skopeo starts, so a wrangler failure stops here instead of reaching the
+# registry as an authentication error
+registry_credentials() {
+  registry_wrangler containers registries credentials registry.cloudflare.com "$@" | tail -n1
 }
 
 build_lang() {
-  local lang=$1 name tag
+  local lang=$1 name tag creds
   name=skolia-ingest-$lang
   tag=$(tag_of "$lang")
   if in_registry "$name" "$tag"; then
@@ -69,10 +78,9 @@ build_lang() {
   # With the credentials wrangler containers push would use (user v1), on stdin. Cloudflare's
   # registry sometimes times out committing a large layer (on 2026-11-06 a 1 GB model layer
   # failed 3 times, then went through): skopeo retries.
-  registry_wrangler containers registries credentials registry.cloudflare.com --push --pull \
-    --expiration-minutes 60 | tail -n1 |
-    "$nix_sh" sh -c 'exec nix run "./analysis#ingest-$0.copyTo" -- --retry-times 5 \
-      --format v2s2 --dest-creds "v1:$(cat)" "$1"' "$lang" "docker://$repo/$name:$tag"
+  creds=$(registry_credentials --push --pull --expiration-minutes 60)
+  "$nix_sh" sh -c 'exec nix run "./analysis#ingest-$0.copyTo" -- --retry-times 5 \
+    --format v2s2 --dest-creds "v1:$(cat)" "$1"' "$lang" "docker://$repo/$name:$tag" <<<"$creds"
   # Everything the next build needs but the models, which would fill the cache
   if [ -n "${CACHIX_AUTH_TOKEN:-}" ]; then
     nix build --no-link --print-out-paths "./analysis#cacheable-$lang" | cachix push andyyu2004
