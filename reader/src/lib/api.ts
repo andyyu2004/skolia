@@ -67,6 +67,13 @@ export async function getDocument(id: string): Promise<DocumentSummary> {
   return response.json();
 }
 
+/** The text as uploaded, to show before its analysis is ready. */
+export async function getText(id: string): Promise<string> {
+  const response = await api.documents[":id"].text.$get({ param: { id } });
+  if (!response.ok) throw await failure(response);
+  return response.text();
+}
+
 export async function importDocument(body: ImportRequest): Promise<DocumentSummary> {
   const response = await api.documents.$post({ json: body });
   if (!response.ok) throw await failure(response);

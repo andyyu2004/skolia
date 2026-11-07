@@ -18,7 +18,7 @@ import {
 import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { Status, Versions } from "@skolia/shared/schema";
 import * as schemas from "@skolia/shared/schemas";
-import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob, StoredDocument, UserData } from "./ports.ts";
+import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, Sharing, StoredBlob, StoredDocument, UserData } from "./ports.ts";
 
 export interface Deps {
   auth: Auth;
@@ -118,11 +118,17 @@ export function createApp(deps: Deps) {
       if (!user) return c.json({ error: "sign in to import" } satisfies ApiError, 401);
       const body = c.req.valid("json");
       const request = { ...body, title: body.title?.trim().slice(0, MAX_TITLE_LENGTH) || firstWords(body.text) };
+      const sharing: Sharing = {
+        licence: body.licence,
+        author: body.author?.trim() || null,
+        source: body.source ?? null,
+        licensor: user.id,
+      };
       const id = await docId(request.lang, request.text);
       let existing = await deps.documents.get(id);
       if (existing?.visibility === "private" && request.visibility === "public") {
-        await deps.documents.makePublic(id);
-        existing = { ...existing, visibility: "public" };
+        await deps.documents.share(id, sharing);
+        existing = { ...existing, ...sharing, visibility: "public" };
       }
       if (existing) {
         const summary = await current(existing, versionsOf(deps.blobs));
@@ -142,6 +148,7 @@ export function createApp(deps: Deps) {
           words: countWords(request.text),
           importer: user.id,
           visibility: request.visibility,
+          ...sharing,
         });
       }
       const record = existing ?? (await deps.documents.get(id));
@@ -282,7 +289,7 @@ export function parseVersions(raw: string): Versions | null {
   return parseJson(schemas.Versions, raw);
 }
 
-function summarize({ importer: _, ...record }: StoredDocument, status: Status | null): DocumentSummary {
+function summarize({ importer: _, licensor: __, ...record }: StoredDocument, status: Status | null): DocumentSummary {
   const summary: DocumentSummary = { ...record, state: status?.state ?? "failed" };
   const analysis = nameOf(status?.analysis);
   const bundle = nameOf(status?.bundle);

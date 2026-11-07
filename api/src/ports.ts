@@ -1,7 +1,7 @@
 // What the API needs from its surroundings: D1, R2, Cloudflare Queues and a Durable
 // Object per user (src/worker/adapters.ts), Better Auth (src/auth.ts), and fakes in the
 // tests.
-import type { KnownLemma, Lang, LemmaId, LemmaStatus, User, Visibility } from "@skolia/shared/api";
+import type { KnownLemma, Lang, LemmaId, Licence, LemmaStatus, User, Visibility } from "@skolia/shared/api";
 import type { IngestJob } from "@skolia/shared/schema";
 
 /** A document's metadata, owned by the API. Its state lives in the status blob. */
@@ -14,7 +14,15 @@ export interface DocumentRecord {
   /** The user who first imported it. */
   importer: string;
   visibility: Visibility;
+  licence: Licence;
+  author: string | null;
+  source: string | null;
+  /** The user who claimed the licence: the importer, or whoever made it public. */
+  licensor: string;
 }
+
+/** A licence claim, which makes a private document public. */
+export type Sharing = Pick<DocumentRecord, "licence" | "author" | "source" | "licensor">;
 
 /** A stored document, with its importer's name. */
 export interface StoredDocument extends DocumentRecord {
@@ -27,7 +35,8 @@ export interface DocumentStore {
   get(id: string): Promise<StoredDocument | null>;
   /** Insert, or keep the existing record if the id is already there. */
   add(record: DocumentRecord): Promise<void>;
-  makePublic(id: string): Promise<void>;
+  /** Make it public under this licence claim. */
+  share(id: string, sharing: Sharing): Promise<void>;
   /** How many documents were imported at or after this ISO time. */
   countImportedSince(since: string): Promise<number>;
 }

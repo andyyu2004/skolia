@@ -57,13 +57,17 @@ export function putLemma(app: App, headers: Headers | undefined, lemmaId: string
   });
 }
 
-export function importText(app: App, text = TEXT, { headers = importer, visibility }: { headers?: HeadersInit; visibility?: string } = {}) {
+export function importText(
+  app: App,
+  text = TEXT,
+  { headers = importer, ...fields }: { headers?: HeadersInit; visibility?: string; licence?: string; author?: string; source?: string } = {},
+) {
   const allHeaders = new Headers(headers);
   allHeaders.set("content-type", "application/json");
   return app.request(`${ORIGIN}/api/documents`, {
     method: "POST",
     headers: allHeaders,
-    body: JSON.stringify({ title: "", text, lang: "pl", visibility }),
+    body: JSON.stringify({ title: "", text, lang: "pl", ...fields }),
   });
 }
 
