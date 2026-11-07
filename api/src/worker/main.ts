@@ -25,20 +25,26 @@ interface Env {
   GOOGLE_CLIENT_SECRET?: string;
 }
 
-let auth: Auth | undefined;
+/** A Better Auth instance per request: it sets itself up on first use and keeps that
+ * promise, and a request that awaits a promise made in another can hang on Workers (in
+ * pr-16's smoke tests, one of two concurrent first requests got no response). */
+let warned = false;
+
+function warnOnce(message: string): void {
+  if (warned) return;
+  warned = true;
+  console.error(message);
+}
 
 function authFor(env: Env): Auth {
-  if (auth) return auth;
   const { BASE_URL, BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = env;
   if (!BASE_URL || !BETTER_AUTH_SECRET) {
-    console.error("BASE_URL or BETTER_AUTH_SECRET isn't set; sign-in is off");
-    auth = NO_AUTH;
-  } else {
-    const google = GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET ? { clientId: GOOGLE_CLIENT_ID, clientSecret: GOOGLE_CLIENT_SECRET } : undefined;
-    if (!google) console.error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET isn't set; only API keys sign in");
-    auth = createAuth({ database: env.DB, baseURL: BASE_URL, secret: BETTER_AUTH_SECRET, google });
+    warnOnce("BASE_URL or BETTER_AUTH_SECRET isn't set; sign-in is off");
+    return NO_AUTH;
   }
-  return auth;
+  const google = GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET ? { clientId: GOOGLE_CLIENT_ID, clientSecret: GOOGLE_CLIENT_SECRET } : undefined;
+  if (!google) warnOnce("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET isn't set; only API keys sign in");
+  return createAuth({ database: env.DB, baseURL: BASE_URL, secret: BETTER_AUTH_SECRET, google });
 }
 
 export default {
