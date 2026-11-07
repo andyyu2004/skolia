@@ -4,6 +4,7 @@
   import { getDocument, loadReading, type Reading } from "./lib/api.ts";
   import { layout, tokenKey, type Layout } from "./lib/doc.ts";
   import { afterPoll, notice as noticeFor, retryAfter } from "./lib/reading.ts";
+  import { LICENCE_INFO } from "./lib/licence.ts";
   import WordSheet from "./WordSheet.svelte";
 
   let { id }: { id: string } = $props();
@@ -108,7 +109,16 @@
 <div class="reader" class:sheet-open={piece !== undefined}>
   <main class="page">
     {#if summary}
+      {@const licence = LICENCE_INFO[summary.licence]}
       <h1>{summary.title}</h1>
+      <p class="credit muted small">
+        {#if summary.author}<span>{summary.author}</span>{/if}
+        <span>
+          {#if licence.url}<a href={licence.url} rel="license noreferrer">{licence.short}</a>{:else}{licence.short}{/if}
+        </span>
+        {#if summary.source}<span><a href={summary.source} rel="noreferrer">source</a></span>{/if}
+        {#if summary.visibility === "private"}<span>private</span>{/if}
+      </p>
     {/if}
 
     {#if notice.kind === "unreachable"}

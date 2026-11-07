@@ -1,22 +1,41 @@
 <script lang="ts">
-  import type { Lang, User } from "@skolia/shared/api";
-  import { LANGS, MAX_TEXT_LENGTH } from "@skolia/shared/api";
+  import type { Lang, Licence, User } from "@skolia/shared/api";
+  import { LANGS, LICENCES, MAX_AUTHOR_LENGTH, MAX_SOURCE_LENGTH, MAX_TEXT_LENGTH, isShareable } from "@skolia/shared/api";
   import { LANGUAGES } from "./lang/index.ts";
   import { importDocument, signIn } from "./lib/api.ts";
+  import { LICENCE_INFO } from "./lib/licence.ts";
 
   let { user }: { user: User | null | undefined } = $props();
 
   let title = $state("");
   let text = $state("");
   let lang = $state<Lang>("pl");
+  let licence = $state<Licence | "">("");
+  let ownWork = $state(false);
+  let author = $state("");
+  let source = $state("");
+  let share = $state(false);
   let importing = $state(false);
   let error = $state<string | null>(null);
 
+  const shareable = $derived(licence !== "" && isShareable(licence));
+  const ready = $derived(title.trim() !== "" && text.trim() !== "" && licence !== "");
+
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
+    if (licence === "" || !user) return;
     importing = true;
     try {
-      const summary = await importDocument({ title, text, lang });
+      const by = ownWork ? user.name : author.trim();
+      const summary = await importDocument({
+        title,
+        text,
+        lang,
+        licence,
+        visibility: share && shareable ? "public" : "private",
+        ...(by === "" ? {} : { author: by }),
+        ...(source.trim() === "" ? {} : { source: source.trim() }),
+      });
       location.hash = `#/doc/${summary.id}`;
     } catch (e: unknown) {
       error = e instanceof Error ? e.message : String(e);
@@ -49,9 +68,46 @@
         maxlength={MAX_TEXT_LENGTH}
         required
       ></textarea>
+      <div class="muted small count">{text.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}</div>
+
+      <fieldset>
+        <legend>Where it's from</legend>
+        <label>
+          Licence
+          <select bind:value={licence} required>
+            <option value="" disabled>Choose a licence</option>
+            {#each LICENCES.filter((l) => l !== "unknown") as l (l)}
+              <option value={l}>{LICENCE_INFO[l].label}</option>
+            {/each}
+          </select>
+        </label>
+        <label class="check">
+          <input type="checkbox" bind:checked={ownWork} />
+          I wrote this text
+        </label>
+        {#if !ownWork}
+          <label>
+            <span>Author <span class="muted">(optional)</span></span>
+            <input bind:value={author} maxlength={MAX_AUTHOR_LENGTH} />
+          </label>
+        {/if}
+        <label>
+          <span>Source URL <span class="muted">(optional)</span></span>
+          <input type="url" bind:value={source} placeholder="https://" maxlength={MAX_SOURCE_LENGTH} />
+        </label>
+        <label class="check" class:muted={!shareable}>
+          <input type="checkbox" bind:checked={share} disabled={!shareable} />
+          Share it in Explore. I confirm the text is under the licence above.
+        </label>
+        {#if licence !== "" && !shareable}
+          <p class="muted small">
+            Only public domain and Creative Commons texts can be shared. This one stays private to you.
+          </p>
+        {/if}
+      </fieldset>
+
       <div class="row end">
-        <span class="muted small">{text.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}</span>
-        <button type="submit" class="primary" disabled={importing || title.trim() === "" || text.trim() === ""}>
+        <button type="submit" class="primary" disabled={importing || !ready}>
           {importing ? "Uploading…" : "Upload"}
         </button>
       </div>

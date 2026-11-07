@@ -3,6 +3,7 @@
   import { LANGS } from "@skolia/shared/api";
   import { LANGUAGES } from "./lang/index.ts";
   import { listDocuments } from "./lib/api.ts";
+  import { LICENCE_INFO } from "./lib/licence.ts";
   import { badge } from "./lib/reading.ts";
 
   let documents = $state<DocumentSummary[] | null>(null);
@@ -55,8 +56,11 @@
             <span class="card-title">{doc.title}</span>
             <span class="muted small">
               {LANGUAGES[doc.lang].name} · {doc.words.toLocaleString()} {doc.words === 1 ? "word" : "words"} · {doc.importerName} ·
-              {dateFormat.format(new Date(doc.imported))}
+              {dateFormat.format(new Date(doc.imported))} · {LICENCE_INFO[doc.licence].short}
             </span>
+            {#if doc.visibility === "private"}
+              <span class="badge">private</span>
+            {/if}
             {#if status}
               <span class="badge" class:failed={status.failed}>{status.text}</span>
             {/if}

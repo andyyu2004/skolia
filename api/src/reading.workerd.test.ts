@@ -23,7 +23,7 @@ test("brotli blobs are sent as stored when accepted, refused otherwise, cached f
 
 test("the summary names the reading once there is one, and it's served by name", async () => {
   const app = setup();
-  await importText(app);
+  await importText(app, TEXT, { visibility: "public", licence: "cc0" });
   const id = await docId("pl", TEXT);
   assert.equal((await summaryOf(app, id)).reading, undefined);
   await readyAt(id, "1");
@@ -39,7 +39,7 @@ test("the summary names the reading once there is one, and it's served by name",
 
 test("an outdated document is queued once, and its old reading is kept meanwhile", async () => {
   const app = setup();
-  await importText(app);
+  await importText(app, TEXT, { visibility: "public", licence: "cc0" });
   const id = await docId("pl", TEXT);
   await readyAt(id, "1");
   await publish("2");

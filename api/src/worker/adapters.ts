@@ -4,7 +4,7 @@ import * as z from "zod";
 import type { KnownLemma, LemmaId, LemmaStatus } from "@skolia/shared/api";
 import type { IngestJob } from "@skolia/shared/schema";
 import { DocumentRow } from "@skolia/shared/schemas";
-import type { BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob, StoredDocument, UserData } from "../ports.ts";
+import type { BlobStore, DocumentRecord, DocumentStore, JobQueue, Sharing, StoredBlob, StoredDocument, UserData } from "../ports.ts";
 import type { User } from "./user.ts";
 
 export class DurableObjectUsers implements UserData {
@@ -45,17 +45,20 @@ export class D1Documents implements DocumentStore {
     return row ? DocumentRow.parse(row) : null;
   }
 
-  async add({ id, title, lang, imported, words, importer, visibility }: DocumentRecord): Promise<void> {
+  async add(r: DocumentRecord): Promise<void> {
     await this.db
       .prepare(
-        "INSERT OR IGNORE INTO document (id, title, lang, imported, words, importer, visibility) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT OR IGNORE INTO document (id, title, lang, imported, words, importer, visibility, licence, author, source, licensor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
-      .bind(id, title, lang, imported, words, importer, visibility)
+      .bind(r.id, r.title, r.lang, r.imported, r.words, r.importer, r.visibility, r.licence, r.author, r.source, r.licensor)
       .run();
   }
 
-  async makePublic(id: string): Promise<void> {
-    await this.db.prepare("UPDATE document SET visibility = 'public' WHERE id = ?").bind(id).run();
+  async share(id: string, { licence, author, source, licensor }: Sharing): Promise<void> {
+    await this.db
+      .prepare("UPDATE document SET visibility = 'public', licence = ?, author = ?, source = ?, licensor = ? WHERE id = ?")
+      .bind(licence, author, source, licensor, id)
+      .run();
   }
 
   async countImportedSince(since: string): Promise<number> {
