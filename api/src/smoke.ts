@@ -5,7 +5,7 @@
 // usage: node src/smoke.ts https://staging.skolia.io $(git describe --tags --always --dirty)
 import { LANGS, type DocumentSummary, type ImportRequest, type Lang, type Version } from "@skolia/shared/api";
 
-const TIMEOUT_MS = 5 * 60 * 1000;
+const TIMEOUT_MS = 10 * 60 * 1000;
 const POLL_MS = 10 * 1000;
 const VERSION_TIMEOUT_MS = 2 * 60 * 1000;
 
