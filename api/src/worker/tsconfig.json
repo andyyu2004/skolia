@@ -4,5 +4,5 @@
     "types": ["@cloudflare/workers-types"]
   },
   "include": [".", "../app.ts", "../auth.ts", "../ports.ts", "../user/migrator.ts","../user/migrations/0*.ts", "../user/migrations/index.ts", "../../../shared"],
-  "exclude": []
+  "exclude": ["../../../shared/**/*.test.ts", "../../../shared/scripts"]
 }

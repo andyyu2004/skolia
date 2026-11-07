@@ -1,6 +1,6 @@
 // "Why this case?": the analysis's case_reason (lang/pl/cases.py) in plain English.
 import type { Case, Token } from "@skolia/shared/schema";
-import { CASE_NAME } from "../../lib/ud.ts";
+import { CASE_NAME } from "../../ud.ts";
 import type { CaseExplanation } from "../types.ts";
 
 // Prepositions that take two cases, with what each means

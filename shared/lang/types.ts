@@ -1,6 +1,6 @@
 // What the reader needs from a language: everything outside lang/ goes through this.
 import type { Entry, Relation, Token } from "@skolia/shared/schema";
-import type { Layout, MergeLabels } from "../lib/paradigm.ts";
+import type { Layout, MergeLabels } from "../paradigm.ts";
 
 export interface CaseExplanation {
   text: string;

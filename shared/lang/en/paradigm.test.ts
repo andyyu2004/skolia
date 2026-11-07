@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Bundle, Entry, Feats, Token } from "@skolia/shared/schema";
-import { paradigmTables, type Table } from "../../lib/paradigm.ts";
+import { paradigmTables, type Table } from "../../paradigm.ts";
 import { english } from "./index.ts";
 
 function token(text: string, lemma: string, upos: Token["upos"], feats: Feats): Token {

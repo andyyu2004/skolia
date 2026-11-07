@@ -18,5 +18,5 @@
     "skipLibCheck": true
   },
   "include": ["src", "../shared"],
-  "exclude": ["src/worker", "src/testing", "src/**/*.workerd.test.ts"]
+  "exclude": ["src/worker", "src/testing", "src/**/*.workerd.test.ts", "../shared/**/*.test.ts", "../shared/scripts"]
 }

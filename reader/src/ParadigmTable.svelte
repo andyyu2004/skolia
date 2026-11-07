@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Lang } from "@skolia/shared/api";
-  import type { Table } from "./lib/paradigm.ts";
+  import type { Table } from "@skolia/shared/paradigm";
 
   let { lang, table }: { lang: Lang; table: Table } = $props();
 

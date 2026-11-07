@@ -6,7 +6,15 @@
     "./schema": "./schema.gen.ts",
     "./api": "./api.ts",
     "./keys": "./keys.ts",
-    "./schemas": "./schemas.ts"
+    "./schemas": "./schemas.ts",
+    "./lang": "./lang/index.ts",
+    "./ud": "./ud.ts",
+    "./paradigm": "./paradigm.ts",
+    "./lexicon": "./lexicon.ts",
+    "./doc": "./doc.ts"
+  },
+  "scripts": {
+    "test": "node --test \"lang/**/*.test.ts\""
   },
   "dependencies": {
     "zod": "4.6.7"

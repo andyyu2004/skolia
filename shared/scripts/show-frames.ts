@@ -1,8 +1,8 @@
 // Print the frame patterns the word sheet would show, for some lemmas of a bundle.
-// usage: node scripts/show-frames.ts BUNDLE.json pl:szukać:VERB pl:mieć:VERB ...
+// usage: node shared/scripts/show-frames.ts BUNDLE.json pl:szukać:VERB pl:mieć:VERB ...
 import { readFileSync } from "node:fs";
 import type { Bundle } from "@skolia/shared/schema";
-import { frames } from "../src/lib/frames.ts";
+import { frames } from "../lang/pl/frames.ts";
 
 const [path, ...ids] = process.argv.slice(2);
 if (!path) throw new Error("usage: show-frames.ts BUNDLE.json LEMMA_ID...");

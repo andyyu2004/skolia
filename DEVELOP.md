@@ -52,7 +52,7 @@ Request bodies, the blobs ingest writes, and database rows are checked with the 
 
 Both are strict TypeScript (`strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`). The API uses TypeScript 7; the reader stays on 6 because svelte-check, which type-checks the `.svelte` components, supports TypeScript 5 and 6 only (move it to 7 when svelte-check does). The tests run the `.ts` files directly with Node's type stripping (wrangler bundles them for Workers); that also means TypeScript-only syntax (enums, parameter properties) isn't allowed (`erasableSyntaxOnly`).
 
-The reader's language-specific parts (paradigm layout, case explanations, Walenty frames) are in `reader/src/lang/<lang>/`, behind the `Language` interface in `reader/src/lang/types.ts`.
+The language-specific parts the reader shows (paradigm layout, case explanations, Walenty frames) are in `shared/lang/<lang>/`, behind the `Language` interface in `shared/lang/types.ts`; the reader only renders them.
 
 After changing a Python schema (`schema.py`, `lexicon/schema.py`, `ingest/schema.py`), regenerate the TypeScript types; `tests/test_ts_types.py` fails until you do:
 

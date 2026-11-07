@@ -4,5 +4,5 @@
     "types": ["node", "@cloudflare/workers-types"]
   },
   "include": ["src/**/*.workerd.test.ts", "src/testing", "../shared"],
-  "exclude": []
+  "exclude": ["../shared/**/*.test.ts", "../shared/scripts"]
 }
