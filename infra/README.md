@@ -40,7 +40,7 @@ A new environment: add it to the checks in `tf.sh`, `wrangler.sh` and `deploy-in
 
 ### Previews
 
-Each pull request from a branch of this repository gets a preview, `pr-N`, deployed and smoke-tested on every push (`ci.yml`, job `preview`). It doesn't gate merging; a fork's pull request gets none. It is on workers.dev only, with no Google client, so only the smoke test's API key signs in, and it accepts 20 imports a day. Its wrangler configs are made by `infra/preview.py config pr-N` from the `env.staging` blocks, with `-pr-N` names, its D1 id and its workers.dev URL; `deploy-infra` makes them after Terraform, and `wrangler.sh` when they're missing. They're gitignored.
+Each pull request from a branch of this repository gets a preview, `pr-N`, deployed and smoke-tested on every push (`ci.yml`, job `preview`). Merging needs it to pass (`ci.yml`, job `smoke`); a fork's pull request gets none and isn't held up. It is on workers.dev only, with no Google client, so only the smoke test's API key signs in, and it accepts 20 imports a day. Its wrangler configs are made by `infra/preview.py config pr-N` from the `env.staging` blocks, with `-pr-N` names, its D1 id and its workers.dev URL; `deploy-infra` makes them after Terraform, and `wrangler.sh` when they're missing. They're gitignored.
 
 Closing the pull request tears the preview down (`just teardown pr-N`, `infra/teardown.sh`): the queue's consumer, the ingest Worker, its container applications (which `wrangler delete` leaves), the skolia Worker, the bucket's objects, `terraform destroy`, then the state object. Each step skips what's already gone, so it can be run again. Every night `sweep.yml` runs `infra/sweep.sh`, which finds previews by their resources' and state's names, tears down those whose pull request isn't open, and fails if any are left; `infra/sweep.sh -n` lists them without tearing them down.
 
@@ -64,7 +64,7 @@ A push to main deploys staging and smoke-tests it: in each language it imports a
 - in the `staging` and `production` environments, secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (the OAuth clients above)
 - environments `staging`, `production` and `preview` (every pull request's)
 
-These, and `main`'s ruleset (pull requests only, through a merge queue that requires CI's `check` job), are managed in Terraform in the dotfiles (`~/.dotfiles/terraform/github`), from `pass`.
+These, and `main`'s ruleset (pull requests only, through a merge queue that requires CI's `check` and `smoke` jobs), are managed in Terraform in the dotfiles (`~/.dotfiles/terraform/github`), from `pass`.
 
 By hand, with the credentials above, the same tasks CI runs:
 
