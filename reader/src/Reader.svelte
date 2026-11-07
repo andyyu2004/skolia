@@ -107,7 +107,6 @@
 
 <div class="reader" class:sheet-open={piece !== undefined}>
   <main class="page">
-    <nav><a href="#/">← Library</a></nav>
     {#if summary}
       <h1>{summary.title}</h1>
     {/if}

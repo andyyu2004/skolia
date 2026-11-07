@@ -3,6 +3,8 @@ import { layout } from "./paradigm.ts";
 
 export const english: Language = {
   name: "English",
+  endonym: "English",
+  flag: "🇬🇧",
   paradigm: layout,
   // The analysis gives no case reasons and the lexicon no frames for English
   explainCase: () => null,
