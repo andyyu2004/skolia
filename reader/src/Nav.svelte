@@ -7,7 +7,7 @@
     user = $bindable(),
     onerror,
   }: {
-    page: "explore" | "upload" | "reader";
+    page: "explore" | "upload" | "review" | "reader";
     user: User | null | undefined;
     onerror: (message: string) => void;
   } = $props();
@@ -27,6 +27,7 @@
     <a href="#/" aria-current={page === "explore" ? "page" : undefined}>Explore</a>
     {#if user}
       <a href="#/upload" aria-current={page === "upload" ? "page" : undefined}>Upload</a>
+      <a href="#/review" aria-current={page === "review" ? "page" : undefined}>Review</a>
     {/if}
   </nav>
   <div class="account">
@@ -42,7 +43,7 @@
           run(async () => {
             await signOut();
             user = null;
-            if (page === "upload") location.hash = "#/";
+            if (page === "upload" || page === "review") location.hash = "#/";
           })}>Sign out</button
       >
     {:else if user === null}

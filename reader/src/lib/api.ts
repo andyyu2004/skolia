@@ -6,11 +6,18 @@ import type { AppType } from "@skolia/api/app";
 import {
   isLang,
   type ApiError,
+  type Due,
   type DocumentSummary,
   type ImportRequest,
   type Lang,
+  type LemmaId,
+  type Rating,
   type ReadingNames,
+  type Reviewed,
+  type Settings,
   type User,
+  type Word,
+  type WordStatus,
 } from "@skolia/shared/api";
 import { BUNDLE_SCHEMA, SCHEMA, type Blob, type Bundle } from "@skolia/shared/schema";
 
@@ -95,4 +102,46 @@ export async function loadReading(id: string, names: ReadingNames): Promise<Read
   const lang = a.lang;
   if (a.schema > SCHEMA || b.schema > BUNDLE_SCHEMA || !isLang(lang) || b.lang !== lang) return "unsupported";
   return { lang, text: await text.text(), analysis: a, bundle: b };
+}
+
+/** The user's words, or null when signed out. */
+export async function listWords(): Promise<Word[] | null> {
+  const response = await api.me.words.$get();
+  if (response.status === 401) return null;
+  if (!response.ok) throw await failure(response);
+  return response.json();
+}
+
+export async function setWord(lemmaId: LemmaId, status: WordStatus): Promise<void> {
+  const response = await api.me.words[":lemmaId"].$put({ param: { lemmaId }, json: { status } });
+  if (!response.ok) throw await failure(response);
+}
+
+/** Cards to review, counting today's new cards from the start of the local day. */
+export async function dueCards(now = new Date()): Promise<Due | null> {
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const response = await api.me.cards.due.$get({ query: { dayStart } });
+  if (response.status === 401) return null;
+  if (!response.ok) throw await failure(response);
+  // Hono's JSON type makes the entries' optional fields `| undefined`, which
+  // exactOptionalPropertyTypes tells apart; it's the same JSON
+  return (await response.json()) as Due;
+}
+
+export async function review(cardId: string, rating: Rating): Promise<Reviewed> {
+  const json = { id: crypto.randomUUID(), cardId, rating, at: new Date().toISOString() };
+  const response = await api.me.reviews.$post({ json });
+  if (!response.ok) throw await failure(response);
+  return response.json();
+}
+
+export async function getSettings(): Promise<Settings> {
+  const response = await api.me.settings.$get();
+  if (!response.ok) throw await failure(response);
+  return response.json();
+}
+
+export async function saveSettings(settings: Settings): Promise<void> {
+  const response = await api.me.settings.$put({ json: settings });
+  if (!response.ok) throw await failure(response);
 }

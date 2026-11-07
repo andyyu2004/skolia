@@ -3,7 +3,10 @@
   import type { Bundle, Token } from "@skolia/shared/schema";
   import { LANGUAGES } from "@skolia/shared/lang";
   import type { Piece } from "@skolia/shared/doc";
-  import { entryFor, pronunciationsOf, rankSenses } from "@skolia/shared/lexicon";
+  import type { LemmaId, WordStatus } from "@skolia/shared/api";
+  import { entryFor, entryIdFor, pronunciationsOf, rankSenses } from "@skolia/shared/lexicon";
+  import { LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
+  import { loadWords, setStatus, words as known } from "./lib/words.svelte.ts";
   import { paradigmTables } from "@skolia/shared/paradigm";
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
   import ParadigmTable from "./ParadigmTable.svelte";
@@ -58,9 +61,11 @@
         const head = w.token.head === null ? null : headText(w.sentence, w.token.head);
         const tokens = sentenceTokens(w.sentence);
         const uses = entry && partOfWord === null ? language.uses(entry, tokens, w.index) : [];
+        const parsedId = LemmaIdSchema.safeParse(entryIdFor(bundle, w.token));
         return {
           ref: w,
           entry,
+          lemmaId: parsedId.success ? parsedId.data : null,
           said: pronunciationsOf(bundle, w.token.text, w.token.upos),
           lemmaSaid:
             entry && entry.lemma !== w.token.text ? pronunciationsOf(bundle, entry.lemma, entry.upos) : [],
@@ -77,6 +82,26 @@
         };
       }),
   );
+
+  const STATUS_LABELS: [WordStatus, string][] = [
+    ["active", "Learn"],
+    ["known", "Known"],
+    ["ignored", "Ignore"],
+  ];
+  let statusError = $state<string | null>(null);
+
+  $effect(() => {
+    loadWords().catch((e: unknown) => (statusError = e instanceof Error ? e.message : String(e)));
+  });
+
+  async function mark(lemmaId: LemmaId, status: WordStatus): Promise<void> {
+    statusError = null;
+    try {
+      await setStatus(lemmaId, status);
+    } catch (e: unknown) {
+      statusError = e instanceof Error ? e.message : String(e);
+    }
+  }
 </script>
 
 <aside class="sheet" class:expanded aria-label="Word details">
@@ -109,6 +134,24 @@
             >
           {/if}
         </p>
+      {/if}
+      {#if known.byId && word.lemmaId && word.partOfWord === null}
+        {@const lemmaId = word.lemmaId}
+        {@const current = known.byId[lemmaId]}
+        <div class="word-status" role="group" aria-label="Your word">
+          {#each STATUS_LABELS as [status, label] (status)}
+            <button
+              type="button"
+              class="quiet"
+              aria-pressed={current?.status === status}
+              onclick={() => mark(lemmaId, status)}>{label}</button
+            >
+          {/each}
+          {#if current?.status === "active"}
+            <span class="muted">{current.mature ? "known from your cards" : "learning"}</span>
+          {/if}
+        </div>
+        {#if statusError}<p class="error">{statusError}</p>{/if}
       {/if}
       <p class="grammar">
         {[word.partOfWord ?? UPOS_LABEL[token.upos], ...featureWords(token.feats)].join(

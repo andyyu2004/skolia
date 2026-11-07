@@ -4,13 +4,15 @@
   import { currentUser } from "./lib/api.ts";
   import Nav from "./Nav.svelte";
   import Reader from "./Reader.svelte";
+  import Review from "./Review.svelte";
   import Upload from "./Upload.svelte";
   import { versionUrl } from "./lib/version.ts";
 
-  type Route = { page: "explore" } | { page: "upload" } | { page: "reader"; id: string };
+  type Route = { page: "explore" } | { page: "upload" } | { page: "review" } | { page: "reader"; id: string };
 
   function parse(hash: string): Route {
     if (hash === "#/upload") return { page: "upload" };
+    if (hash === "#/review") return { page: "review" };
     const match = /^#\/doc\/([0-9a-f]{64})$/.exec(hash);
     return match?.[1] ? { page: "reader", id: match[1] } : { page: "explore" };
   }
@@ -44,6 +46,8 @@
   {/key}
 {:else if route.page === "upload"}
   <Upload {user} />
+{:else if route.page === "review"}
+  <Review {user} />
 {:else}
   <Explore />
 {/if}

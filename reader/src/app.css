@@ -542,6 +542,23 @@ textarea {
   margin: 0.2rem 0;
 }
 
+.word-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.4rem 0;
+}
+
+.word-status button.quiet {
+  padding: 0.25rem 0.75rem;
+}
+
+button.quiet[aria-pressed="true"] {
+  background: var(--current);
+  border-color: var(--accent);
+}
+
 .pronunciation {
   margin: 0.2rem 0;
   display: flex;
@@ -713,4 +730,70 @@ textarea {
 
 .form-list {
   margin: 0.2rem 0;
+}
+
+/* Review */
+
+.review {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.review .counts {
+  margin: 0;
+}
+
+.flashcard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 2rem var(--gutter);
+  min-height: 12rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.flashcard .prompt {
+  font-family: var(--reading);
+  font-size: 2rem;
+  margin: 0;
+}
+
+.flashcard .glosses {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 1.1rem;
+}
+
+.flashcard hr {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.grades {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+}
+
+.grades button {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.review .settings {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.review .settings input {
+  width: 5rem;
 }
