@@ -25,5 +25,10 @@ until curl -fs -o /dev/null "http://localhost:$port/api/documents"; do
   sleep 2
 done
 
+SMOKE_API_KEY=$(openssl rand -hex 32)
+export SMOKE_API_KEY
+node src/smoke-key.ts > "$state/smoke-key.sql"
+pnpm exec wrangler d1 execute DB --local --persist-to "$state" --env='' --file "$state/smoke-key.sql" >/dev/null
+
 # wrangler dev serves version "dev" (define in wrangler.jsonc)
 node src/smoke.ts "http://localhost:$port" dev || { echo "smoke test failed; see api/$log" >&2; exit 1; }

@@ -1,9 +1,12 @@
 // End-to-end check of a deployed environment: in each language, imports a text no one
 // has imported (so its ingest container really runs), waits until it's ready, then
 // fetches its analysis and bundle. Uses one of the day's imports per language. First
-// checks that the environment serves the expected version, i.e. the deploy took.
-// usage: node src/smoke.ts https://staging.skolia.io $(git describe --tags --always --dirty)
-import { LANGS, type DocumentSummary, type ImportRequest, type Lang, type Version } from "@skolia/shared/api";
+// checks that the environment serves the expected version, i.e. the deploy took. Imports
+// as the system user, with the API key smoke-key.ts wrote, and privately, so the texts
+// stay out of the library.
+// usage: SMOKE_API_KEY=<key> node src/smoke.ts https://staging.skolia.io $(git describe --tags --always --dirty)
+import { LANGS, type DocumentList, type DocumentSummary, type ImportRequest, type Lang, type Version } from "@skolia/shared/api";
+import { API_KEY_HEADER } from "./auth.ts";
 
 const TIMEOUT_MS = 10 * 60 * 1000;
 const POLL_MS = 10 * 1000;
@@ -41,17 +44,21 @@ async function checkVersion(base: string, expected: string): Promise<void> {
   }
 }
 
-async function smoke(base: string, lang: Lang): Promise<void> {
+async function smoke(base: string, key: string, lang: Lang): Promise<void> {
   const at = new Date().toISOString();
-  const request: ImportRequest = { title: `smoke test ${at}`, text: `${TEXTS[lang]} Test ${at}.`, lang };
+  const request: ImportRequest = { title: `smoke test ${at}`, text: `${TEXTS[lang]} Test ${at}.`, lang, visibility: "private" };
   const posted = await fetch(`${base}/api/documents`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", [API_KEY_HEADER]: key },
     body: JSON.stringify(request),
   });
   if (posted.status !== 202) throw new Error(`import: ${posted.status} ${await posted.text()}`);
   const { id } = (await posted.json()) as DocumentSummary;
   console.log(`${lang}: imported ${id}`);
+  const listed = await fetch(`${base}/api/documents`);
+  if (!listed.ok) throw new Error(`list: ${listed.status} ${await listed.text()}`);
+  const { documents } = (await listed.json()) as DocumentList;
+  if (documents.some((d) => d.id === id)) throw new Error(`${lang}: a private text is in the library`);
 
   const deadline = Date.now() + TIMEOUT_MS;
   for (;;) {
@@ -75,11 +82,12 @@ async function smoke(base: string, lang: Lang): Promise<void> {
 }
 
 const [, , url, expected] = process.argv;
-if (!url || !expected) {
-  console.error("usage: node src/smoke.ts <base url> <version>");
+const key = process.env["SMOKE_API_KEY"];
+if (!url || !expected || !key) {
+  console.error("usage: SMOKE_API_KEY=<key> node src/smoke.ts <base url> <version>");
   process.exit(2);
 }
 const base = url.replace(/\/$/, "");
 await checkVersion(base, expected);
 // The containers are separate, so the languages run at the same time
-await Promise.all(LANGS.map((lang) => smoke(base, lang)));
+await Promise.all(LANGS.map((lang) => smoke(base, key, lang)));

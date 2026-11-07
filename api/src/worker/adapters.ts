@@ -4,7 +4,7 @@ import * as z from "zod";
 import type { KnownLemma, LemmaId, LemmaStatus } from "@skolia/shared/api";
 import type { IngestJob } from "@skolia/shared/schema";
 import { DocumentRow } from "@skolia/shared/schemas";
-import type { BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob, UserData } from "../ports.ts";
+import type { BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob, StoredDocument, UserData } from "../ports.ts";
 import type { User } from "./user.ts";
 
 export class DurableObjectUsers implements UserData {
@@ -23,6 +23,8 @@ export class DurableObjectUsers implements UserData {
   }
 }
 
+const SELECT_DOCUMENT = `SELECT document.*, "user"."name" AS importerName FROM document JOIN "user" ON "user"."id" = document.importer`;
+
 export class D1Documents implements DocumentStore {
   private readonly db: D1Database;
 
@@ -30,21 +32,30 @@ export class D1Documents implements DocumentStore {
     this.db = db;
   }
 
-  async list(): Promise<DocumentRecord[]> {
-    const { results } = await this.db.prepare("SELECT * FROM document ORDER BY imported DESC").all();
+  async list(viewer: string | null): Promise<StoredDocument[]> {
+    const { results } = await this.db
+      .prepare(`${SELECT_DOCUMENT} WHERE document.visibility = 'public' OR document.importer = ? ORDER BY document.imported DESC`)
+      .bind(viewer)
+      .all();
     return results.map((row) => DocumentRow.parse(row));
   }
 
-  async get(id: string): Promise<DocumentRecord | null> {
-    const row = await this.db.prepare("SELECT * FROM document WHERE id = ?").bind(id).first();
+  async get(id: string): Promise<StoredDocument | null> {
+    const row = await this.db.prepare(`${SELECT_DOCUMENT} WHERE document.id = ?`).bind(id).first();
     return row ? DocumentRow.parse(row) : null;
   }
 
-  async add({ id, title, lang, imported, words }: DocumentRecord): Promise<void> {
+  async add({ id, title, lang, imported, words, importer, visibility }: DocumentRecord): Promise<void> {
     await this.db
-      .prepare("INSERT OR IGNORE INTO document (id, title, lang, imported, words) VALUES (?, ?, ?, ?, ?)")
-      .bind(id, title, lang, imported, words)
+      .prepare(
+        "INSERT OR IGNORE INTO document (id, title, lang, imported, words, importer, visibility) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .bind(id, title, lang, imported, words, importer, visibility)
       .run();
+  }
+
+  async makePublic(id: string): Promise<void> {
+    await this.db.prepare("UPDATE document SET visibility = 'public' WHERE id = ?").bind(id).run();
   }
 
   async countImportedSince(since: string): Promise<number> {

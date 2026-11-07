@@ -20,3 +20,8 @@ output "ingest_s3_secret_access_key" {
   value     = sha256(cloudflare_account_token.ingest_r2.value)
   sensitive = true
 }
+
+output "better_auth_secret" {
+  value     = random_password.better_auth_secret.result
+  sensitive = true
+}

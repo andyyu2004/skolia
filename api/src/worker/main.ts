@@ -30,16 +30,13 @@ let auth: Auth | undefined;
 function authFor(env: Env): Auth {
   if (auth) return auth;
   const { BASE_URL, BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = env;
-  if (!BASE_URL || !BETTER_AUTH_SECRET || !GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-    console.error("BASE_URL, BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET isn't set; sign-in is off");
+  if (!BASE_URL || !BETTER_AUTH_SECRET) {
+    console.error("BASE_URL or BETTER_AUTH_SECRET isn't set; sign-in is off");
     auth = NO_AUTH;
   } else {
-    auth = createAuth({
-      database: env.DB,
-      baseURL: BASE_URL,
-      secret: BETTER_AUTH_SECRET,
-      google: { clientId: GOOGLE_CLIENT_ID, clientSecret: GOOGLE_CLIENT_SECRET },
-    });
+    const google = GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET ? { clientId: GOOGLE_CLIENT_ID, clientSecret: GOOGLE_CLIENT_SECRET } : undefined;
+    if (!google) console.error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET isn't set; only API keys sign in");
+    auth = createAuth({ database: env.DB, baseURL: BASE_URL, secret: BETTER_AUTH_SECRET, google });
   }
   return auth;
 }

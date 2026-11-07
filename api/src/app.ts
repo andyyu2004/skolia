@@ -18,7 +18,7 @@ import {
 import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { Status, Versions } from "@skolia/shared/schema";
 import * as schemas from "@skolia/shared/schemas";
-import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob, UserData } from "./ports.ts";
+import type { Auth, BlobStore, DocumentRecord, DocumentStore, JobQueue, StoredBlob, StoredDocument, UserData } from "./ports.ts";
 
 export interface Deps {
   auth: Auth;
@@ -48,7 +48,7 @@ export function createApp(deps: Deps) {
 
   /** The summary, after queueing the document again if ingest now produces other
    * versions, or if its job seems lost. */
-  async function current(record: DocumentRecord, versions: VersionsOf): Promise<DocumentSummary> {
+  async function current(record: StoredDocument, versions: VersionsOf): Promise<DocumentSummary> {
     const status = await readStatus(deps.blobs, record.id);
     if (status !== null && (isStuck(status, now()) || isOutdated(status, await versions(record.lang)))) {
       return summarize(record, await requeue(deps, record, status, now()));
@@ -107,16 +107,23 @@ export function createApp(deps: Deps) {
       },
     )
     .get("/api/documents", async (c) => {
-      const records = await deps.documents.list();
+      const viewer = await deps.auth.user(c.req.raw.headers);
+      const records = await deps.documents.list(viewer?.id ?? null);
       const versions = versionsOf(deps.blobs);
       const documents = await Promise.all(records.map((r) => current(r, versions)));
       return c.json({ documents } satisfies DocumentList, 200);
     })
     .post("/api/documents", limit, zValidator("json", schemas.ImportRequest, badRequest()), async (c) => {
+      const user = await deps.auth.user(c.req.raw.headers);
+      if (!user) return c.json({ error: "sign in to import" } satisfies ApiError, 401);
       const body = c.req.valid("json");
       const request = { ...body, title: body.title?.trim().slice(0, MAX_TITLE_LENGTH) || firstWords(body.text) };
       const id = await docId(request.lang, request.text);
-      const existing = await deps.documents.get(id);
+      let existing = await deps.documents.get(id);
+      if (existing?.visibility === "private" && request.visibility === "public") {
+        await deps.documents.makePublic(id);
+        existing = { ...existing, visibility: "public" };
+      }
       if (existing) {
         const summary = await current(existing, versionsOf(deps.blobs));
         // A failed import is retried by importing the same text again
@@ -133,6 +140,8 @@ export function createApp(deps: Deps) {
           lang: request.lang,
           imported: now().toISOString(),
           words: countWords(request.text),
+          importer: user.id,
+          visibility: request.visibility,
         });
       }
       const record = existing ?? (await deps.documents.get(id));
@@ -159,7 +168,7 @@ export function createApp(deps: Deps) {
   return app;
 }
 
-async function findDocument(deps: Deps, id: string): Promise<DocumentRecord | null> {
+async function findDocument(deps: Deps, id: string): Promise<StoredDocument | null> {
   return ID.test(id) ? deps.documents.get(id) : null;
 }
 
@@ -273,7 +282,7 @@ export function parseVersions(raw: string): Versions | null {
   return parseJson(schemas.Versions, raw);
 }
 
-function summarize(record: DocumentRecord, status: Status | null): DocumentSummary {
+function summarize({ importer: _, ...record }: StoredDocument, status: Status | null): DocumentSummary {
   const summary: DocumentSummary = { ...record, state: status?.state ?? "failed" };
   const analysis = nameOf(status?.analysis);
   const bundle = nameOf(status?.bundle);

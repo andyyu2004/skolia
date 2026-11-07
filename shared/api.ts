@@ -16,6 +16,12 @@ export { MAX_TEXT_LENGTH } from "./schema.gen.ts";
 
 export type ImportRequest = z.input<typeof schemas.ImportRequest>;
 
+/** A document's. private: left out of other users' libraries, though anyone with its id
+ * can open it. The reader doesn't offer it; the smoke test uses it. A public import of
+ * the same text makes it public. */
+export const VISIBILITIES = ["public", "private"] as const;
+export type Visibility = (typeof VISIBILITIES)[number];
+
 export interface DocumentSummary {
   /** sha256 hex of the language and text (docId in keys.ts): the same text imported
    * twice in one language is one document. */
@@ -25,6 +31,9 @@ export interface DocumentSummary {
   /** ISO 8601 time of import. */
   imported: string;
   words: number;
+  visibility: Visibility;
+  /** The display name of the user who first imported it. */
+  importerName: string;
   state: State;
   /** The analysis and bundle to show, by name (GET .../analysis/{name}): the current
    * ones, or while newer ones are queued or analysing (or failed), the previous ones.

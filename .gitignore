@@ -8,6 +8,7 @@ node_modules/
 /api/dist/
 .dev.vars
 /api/.env.local
+/.direnv/
 /api/wrangler.ingest.deploy.jsonc
 /api/wrangler.pr-*.json
 /api/wrangler.ingest.pr-*.json

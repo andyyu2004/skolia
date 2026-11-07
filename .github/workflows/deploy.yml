@@ -95,6 +95,9 @@ jobs:
       AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_ACCESS_KEY }}
       TF_IN_AUTOMATION: "1"
+      # The environment's Google OAuth client (infra/README.md); the preview environment has none
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
     steps:
       # The tags, for git describe (justfile deploy-web and smoke)
       - uses: actions/checkout@v7

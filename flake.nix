@@ -1,5 +1,6 @@
-# The tools the justfile needs beyond pnpm and uv: terraform and just. nix develop puts
-# them on PATH; CI adds packages.tools to PATH (.github/actions/setup).
+# The tools the justfile needs beyond pnpm and uv: terraform and just, and for just dev,
+# sops and age. nix develop puts them on PATH; CI adds only packages.tools to PATH
+# (.github/actions/setup).
 {
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -46,7 +47,13 @@
         in
         {
           packages.tools = tools;
-          devShells.default = pkgs.mkShellNoCC { packages = [ tools ]; };
+          devShells.default = pkgs.mkShellNoCC {
+            packages = [
+              tools
+              pkgs.sops
+              pkgs.age
+            ];
+          };
         };
       systems = builtins.mapAttrs perSystem terraformZips;
     in
