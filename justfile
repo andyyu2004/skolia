@@ -35,15 +35,13 @@ dev-api: images env-local
     pnpm exec wrangler d1 migrations apply DB --local --env=''
     pnpm exec wrangler dev -c wrangler.jsonc -c wrangler.ingest.jsonc --port 8787
 
-# api/.env.local, the dev Google OAuth client, from secrets/dev.env if it's missing. sops on macOS
-# looks for the age key in ~/Library/Application Support, so this points it at ~/.config's.
+# api/.env.local, the dev Google OAuth client, from secrets/dev.env if it's missing. sops finds the
+# age key through .envrc.
 [working-directory('api')]
 env-local:
     #!/usr/bin/env bash
     set -euo pipefail
     [ -f .env.local ] && exit
-    key=${XDG_CONFIG_HOME:-$HOME/.config}/sops/age/keys.txt
-    if [ -z "${SOPS_AGE_KEY_FILE:-}" ] && [ -f "$key" ]; then export SOPS_AGE_KEY_FILE=$key; fi
     if ! sops decrypt ../secrets/dev.env > .env.local.tmp; then
       rm -f .env.local.tmp
       echo "env-local: can't decrypt secrets/dev.env; DEVELOP.md says how to get your age key added" >&2

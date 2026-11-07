@@ -17,10 +17,10 @@ reader (Vite, :5173) → wrangler dev (:8787): skolia → local queue → skolia
 
 `wrangler dev` runs both Workers from their configs, with local D1, R2 and Queue in `api/.wrangler/state`, and runs each language's ingest container in Docker from the image Nix builds (`analysis/flake.nix`), which `just images` loads as `skolia-ingest-{lang}:dev` (`analysis/image/Dockerfile` is just that image). The container reaches the local bucket through the dev server's S3 endpoint (`api/.env`, which wrangler dev loads for both Workers; `--env-file` would reach only the first config, and an `api/.dev.vars` would replace it).
 
-Once: install Nix, the JavaScript packages and Docker. `nix develop` puts `just`, terraform, sops and age on PATH (`flake.nix`). The images are built by Nix in a container (`analysis/scripts/nix.sh`), or by this machine's Nix on x86-64 Linux or with `SKOLIA_NIX=host` (on a Mac, Determinate Nix's Linux builder, after `cachix use andyyu2004`).
+Once: install Nix, direnv (with nix-direnv), the JavaScript packages and Docker, and run `direnv allow` in the repo. `.envrc` loads the flake's dev shell, which puts `just`, terraform, sops and age on PATH (`flake.nix`), and tells sops where your age key is. The images are built by Nix in a container (`analysis/scripts/nix.sh`), or by this machine's Nix on x86-64 Linux or with `SKOLIA_NIX=host` (on a Mac, Determinate Nix's Linux builder, after `cachix use andyyu2004`).
 
 ```fish
-nix develop                  # just, terraform, sops and age
+direnv allow                 # once: .envrc loads the dev shell
 pnpm install                 # from the repo root: api, reader and shared
 just dev                     # http://localhost:5173 (Vite), or :8787 for the built reader
 just e2e                     # fresh local state: import a text, wait until it's ready
@@ -31,7 +31,7 @@ just e2e                     # fresh local state: import a text, wait until it's
 - The images are `linux/amd64` only, as wrangler dev (4.151.2) builds and pulls containers for amd64, so on Apple Silicon they run under emulation. Morfeusz is PyPI's `morfeusz2` x86-64 wheel, with SGJP's dictionary from the same release (1.99.15, 2026-06-01).
 - On a phone on the same network: `pnpm --filter @skolia/reader dev --host` and open the address it prints.
 - Without signing in you can read, but not import or make flashcards. `just dev` writes the dev OAuth client's credentials (infra/README.md), `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, to `api/.env.local` (git-ignored, loaded with `api/.env`) if it's missing, decrypting them from `secrets/dev.env` with sops and your age key. Without them only API keys sign in (`just e2e` writes one for the system user). Sign in from http://localhost:5173, the origin `BASE_URL` names.
-- Your age key: run `mkdir -p ~/.config/sops/age && age-keygen -o ~/.config/sops/age/keys.txt` and send its public key (`age1…`) to a developer who has one. They add it to `.sops.yaml` and run `sops updatekeys secrets/dev.env`, and commit both. `just dev` tells sops about `~/.config/sops/age/keys.txt`, which sops on macOS doesn't look in, unless `SOPS_AGE_KEY_FILE` is set. Removing someone is removing their key and running `sops updatekeys` again, then rotating the dev client's secret, as the old ciphertext stays in git history.
+- Your age key: run `mkdir -p ~/.config/sops/age && age-keygen -o ~/.config/sops/age/keys.txt` and send its public key (`age1…`) to a developer who has one. They add it to `.sops.yaml` and run `sops updatekeys secrets/dev.env`, and commit both. `.envrc` tells sops about `~/.config/sops/age/keys.txt`, which sops on macOS doesn't look in, unless `SOPS_AGE_KEY_FILE` is set. Removing someone is removing their key and running `sops updatekeys` again, then rotating the dev client's secret, as the old ciphertext stays in git history.
 
 ## API and reader (TypeScript)
 
