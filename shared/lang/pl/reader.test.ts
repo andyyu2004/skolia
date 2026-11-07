@@ -81,7 +81,7 @@ const PIES: Entry = {
 };
 
 const BUNDLE: Bundle = {
-  schema: 2,
+  schema: 1,
   lang: "pl",
   lexicon: "t",
   attribution: "",
@@ -95,6 +95,8 @@ const BUNDLE: Bundle = {
 test("a word is pronounced by its text and part of speech", () => {
   assert.deepEqual(pronunciationsOf(BUNDLE, "psa", "NOUN"), [{ ipa: "/ˈpsa/" }]);
   assert.deepEqual(pronunciationsOf(BUNDLE, "psa", "VERB"), []);
+  const { pronunciations: _, ...older } = BUNDLE;
+  assert.deepEqual(pronunciationsOf(older, "psa", "NOUN"), []);
 });
 
 test("the token's features pick the sense", () => {

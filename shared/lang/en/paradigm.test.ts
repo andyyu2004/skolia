@@ -63,7 +63,7 @@ const FIRST: Entry = {
 };
 
 const BUNDLE: Bundle = {
-  schema: 2,
+  schema: 1,
   lang: "en",
   lexicon: "t",
   attribution: "",
@@ -71,7 +71,6 @@ const BUNDLE: Bundle = {
   lookup: { "en:be:AUX": "en:be:VERB" },
   match: {},
   feats: [PRES_1SG, PRES_3SG, { VerbForm: "Inf" }, { Degree: "Pos" }, { Degree: "Sup" }],
-  pronunciations: {},
 };
 
 test("a curly apostrophe matches the lexicon's straight one", () => {
