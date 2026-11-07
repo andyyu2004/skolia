@@ -31,6 +31,7 @@ depends = ["dev:api", "dev:reader"]
 
 [tasks."dev:api"]
 description = "wrangler dev on :8787 with local state in api/.wrangler/state"
+depends = ["images"]
 dir = "api"
 run = [
   "pnpm exec wrangler d1 migrations apply DB --local --env=''",
@@ -43,12 +44,12 @@ run = "pnpm --filter @skolia/reader dev --port 5173 --strictPort"
 
 [tasks.e2e]
 description = "Import a text through wrangler dev with fresh local state and wait until it's ready"
-depends = ["build"]
+depends = ["build", "images"]
 run = "api/scripts/e2e.sh"
 
-[tasks.data]
-description = "The lexicon and valency files, from the inputs pinned in analysis/inputs.sha256"
-run = "analysis/scripts/build_data.sh"
+[tasks.images]
+description = "Build each language's ingest image with Nix and load it into Docker for wrangler dev"
+run = "analysis/scripts/load_images.sh"
 
 [tasks.plan]
 description = "What a deploy would change in Terraform's resources"

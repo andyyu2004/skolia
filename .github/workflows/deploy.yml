@@ -52,11 +52,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
-      - uses: docker/setup-buildx-action@v4
-      - name: Build and push
+      # The model downloads read HF_TOKEN (impureEnvVars) from the daemon, not this job
+      - uses: DeterminateSystems/determinate-nix-action@v3
+        with:
+          extra-conf: |
+            extra-experimental-features = configurable-impure-env
+            impure-env = HF_TOKEN=${{ secrets.HF_TOKEN }}
+      # deploy-ingest pushes to it
+      - uses: cachix/cachix-action@v17
+        with:
+          name: andyyu2004
+          skipPush: true
+      - run: infra/deploy-ingest.sh ${{ inputs.env }} build ${{ matrix.lang }}
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: infra/deploy-ingest.sh ${{ inputs.env }} build ${{ matrix.lang }}
+          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
   # Reads the R2 credentials from Terraform, so after infra
   ingest:
@@ -73,6 +82,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
+      # For the images' tags (nix eval); nothing is built
+      - uses: DeterminateSystems/determinate-nix-action@v3
       - run: infra/deploy-ingest.sh ${{ inputs.env }} deploy
 
   web:

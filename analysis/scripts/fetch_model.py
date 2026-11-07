@@ -1,5 +1,5 @@
 """Download one Hugging Face model at a fixed revision into the cache, for the Cloudflare
-image (analysis/Dockerfile): one image layer per model, as Cloudflare's registry times
+image (analysis/flake.nix): one image layer per model, as Cloudflare's registry times
 out on a single 3 GB layer.
 
   python scripts/fetch_model.py REPO REVISION [FILE ...]

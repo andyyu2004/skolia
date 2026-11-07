@@ -1,5 +1,5 @@
 // skolia-ingest on Cloudflare (api/wrangler.ingest.jsonc): consumes the ingest queue
-// and hands each job to its language's analysis container (analysis/Dockerfile, one
+// and hands each job to its language's analysis container (analysis/flake.nix, one
 // image per language, served by analysis/src/skolia_analysis/ingest/http.py), which
 // writes status and blobs to R2.
 //
