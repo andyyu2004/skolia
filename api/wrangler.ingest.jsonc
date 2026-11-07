@@ -21,6 +21,8 @@
       "name": "skolia-ingest",
       "class_name": "Ingester",
       "scheduling_policy": "durable_object",
+      // Not inherited from the Worker's for this policy
+      "observability": { "logs": { "enabled": true } },
       "images": {
         "pl": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "pl" } },
         "en": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "en" } }
@@ -53,6 +55,8 @@
           "name": "skolia-ingest-staging",
           "class_name": "Ingester",
           "scheduling_policy": "durable_object",
+          // Not inherited from the Worker's for this policy
+          "observability": { "logs": { "enabled": true } },
           "images": {
             "pl": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "pl" } },
             "en": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "en" } }
