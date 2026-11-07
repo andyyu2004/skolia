@@ -32,6 +32,7 @@ dev: dev-api dev-reader
 # wrangler dev on :8787 with local state in api/.wrangler/state
 [working-directory('api')]
 dev-api: images
+    [ -f .env.local ] || { ../infra/dev-env-local.sh > .env.local.tmp && mv .env.local.tmp .env.local; }
     pnpm exec wrangler d1 migrations apply DB --local --env=''
     pnpm exec wrangler dev -c wrangler.jsonc -c wrangler.ingest.jsonc --port 8787
 
