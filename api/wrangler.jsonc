@@ -26,8 +26,6 @@
     {
       "binding": "DB",
       "database_name": "skolia",
-      // infra/tf.sh production output -raw d1_database_id
-      "database_id": "e9c02964-6266-463f-9d7a-ce71a33f3b98",
       "migrations_dir": "migrations"
     }
   ],
@@ -54,7 +52,8 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["User"] }],
   // Bindings and routes aren't inherited, so each environment lists its own (Terraform's
-  // names). Deployed as skolia-staging.
+  // names). Wrangler looks D1 databases up by name, and creates one it can't find, so
+  // Terraform must make it first (just deploy-infra). Deployed as skolia-staging.
   "env": {
     "staging": {
       "routes": [{ "pattern": "staging.skolia.io", "custom_domain": true }],
@@ -63,8 +62,6 @@
         {
           "binding": "DB",
           "database_name": "skolia-staging",
-          // infra/tf.sh staging output -raw d1_database_id
-          "database_id": "fcffbf4c-49da-4a60-b85b-c6ccabd225a1",
           "migrations_dir": "migrations"
         }
       ],

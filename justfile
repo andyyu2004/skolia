@@ -76,7 +76,7 @@ apply env:
 # Terraform and D1 migrations, the ingest Worker, then the skolia Worker: the queue's consumer before its producer
 deploy env: (deploy-infra env) (deploy-ingest env) (deploy-web env)
 
-# Terraform, then D1 migrations; for a preview, its wrangler configs in between (they need its D1 id)
+# Terraform, then D1 migrations; for a preview, its wrangler configs in between
 deploy-infra env: (apply env) && (migrate env)
     case {{ env }} in pr-*) infra/preview.py config {{ env }} ;; esac
 
