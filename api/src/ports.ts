@@ -89,7 +89,7 @@ export interface UserData {
   setSettings(userId: string, settings: Settings): Promise<void>;
 }
 
-/** The lexicon, without paradigms. Ids it doesn't have are left out. */
+/** The lexicon, with the feature sets its entries' paradigms use. Ids it doesn't have are left out. */
 export interface Lexicon {
   entries(ids: readonly LemmaId[]): Promise<Lookup>;
 }
