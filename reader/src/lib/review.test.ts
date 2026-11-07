@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { shortcut, type Key } from "./review.ts";
+import { clue, shortcut, type Key } from "./review.ts";
 
 function press(key: string, fields: Partial<Key> = {}): Key {
   return { key, repeat: false, altKey: false, ctrlKey: false, metaKey: false, target: "page", ...fields };
@@ -30,4 +30,17 @@ test("Space and Enter on a link or button are the control's, but digits still gr
   assert.equal(shortcut(press("Enter", { target: "control" }), false), null);
   assert.equal(shortcut(press(" ", { target: "control" }), false), null);
   assert.deepEqual(shortcut(press("3", { target: "control" }), true), { kind: "grade", rating: 3 });
+});
+
+test("a production card's clue is the gloss's translations without its definitions", () => {
+  assert.equal(clue("dog (Canis lupus familiaris)"), "dog");
+  assert.equal(clue("dog (any member of the family Canidae (extant and extinct); canid)"), "dog");
+  assert.equal(clue("to go; to walk"), "to go, to walk");
+  assert.equal(clue("quickly, rapidly, fast, swiftly (at a speed covering a given distance)"), "quickly, rapidly, fast, swiftly");
+  assert.equal(
+    clue("Form of greeting or farewell used with someone with which one is on a first-name basis; hi; hello; bye"),
+    "hi, hello, bye",
+  );
+  assert.equal(clue("interrogative pronoun, referring to a number of choices; what, which one"), "what, which one");
+  assert.equal(clue("used to form impersonal present or future tense"), "used to form impersonal present or future tense");
 });

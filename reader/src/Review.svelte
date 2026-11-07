@@ -4,7 +4,7 @@
   import { LANGUAGES } from "@skolia/shared/lang";
   import { UPOS_LABEL } from "@skolia/shared/ud";
   import { cardCounts, dueCards, review, signIn } from "./lib/api.ts";
-  import { keyTarget, shortcut } from "./lib/review.ts";
+  import { clue, keyTarget, shortcut } from "./lib/review.ts";
 
   /** lang is the URL's (#/review/pl); without one, the language with the most to review. */
   let { user, lang }: { user: User | null | undefined; lang: Lang | null } = $props();
@@ -110,6 +110,14 @@
     return (c.entry?.senses ?? []).slice(0, SHOWN_SENSES).map((s) => ({ gloss: s.gloss, tags: s.tags.filter((t) => !hidden.has(t)) }));
   }
 
+  /** Aspect tells apart verbs a clue can't, like pisać and napisać ("to write"). */
+  const ASPECTS = new Set(["perfective", "imperfective"]);
+
+  function hintOf(c: DueCard): string {
+    const first = c.entry?.senses[0];
+    return [UPOS_LABEL[c.entry?.upos ?? "X"], ...(first?.tags.filter((t) => ASPECTS.has(t)) ?? [])].join(" · ");
+  }
+
   function lemmaOf(c: DueCard): string {
     return c.entry?.lemma ?? c.lemmaId.split(":")[1] ?? c.lemmaId;
   }
@@ -130,6 +138,16 @@
 
 {#snippet lemma(c: DueCard)}
   <p class="prompt" lang={langOf(c)}>{lemmaOf(c)}</p>
+{/snippet}
+
+{#snippet prompt(c: DueCard)}
+  {@const first = c.entry?.senses[0]}
+  {#if first}
+    <p class="prompt">{clue(first.gloss)}</p>
+    <p class="muted">{hintOf(c)}</p>
+  {:else}
+    <p class="muted">No dictionary meaning yet, so this card has no clue.</p>
+  {/if}
 {/snippet}
 
 {#snippet meanings(c: DueCard)}
@@ -174,15 +192,12 @@
         {#if card.kind === "recognition"}
           {@render lemma(card)}
         {:else}
-          {@render meanings(card)}
+          {@render prompt(card)}
         {/if}
         {#if revealed}
           <hr />
-          {#if card.kind === "recognition"}
-            {@render meanings(card)}
-          {:else}
-            {@render lemma(card)}
-          {/if}
+          {#if card.kind === "production"}{@render lemma(card)}{/if}
+          {@render meanings(card)}
         {/if}
       </section>
       {#if revealed}
