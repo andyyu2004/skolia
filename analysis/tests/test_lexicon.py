@@ -1,7 +1,9 @@
+import json
+import sqlite3
 from pathlib import Path
 
 from skolia_analysis.lang.pl.walenty.parse import parse_schema
-from skolia_analysis.lexicon import build, bundle, pronunciation, store
+from skolia_analysis.lexicon import build, bundle, cards, pronunciation, store
 from skolia_analysis.lexicon.schema import Form, Paradigm, Pronunciation, Sense
 from skolia_analysis.lexicon.source import Converted
 from skolia_analysis.schema import Blob, Feats, Token, Upos
@@ -163,3 +165,47 @@ def test_pronunciations_merge_accents() -> None:
         {"ipa": "/ɹɛd/"},
     ]
     assert pronunciation.merge([uk], [{"ipa": "/ɹiːd/"}]) == [{"ipa": "/ɹiːd/"}]
+
+
+def test_cards_lexicon_has_pronunciations_compact_paradigms_and_feature_rows(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "pl.sqlite"
+    said = [store.PronunciationRow("pies", "NOUN", [{"ipa": "/pjɛs/"}])]
+    store.write(
+        path,
+        [store.Row("pl:pies:NOUN", "pies", "NOUN", [DOG], [], [])],
+        {"lang": "pl", "version": "test/1"},
+        lambda: said,
+    )
+    gen: Feats = {"Case": "Gen", "Number": "Sing"}
+    acc: Feats = {"Case": "Acc", "Number": "Sing"}
+
+    def paradigms(_lemma: str, _upos: Upos) -> list[Paradigm]:
+        forms: list[Form] = [
+            {"form": "psa", "xpos": "subst:sg:gen:m2", "feats": gen},
+            {"form": "psa", "xpos": "subst:sg:acc:m2", "feats": acc},
+        ]
+        return [{"homonym": "", "forms": forms}]
+
+    out = tmp_path / "pl.cards.sqlite"
+    assert cards.build(store.Lexicon(path), paradigms, out) == 1
+    db = sqlite3.connect(out)
+    assert dict(db.execute("SELECT key, value FROM meta")) == {
+        "lang": "pl",
+        "version": f"test/1+cards{cards.CARDS_VERSION}",
+    }
+    lemma_lower, pronunciations, paradigm = db.execute(
+        "SELECT lemma_lower, pronunciations, paradigms FROM entry"
+    ).fetchone()
+    assert lemma_lower == "pies"
+    assert json.loads(pronunciations) == [{"ipa": "/pjɛs/"}]
+    assert json.loads(paradigm) == [{"homonym": "", "forms": [["psa", [0, 1]]]}]
+    assert db.execute(
+        "SELECT id, feature, value FROM featureset ORDER BY id, feature"
+    ).fetchall() == [
+        (0, "Case", "Gen"),
+        (0, "Number", "Sing"),
+        (1, "Case", "Acc"),
+        (1, "Number", "Sing"),
+    ]

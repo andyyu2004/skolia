@@ -7,7 +7,7 @@ from typing import cast
 from .. import lang
 from ..plugin import lexicon_path
 from ..schema import Blob
-from . import build
+from . import build, cards
 from .store import Lexicon
 
 
@@ -28,6 +28,20 @@ def build_main() -> None:
         f"{stats.pronounced} (word, part of speech) pairs with a pronunciation",
         file=sys.stderr,
     )
+
+
+def cards_main() -> None:
+    parser = argparse.ArgumentParser(
+        prog="skolia-build-cards",
+        description="Build the lexicon review cards read (infra/load-lexicon.py loads it): "
+        "each entry with its lemma's pronunciations and compact paradigms.",
+    )
+    parser.add_argument("lang", choices=lang.LANGS)
+    parser.add_argument("lexicon", type=Path, help="{lang}.sqlite from skolia-build-lexicon")
+    parser.add_argument("out", type=Path, help="output .sqlite file (replaced)")
+    args = parser.parse_args()
+    count = cards.build(Lexicon(args.lexicon), lang.plugin(args.lang).paradigms(), args.out)
+    print(f"{count} entries", file=sys.stderr)
 
 
 def bundle_main() -> None:

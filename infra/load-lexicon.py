@@ -5,8 +5,8 @@
 # ///
 """Loads a language's lexicon into the lexicon D1 database (LEXICON in api/wrangler.jsonc):
   load-lexicon.py <staging|production|pr-N|local> <sqlite> [--sample N]
-sqlite is analysis's {lang}.sqlite (skolia-build-lexicon, or the Nix output
-analysis#lexicon-{lang}); its meta table gives the language and version. Skipped if D1
+sqlite is analysis's {lang}.cards.sqlite (skolia-build-cards, or the Nix output
+analysis#cards-lexicon-{lang}); its meta table gives the language and version. Skipped if D1
 already serves that version. The new version's rows go in beside the old ones, then
 loaded points at it and the old rows are deleted in batches (api/lexicon-migrations), so a
 load that stops part way leaves the old version serving and can be run again. local is wrangler
@@ -20,6 +20,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import cast
 
@@ -68,7 +69,7 @@ def serving(env: str, lang: str) -> str | None:
 
 
 def selection(lang: str, sample: int | None) -> str:
-    columns = "SELECT lemma_id, lemma, upos, senses, relations FROM entry"
+    columns = "SELECT lemma_id, lemma, upos, senses, relations, pronunciations, paradigms FROM entry"
     if sample is None:
         return columns
     # A word's every entry (run the noun and the verb), not its proper nouns
@@ -82,28 +83,44 @@ def selection(lang: str, sample: int | None) -> str:
 def statements(
     db: sqlite3.Connection, lang: str, version: str, sample: int | None
 ) -> list[str]:
-    head = "INSERT INTO entry (lemma_id, version, lang, lemma, upos, senses, relations) VALUES\n"
-    out = [f"DELETE FROM entry WHERE lang = {quote(lang)} AND version = {quote(version)};"]
-    values: list[str] = []
-    size = len(head)
-    rows = cast(
-        list[tuple[str, str, str, str, str]],
-        db.execute(selection(lang, sample)),
+    which = f"lang = {quote(lang)} AND version = {quote(version)}"
+    out = [f"DELETE FROM entry WHERE {which};", f"DELETE FROM featureset WHERE {which};"]
+    entries = cast(list[tuple[str, ...]], db.execute(selection(lang, sample)))
+    out += inserts(
+        "INSERT INTO entry (lemma_id, version, lang, lemma, upos, senses, relations, "
+        "pronunciations, paradigms) VALUES",
+        ((lemma_id, version, lang, *rest) for lemma_id, *rest in entries),
     )
-    for lemma_id, lemma, upos, senses, relations in rows:
-        columns = (lemma_id, version, lang, lemma, upos, senses, relations)
-        value = f"({', '.join(quote(v) for v in columns)})"
-        if values and size + len(value.encode()) + 2 > MAX_STATEMENT_BYTES:
-            out.append(head + ",\n".join(values) + ";")
-            values, size = [], len(head)
-        values.append(value)
-        size += len(value.encode()) + 2
-    if values:
-        out.append(head + ",\n".join(values) + ";")
+    features = cast(list[tuple[int, str, str]], db.execute("SELECT id, feature, value FROM featureset"))
+    out += inserts(
+        "INSERT INTO featureset (lang, version, id, feature, value) VALUES",
+        ((lang, version, str(i), feature, value) for i, feature, value in features),
+        numeric=frozenset({2}),
+    )
     out.append(
         f"INSERT INTO loaded (lang, version) VALUES ({quote(lang)}, {quote(version)}) "
         "ON CONFLICT (lang) DO UPDATE SET version = excluded.version;"
     )
+    return out
+
+
+def inserts(
+    head: str, rows: Iterable[Sequence[str]], numeric: frozenset[int] = frozenset()
+) -> list[str]:
+    """Multi-row INSERTs, each under D1's longest statement. Columns in numeric aren't quoted."""
+    out: list[str] = []
+    values: list[str] = []
+    size = len(head) + 1
+    for row in rows:
+        cells = (v if i in numeric else quote(v) for i, v in enumerate(row))
+        value = f"({', '.join(cells)})"
+        if values and size + len(value.encode()) + 2 > MAX_STATEMENT_BYTES:
+            out.append(head + "\n" + ",\n".join(values) + ";")
+            values, size = [], len(head) + 1
+        values.append(value)
+        size += len(value.encode()) + 2
+    if values:
+        out.append(head + "\n" + ",\n".join(values) + ";")
     return out
 
 
@@ -118,6 +135,9 @@ def clean(env: str, lang: str, version: str) -> None:
     while (left := remaining(env, count)) > 0:
         print(f"{env}: deleting {left} old {lang} rows")
         wrangler(env, "--command", delete)
+    # A few thousand rows per version
+    features = f"DELETE FROM featureset WHERE lang = {quote(lang)} AND version != {quote(version)}"
+    wrangler(env, "--command", features)
 
 
 def remaining(env: str, count: str) -> int:

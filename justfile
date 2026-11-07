@@ -38,13 +38,16 @@ dev-api: images env-local
     pnpm exec wrangler dev -c wrangler.jsonc -c wrangler.ingest.jsonc --port 8787
 
 # Load data/lexicon/{lang}.sqlite (DEVELOP.md says how to build them) into wrangler dev's lexicon
-# database for cards' meanings; a language without one is left empty, and an unchanged one is skipped
+# database for cards, through {lang}.cards.sqlite, rebuilt when the lexicon is newer; a language
+# without one is left empty, and an unchanged one is skipped
 lexicon-local:
     #!/usr/bin/env bash
     set -euo pipefail
     for lang in pl en; do
-      if [ -f "data/lexicon/$lang.sqlite" ]; then
-        infra/load-lexicon.py local "data/lexicon/$lang.sqlite"
+      lexicon=data/lexicon/$lang.sqlite cards=data/lexicon/$lang.cards.sqlite
+      if [ -f "$lexicon" ]; then
+        [ "$cards" -nt "$lexicon" ] || (cd analysis && uv run skolia-build-cards "$lang" "../$lexicon" "../$cards")
+        infra/load-lexicon.py local "$cards"
       else
         echo "lexicon-local: no data/lexicon/$lang.sqlite; cards in $lang will have no meanings" >&2
       fi
@@ -86,15 +89,15 @@ migrate env:
     infra/wrangler.sh {{ env }} d1 migrations apply LEXICON --remote
 
 # The Nix store path must be readable here: Linux, or SKOLIA_NIX=host (analysis/scripts/nix.sh).
-# Load each language's lexicon into the lexicon database (staging, production, pr-N or local), from the ingest images' Nix build.
+# Load each language's lexicon into the lexicon database (staging, production, pr-N or local), from its Nix build for cards.
 # A preview gets English only, for wordfreq's 3,000 most common words (infra/load-lexicon.py --sample).
 load-lexicon env:
     #!/usr/bin/env bash
     set -euo pipefail
     case {{ env }} in pr-*) langs=(en) sample=(--sample 3000) ;; *) langs=(pl en) sample=() ;; esac
     for lang in "${langs[@]}"; do
-      out=$(analysis/scripts/nix.sh nix build --no-link --print-out-paths "./analysis#lexicon-$lang")
-      infra/load-lexicon.py {{ env }} "$out/$lang.sqlite" "${sample[@]}"
+      out=$(analysis/scripts/nix.sh nix build --no-link --print-out-paths "./analysis#cards-lexicon-$lang")
+      infra/load-lexicon.py {{ env }} "$out/$lang.cards.sqlite" "${sample[@]}"
     done
 
 # Terraform: storage, queue, ingest's R2 token, billing alerts

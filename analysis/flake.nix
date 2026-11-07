@@ -196,6 +196,15 @@
             '';
       };
 
+      # What review cards read, for the API's D1 lexicon (infra/load-lexicon.py): each entry
+      # with its lemma's pronunciations and compact paradigms. Not in the images.
+      cardsLexicon =
+        lang:
+        pkgs.runCommand "skolia-cards-lexicon-${lang}" { nativeBuildInputs = [ venv ]; } ''
+          mkdir $out
+          skolia-build-cards ${lang} ${lexicon.${lang}}/${lang}.sqlite $out/${lang}.cards.sqlite
+        '';
+
       env =
         lang:
         {
@@ -303,6 +312,10 @@
         // perLang host {
           prefix = "lexicon";
           value = lang: lexicon.${lang};
+        }
+        // perLang host {
+          prefix = "cards-lexicon";
+          value = cardsLexicon;
         }
         // perLang host {
           prefix = "cacheable";

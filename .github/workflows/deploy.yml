@@ -39,8 +39,8 @@ jobs:
       - uses: ./.github/actions/setup
       - run: just deploy-infra ${{ inputs.env }}
 
-  # The lexicon from the ingest images' Nix build, which ci.yml's build-ingest-image put
-  # in Cachix (just load-lexicon)
+  # The lexicon for cards, built with Nix from the lexicon and venv ci.yml's
+  # build-ingest-image put in Cachix (just load-lexicon)
   load-lexicon:
     needs: deploy-infra
     runs-on: ubuntu-24.04
