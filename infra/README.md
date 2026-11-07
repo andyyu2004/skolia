@@ -73,7 +73,7 @@ just plan staging
 just deploy staging              # all of the below, in order
 just deploy-infra staging        # terraform apply, D1 migrations
 just deploy-ingest staging       # build, push and deploy the containers
-just load-lexicon staging        # the flashcards' lexicon into D1, if its version is new; a preview gets 3,000 English words
+just load-lexicon staging        # the flashcards' lexicon into D1, if its version is new; a preview gets wordfreq's 3,000 most common English words
 just deploy-web staging          # the skolia Worker (reader and API)
 just smoke staging
 just teardown pr-12              # previews only

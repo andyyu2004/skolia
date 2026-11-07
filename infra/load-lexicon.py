@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.12"
-# dependencies = []
+# dependencies = ["wordfreq==3.1.1"]
 # ///
 """Loads a language's lexicon into the lexicon D1 database (LEXICON in api/wrangler.jsonc):
   load-lexicon.py <staging|production|pr-N|local> <sqlite> [--sample N]
@@ -10,9 +10,8 @@ analysis#lexicon-{lang}); its meta table gives the language and version. Skipped
 already serves that version. The new version's rows go in beside the old ones, then
 loaded points at it and the old rows are deleted in batches (api/lexicon-migrations), so a
 load that stops part way leaves the old version serving and can be run again. local is wrangler
-dev's database. --sample loads only N common words, for previews: the lexicon has no
-frequencies, so it takes the lowercase, non-proper-noun entries with the most senses, and
-their version ends in +sampleN. Needs the credentials infra/wrangler.sh needs.
+dev's database. --sample loads only the entries for wordfreq's N most common words, for
+previews, and their version ends in +sampleN. Needs the credentials infra/wrangler.sh needs.
 """
 
 import json
@@ -23,6 +22,8 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import cast
+
+import wordfreq
 
 WRANGLER = Path(__file__).resolve().parent / "wrangler.sh"
 # D1's longest statement is 100 KB; the longest row is 35 KB (English)
@@ -66,13 +67,15 @@ def serving(env: str, lang: str) -> str | None:
     return rows[0]["version"] if rows else None
 
 
-def selection(sample: int | None) -> str:
+def selection(lang: str, sample: int | None) -> str:
     columns = "SELECT lemma_id, lemma, upos, senses, relations FROM entry"
     if sample is None:
         return columns
+    # A word's every entry (run the noun and the verb), not its proper nouns
+    words = json.dumps(wordfreq.top_n_list(lang, sample))
     return (
-        f"{columns} WHERE upos != 'PROPN' AND lemma GLOB '[a-z]*' "
-        f"ORDER BY json_array_length(senses) DESC, lemma_id LIMIT {sample}"
+        f"{columns} WHERE upos != 'PROPN' "
+        f"AND lemma_lower IN (SELECT value FROM json_each({quote(words)}))"
     )
 
 
@@ -85,7 +88,7 @@ def statements(
     size = len(head)
     rows = cast(
         list[tuple[str, str, str, str, str]],
-        db.execute(selection(sample)),
+        db.execute(selection(lang, sample)),
     )
     for lemma_id, lemma, upos, senses, relations in rows:
         columns = (lemma_id, version, lang, lemma, upos, senses, relations)

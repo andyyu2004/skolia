@@ -87,7 +87,7 @@ migrate env:
 
 # The Nix store path must be readable here: Linux, or SKOLIA_NIX=host (analysis/scripts/nix.sh).
 # Load each language's lexicon into the lexicon database (staging, production, pr-N or local), from the ingest images' Nix build.
-# A preview gets 3,000 common English words only (infra/load-lexicon.py --sample).
+# A preview gets English only, for wordfreq's 3,000 most common words (infra/load-lexicon.py --sample).
 load-lexicon env:
     #!/usr/bin/env bash
     set -euo pipefail

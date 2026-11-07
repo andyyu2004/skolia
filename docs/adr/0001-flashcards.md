@@ -59,7 +59,7 @@ review(id, card_id, rating, review_time)      -- append-only
 
 The lexicon SQLite is built by Nix (`analysis/flake.nix`, `lexicon`) and only exists inside the ingest images, so the API Worker can't read it. It goes into a separate D1 database, `skolia-lexicon`:
 
-- The columns are `lemma_id, version, lang, lemma, upos, senses, relations`, without paradigms (`api/lexicon-migrations`). Each environment has its own, previews included. Every deploy runs `just load-lexicon` (`deploy.yml`, job `load-lexicon`), from the Nix build the images' job put in Cachix; a preview loads only 3,000 common English words (`--sample`), about 6,000 rows written against D1's 50 million a month included.
+- The columns are `lemma_id, version, lang, lemma, upos, senses, relations`, without paradigms (`api/lexicon-migrations`). Each environment has its own, previews included. Every deploy runs `just load-lexicon` (`deploy.yml`, job `load-lexicon`), from the Nix build the images' job put in Cachix; a preview loads only the English entries for wordfreq's 3,000 most common words (`--sample`): 6,028 entries, about 12,000 rows written with the primary key's index, against D1's 50 million a month included.
 - Sizes of the local lexicons (`data/lexicon/`):
 
   | | entries | senses + relations | paradigms |
