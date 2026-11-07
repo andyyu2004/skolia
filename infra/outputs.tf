@@ -1,7 +1,3 @@
-output "d1_database_id" {
-  value = cloudflare_d1_database.skolia.id
-}
-
 output "queue_id" {
   value = cloudflare_queue.ingest.queue_id
 }

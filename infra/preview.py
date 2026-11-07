@@ -7,15 +7,13 @@
   preview.py config pr-12   writes api/wrangler.pr-12.json and api/wrangler.ingest.pr-12.json
   preview.py url pr-12      prints its workers.dev URL
 Each config is the committed config's env.staging block at the top level, with -pr-12
-for -staging in the names, the D1 id from Terraform, and no routes: a preview is on
-workers.dev only. Needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN, and for config
-the state bucket's credentials (infra/tf.sh).
+for -staging in the names, and no routes: a preview is on workers.dev only. Needs
+CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN.
 """
 
 import json
 import os
 import re
-import subprocess
 import sys
 import urllib.request
 from pathlib import Path
@@ -27,7 +25,6 @@ type Json = str | int | float | bool | None | list[Json] | dict[str, Json]
 type JsonObject = dict[str, Json]
 
 API = Path(__file__).resolve().parent.parent / "api"
-TF = Path(__file__).resolve().parent / "tf.sh"
 # The smoke test takes one per language, so ten deploys a day
 MAX_IMPORTS_PER_DAY = "20"
 
@@ -90,17 +87,9 @@ def url(env: str) -> str:
 
 
 def config(env: str) -> None:
-    database_id = subprocess.run(
-        [TF, env, "output", "-raw", "d1_database_id"], stdout=subprocess.PIPE, text=True, check=True
-    ).stdout
     web = promote("wrangler.jsonc", env)
     web["workers_dev"] = True
     web["preview_urls"] = False
-    databases = web.get("d1_databases")
-    if not isinstance(databases, list):
-        raise SystemExit("wrangler.jsonc: no d1_databases")
-    for database in databases:
-        as_object(database, "d1_databases")["database_id"] = database_id
     web["vars"] = {**as_object(web.get("vars"), "vars"), "MAX_IMPORTS_PER_DAY": MAX_IMPORTS_PER_DAY, "BASE_URL": url(env)}
     configs = {f"wrangler.{env}.json": web, f"wrangler.ingest.{env}.json": promote("wrangler.ingest.jsonc", env)}
     for file, content in configs.items():
