@@ -307,6 +307,10 @@
         // perLang host {
           prefix = "cacheable";
           value = cacheable;
+        }
+        # deploy-ingest.sh reads each pushed image's digest with it
+        // {
+          skopeo = nix2container.packages.${host}.skopeo-nix2container;
         };
     in
     {
