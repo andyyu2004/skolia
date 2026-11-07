@@ -30,7 +30,7 @@ just e2e                     # fresh local state: import a text, wait until it's
 - `just dev` and `just e2e` first run `just images`, which loads an image into Docker only when Docker doesn't have it under its Nix hash yet. The first build downloads the models (about 2 GB per language) and the lexicon inputs (`scripts/fetch_inputs.sh`, which needs `wrangler login`) and builds the lexicons; in the container, later builds reuse its store (the Docker volume `skolia-nix-store`).
 - The images are `linux/amd64` only, as wrangler dev (4.151.2) builds and pulls containers for amd64, so on Apple Silicon they run under emulation. Morfeusz is PyPI's `morfeusz2` x86-64 wheel, with SGJP's dictionary from the same release (1.99.15, 2026-06-01).
 - On a phone on the same network: `pnpm --filter @skolia/reader dev --host` and open the address it prints.
-- Sign-in is optional: without it you can read, but no flashcards are made. To try sign-in locally, put the dev OAuth client's credentials (infra/README.md) and any 32+ character secret in `api/.env.local` (git-ignored, loaded with `api/.env`): `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Without them `/api/auth` answers 503. Sign in from http://localhost:5173, the origin `BASE_URL` names.
+- Without signing in you can read, but not import or make flashcards. To sign in locally, put the dev OAuth client's credentials (infra/README.md) in `api/.env.local` (git-ignored, loaded with `api/.env`): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`. Without them only API keys sign in (`just e2e` writes one for the system user). Sign in from http://localhost:5173, the origin `BASE_URL` names.
 
 ## API and reader (TypeScript)
 

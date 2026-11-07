@@ -1,8 +1,10 @@
 import * as z from "zod";
-import { LANGS, LEMMA_STATUSES, MAX_LEMMA_LENGTH, MAX_TEXT_LENGTH, UPOS } from "./api.ts";
+import { LANGS, LEMMA_STATUSES, MAX_LEMMA_LENGTH, MAX_TEXT_LENGTH, UPOS, VISIBILITIES } from "./api.ts";
 import type { Status as StatusType, Versions as VersionsType } from "./schema.gen.ts";
 
 export const Lang = z.enum(LANGS);
+
+export const Visibility = z.enum(VISIBILITIES);
 
 export const LemmaId = z.templateLiteral([Lang, ":", z.string().min(1).max(MAX_LEMMA_LENGTH), ":", z.enum(UPOS)]);
 
@@ -19,6 +21,7 @@ export const ImportRequest = z.object({
     .refine((t) => t.trim() !== "", "text must be a non-empty string")
     .refine((t) => t.length <= MAX_TEXT_LENGTH, `text is longer than ${MAX_TEXT_LENGTH} characters`),
   lang: Lang,
+  visibility: Visibility.default("public"),
 });
 
 export const State = z.enum(["queued", "analysing", "ready", "failed"]);
@@ -46,4 +49,6 @@ export const DocumentRow = z.object({
   lang: Lang,
   imported: z.string(),
   words: z.number().int(),
+  importer: z.string(),
+  visibility: Visibility,
 });

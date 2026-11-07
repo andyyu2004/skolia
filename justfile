@@ -66,20 +66,27 @@ deploy env: (deploy-infra env) (deploy-ingest env) (deploy-web env)
 deploy-infra env: (apply env) && (migrate env)
     case {{ env }} in pr-*) infra/preview.py config {{ env }} ;; esac
 
-# The skolia Worker (reader and API) with wrangler
+# The skolia Worker (reader and API) with wrangler, with Terraform's BETTER_AUTH_SECRET and, if set,
+# GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET from the environment (GitHub's, in CI) as its secrets
 deploy-web env:
     #!/usr/bin/env bash
     set -euo pipefail
     # The version /api/version and the reader's footer show
     export VITE_VERSION=$(git describe --tags --always --dirty)
     pnpm --filter @skolia/reader build
-    infra/wrangler.sh {{ env }} deploy --define "VERSION:\"$VITE_VERSION\""
+    dir=$(mktemp -d)
+    trap 'rm -rf "$dir"' EXIT
+    # JSON: wrangler expands $ in a dotenv file
+    infra/tf.sh {{ env }} output -raw better_auth_secret | jq -Rn '{BETTER_AUTH_SECRET: input}
+      + ({GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET} | with_entries(select((.value // "") != "")))' > "$dir/secrets.json"
+    infra/wrangler.sh {{ env }} deploy --define "VERSION:\"$VITE_VERSION\"" --secrets-file "$dir/secrets.json"
 
 # Build, push and deploy the ingest container
 deploy-ingest env:
     infra/deploy-ingest.sh {{ env }}
 
-# Check the environment serves this checkout's version, then import a new text and wait until it's ready
+# Check the environment serves this checkout's version, then import a new text and wait until it's ready.
+# Writes a new API key for the system user to the environment's D1 first.
 smoke env:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -88,6 +95,13 @@ smoke env:
       staging) url=https://staging.skolia.io ;;
       *) url=$(infra/preview.py url {{ env }}) || exit ;;
     esac
+    SMOKE_API_KEY=$(openssl rand -hex 32)
+    export SMOKE_API_KEY
+    dir=$(mktemp -d)
+    trap 'rm -rf "$dir"' EXIT
+    sql=$dir/smoke-key.sql
+    node api/src/smoke-key.ts > "$sql"
+    infra/wrangler.sh {{ env }} d1 execute DB --remote --yes --file "$sql" >/dev/null
     node api/src/smoke.ts "$url" "$(git describe --tags --always --dirty)"
 
 # Delete a preview (pr-<N>): its Workers, container applications, storage, queue and Terraform state

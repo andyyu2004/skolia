@@ -1,7 +1,7 @@
 // What the API needs from its surroundings: D1, R2, Cloudflare Queues and a Durable
 // Object per user (src/worker/adapters.ts), Better Auth (src/auth.ts), and fakes in the
 // tests.
-import type { KnownLemma, Lang, LemmaId, LemmaStatus, User } from "@skolia/shared/api";
+import type { KnownLemma, Lang, LemmaId, LemmaStatus, User, Visibility } from "@skolia/shared/api";
 import type { IngestJob } from "@skolia/shared/schema";
 
 /** A document's metadata, owned by the API. Its state lives in the status blob. */
@@ -11,13 +11,18 @@ export interface DocumentRecord {
   lang: Lang;
   imported: string;
   words: number;
+  /** The user who first imported it. */
+  importer: string;
+  visibility: Visibility;
 }
 
 export interface DocumentStore {
-  list(): Promise<DocumentRecord[]>;
+  /** Public documents, and the viewer's own private ones. */
+  list(viewer: string | null): Promise<DocumentRecord[]>;
   get(id: string): Promise<DocumentRecord | null>;
   /** Insert, or keep the existing record if the id is already there. */
   add(record: DocumentRecord): Promise<void>;
+  makePublic(id: string): Promise<void>;
   /** How many documents were imported at or after this ISO time. */
   countImportedSince(since: string): Promise<number>;
 }

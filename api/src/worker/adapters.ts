@@ -30,8 +30,11 @@ export class D1Documents implements DocumentStore {
     this.db = db;
   }
 
-  async list(): Promise<DocumentRecord[]> {
-    const { results } = await this.db.prepare("SELECT * FROM document ORDER BY imported DESC").all();
+  async list(viewer: string | null): Promise<DocumentRecord[]> {
+    const { results } = await this.db
+      .prepare("SELECT * FROM document WHERE visibility = 'public' OR importer = ? ORDER BY imported DESC")
+      .bind(viewer)
+      .all();
     return results.map((row) => DocumentRow.parse(row));
   }
 
@@ -40,11 +43,17 @@ export class D1Documents implements DocumentStore {
     return row ? DocumentRow.parse(row) : null;
   }
 
-  async add({ id, title, lang, imported, words }: DocumentRecord): Promise<void> {
+  async add({ id, title, lang, imported, words, importer, visibility }: DocumentRecord): Promise<void> {
     await this.db
-      .prepare("INSERT OR IGNORE INTO document (id, title, lang, imported, words) VALUES (?, ?, ?, ?, ?)")
-      .bind(id, title, lang, imported, words)
+      .prepare(
+        "INSERT OR IGNORE INTO document (id, title, lang, imported, words, importer, visibility) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .bind(id, title, lang, imported, words, importer, visibility)
       .run();
+  }
+
+  async makePublic(id: string): Promise<void> {
+    await this.db.prepare("UPDATE document SET visibility = 'public' WHERE id = ?").bind(id).run();
   }
 
   async countImportedSince(since: string): Promise<number> {

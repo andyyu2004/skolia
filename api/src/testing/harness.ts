@@ -60,7 +60,8 @@ export async function startLocal(): Promise<Local> {
   await worker.applyD1Migrations("DB");
   const env = await worker.getEnv();
   const recorder = await server.getWorker<object, { default: typeof IngestRecorder }>("ingest-recorder").getExport();
-  const instance = betterAuth({ ...authOptions(authConfig(env.DB)), plugins: [testUtils()] });
+  const options = authOptions(authConfig(env.DB));
+  const instance = betterAuth({ ...options, plugins: [...options.plugins, testUtils()] });
   const { test } = await instance.$context;
   let flushes = 0;
 
@@ -89,8 +90,12 @@ export async function startLocal(): Promise<Local> {
     signIn: (userId) => test.getAuthHeaders({ userId }),
     takeQueued,
     async reset() {
-      const tables = ["document", "session", "account", "verification", "user"];
-      await env.DB.batch(tables.map((t) => env.DB.prepare(`DELETE FROM "${t}"`)));
+      const tables = ["document", "apikey", "session", "account", "verification"];
+      await env.DB.batch([
+        ...tables.map((t) => env.DB.prepare(`DELETE FROM "${t}"`)),
+        // The system user is the migrations'
+        env.DB.prepare(`DELETE FROM "user" WHERE "id" != 'system'`),
+      ]);
       const { objects } = await env.BLOBS.list();
       if (objects.length > 0) await env.BLOBS.delete(objects.map((o) => o.key));
       await takeQueued();

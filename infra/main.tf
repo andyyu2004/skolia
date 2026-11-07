@@ -59,3 +59,10 @@ resource "cloudflare_account_token" "ingest_r2" {
     })
   }]
 }
+
+# Signs the skolia Worker's sessions and encrypts its OAuth tokens. just deploy-web passes
+# it as a Worker secret.
+resource "random_password" "better_auth_secret" {
+  length  = 48
+  special = false
+}

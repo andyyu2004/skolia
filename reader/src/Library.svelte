@@ -73,25 +73,29 @@
 
   <section>
     <h2>Import a text</h2>
-    <form onsubmit={submit}>
-      <input bind:value={title} placeholder="Title (optional)" maxlength="200" />
-      <select bind:value={lang} aria-label="Language">
-        {#each LANGS as code (code)}
-          <option value={code}>{LANGUAGES[code].name}</option>
-        {/each}
-      </select>
-      <textarea
-        bind:value={text}
-        {lang}
-        placeholder={`Paste ${LANGUAGES[lang].name} text here`}
-        rows="8"
-        maxlength={MAX_TEXT_LENGTH}
-        required
-      ></textarea>
-      <button type="submit" disabled={importing || text.trim() === ""}>
-        {importing ? "Importing…" : "Import"}
-      </button>
-    </form>
+    {#if user === null}
+      <p class="muted">Sign in to import a text.</p>
+    {:else if user}
+      <form onsubmit={submit}>
+        <input bind:value={title} placeholder="Title (optional)" maxlength="200" />
+        <select bind:value={lang} aria-label="Language">
+          {#each LANGS as code (code)}
+            <option value={code}>{LANGUAGES[code].name}</option>
+          {/each}
+        </select>
+        <textarea
+          bind:value={text}
+          {lang}
+          placeholder={`Paste ${LANGUAGES[lang].name} text here`}
+          rows="8"
+          maxlength={MAX_TEXT_LENGTH}
+          required
+        ></textarea>
+        <button type="submit" disabled={importing || text.trim() === ""}>
+          {importing ? "Importing…" : "Import"}
+        </button>
+      </form>
+    {/if}
   </section>
 
   {#if error}

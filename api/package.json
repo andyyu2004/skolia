@@ -10,6 +10,7 @@
     "test": "node --test \"src/**/*.test.ts\""
   },
   "dependencies": {
+    "@better-auth/api-key": "1.7.12",
     "@hono/zod-validator": "0.9.1",
     "@skolia/shared": "workspace:*",
     "better-auth": "1.7.12",

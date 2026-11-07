@@ -6,17 +6,24 @@ import { getMigrations } from "better-auth/db/migration";
 import { MAX_TEXT_LENGTH, type DocumentList, type DocumentSummary } from "@skolia/shared/api";
 import { docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import { type AppType, createApp } from "./app.ts";
-import { NO_AUTH, authOptions, createAuth } from "./auth.ts";
+import { API_KEY_HEADER, NO_AUTH, authOptions, createAuth } from "./auth.ts";
 import type { Auth } from "./ports.ts";
+import { SYSTEM_USER, smokeKeySql } from "./smoke-key.ts";
 import { ORIGIN, authConfig, startLocal, type Local } from "./testing/harness.ts";
 import { CloudflareQueue, D1Documents, DurableObjectUsers, R2Blobs } from "./worker/adapters.ts";
 
 let local: Local;
 
+/** Signed in as the user who imports in importText. */
+let importer: Headers;
+
 before(async () => {
   local = await startLocal();
 });
-beforeEach(() => local.reset());
+beforeEach(async () => {
+  await local.reset();
+  importer = await local.signIn((await local.signUp({ name: "Ivy", email: "ivy@example.com" })).id);
+});
 after(() => local?.close());
 
 const NOW = "2026-11-04T00:00:00Z";
@@ -53,12 +60,19 @@ function putLemma(app: App, headers: Headers | undefined, lemmaId: string, body:
   });
 }
 
-function importText(app: App, text = TEXT) {
-  return app.request("/api/documents", {
+function importText(app: App, text = TEXT, { headers = importer, visibility }: { headers?: HeadersInit; visibility?: string } = {}) {
+  const allHeaders = new Headers(headers);
+  allHeaders.set("content-type", "application/json");
+  return app.request(`${ORIGIN}/api/documents`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ title: "", text, lang: "pl" }),
+    headers: allHeaders,
+    body: JSON.stringify({ title: "", text, lang: "pl", visibility }),
   });
+}
+
+async function listed(app: App, headers: HeadersInit = {}): Promise<string[]> {
+  const response = await app.request(`${ORIGIN}/api/documents`, { headers });
+  return ((await response.json()) as DocumentList).documents.map((d) => d.id);
 }
 
 /** A ready document whose analysis and bundle were made by version v, as ingest leaves it. */
@@ -102,13 +116,16 @@ test("every D1 table is STRICT, and timestamps must be toISOString()'s", async (
   const { results } = await env.DB.prepare(
     "select name, strict from pragma_table_list where schema = 'main' and name not like 'sqlite_%' and name not like '_cf_%' and name != 'd1_migrations' order by name",
   ).all();
-  assert.deepEqual(results, ["account", "document", "session", "user", "verification"].map((name) => ({ name, strict: 1 })));
-  const insert = env.DB.prepare("insert into document (id, title, lang, imported, words) values (?, 't', 'pl', ?, 1)");
+  assert.deepEqual(results, ["account", "apikey", "document", "session", "user", "verification"].map((name) => ({ name, strict: 1 })));
+  const user = await local.signUp(ALICE);
+  const insert = env.DB.prepare(`insert into document (id, title, lang, imported, words, importer, visibility) values (?, 't', 'pl', ?, 1, '${user.id}', 'public')`);
   await insert.bind("a", "2026-11-07T00:00:00.000Z").run();
   for (const imported of ["2026-11-07T00:00:00Z", "2026-11-07 00:00:00", "yesterday"]) {
     await assert.rejects(insert.bind("b", imported).run(), /CHECK constraint failed/);
   }
-  await assert.rejects(env.DB.prepare("insert into document values ('c', 't', 'pl', '2026-11-07T00:00:00.000Z', 'many')").run(), /cannot store TEXT/);
+  await assert.rejects(env.DB.prepare(`insert into document values ('c', 't', 'pl', '2026-11-07T00:00:00.000Z', 'many', '${user.id}', 'public')`).run(), /cannot store TEXT/);
+  await assert.rejects(env.DB.prepare(`insert into document values ('d', 't', 'pl', '2026-11-07T00:00:00.000Z', 1, '${user.id}', 'secret')`).run(), /CHECK constraint failed/);
+  await assert.rejects(env.DB.prepare("insert into document values ('e', 't', 'pl', '2026-11-07T00:00:00.000Z', 1, 'nobody', 'public')").run(), /FOREIGN KEY constraint failed/);
 });
 
 test("a forged session cookie signs nobody in", async () => {
@@ -194,7 +211,8 @@ test("without its configuration sign-in answers 503 and nobody is signed in", as
 
 test("the typed client imports, lists and gets a document, and sees a 404 as not ok", async () => {
   const app = setup();
-  const api = hc<AppType>(ORIGIN, { fetch: (input: string | URL | Request, init?: RequestInit) => app.request(input, init) }).api;
+  const headers = Object.fromEntries(importer);
+  const api = hc<AppType>(ORIGIN, { headers, fetch: (input: string | URL | Request, init?: RequestInit) => app.request(input, init) }).api;
   const imported = await api.documents.$post({ json: { title: "", text: TEXT, lang: "pl" } });
   assert.equal(imported.status, 202);
   if (!imported.ok) throw new Error("import failed");
@@ -338,15 +356,85 @@ test("a document queued or analysing for too long is queued again", async () => 
 test("bad requests and ids are rejected", async () => {
   const app = setup();
   assert.equal((await importText(app, "   ")).status, 400);
-  const german = await app.request("/api/documents", {
+  const german = await app.request(`${ORIGIN}/api/documents`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", cookie: importer.get("cookie") ?? "" },
     body: JSON.stringify({ text: "Ich gehe.", lang: "de" }),
   });
   assert.equal(german.status, 400);
-  const malformed = await app.request("/api/documents", { method: "POST", headers: { "content-type": "application/json" }, body: "{" });
+  const malformed = await app.request(`${ORIGIN}/api/documents`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: importer.get("cookie") ?? "" },
+    body: "{",
+  });
   assert.equal(malformed.status, 400);
   assert.deepEqual(await local.takeQueued(), []);
   assert.equal((await app.request("/api/documents/../etc")).status, 404);
   assert.equal((await app.request(`/api/documents/${"0".repeat(64)}`)).status, 404);
+});
+
+test("importing needs a session", async () => {
+  const app = setup();
+  const response = await importText(app, TEXT, { headers: {} });
+  assert.equal(response.status, 401);
+  assert.deepEqual(await local.takeQueued(), []);
+  assert.deepEqual(await listed(app), []);
+});
+
+test("the importer is recorded, and a private text is in only its importer's library", async () => {
+  const app = setup();
+  const response = await importText(app, TEXT, { visibility: "private" });
+  assert.equal(response.status, 202);
+  const summary = (await response.json()) as DocumentSummary;
+  assert.equal(summary.visibility, "private");
+  assert.equal("importer" in summary, false);
+  const row = await local.env.DB.prepare("select importer, visibility from document where id = ?").bind(summary.id).first();
+  assert.deepEqual(row, { importer: (await local.auth.user(importer))?.id, visibility: "private" });
+  const alice = await local.signIn((await local.signUp(ALICE)).id);
+  assert.deepEqual(await listed(app), []);
+  assert.deepEqual(await listed(app, alice), []);
+  assert.deepEqual(await listed(app, importer), [summary.id]);
+  assert.equal((await summaryOf(app, summary.id)).visibility, "private");
+});
+
+test("a public import of a private text makes it public", async () => {
+  const app = setup();
+  await importText(app, TEXT, { visibility: "private" });
+  const alice = await local.signIn((await local.signUp(ALICE)).id);
+  const again = await importText(app, TEXT, { headers: alice });
+  assert.equal(again.status, 200);
+  assert.equal(((await again.json()) as DocumentSummary).visibility, "public");
+  assert.deepEqual(await listed(app), [await docId("pl", TEXT)]);
+  // A private import of a public text doesn't hide it
+  await importText(app, TEXT, { visibility: "private" });
+  assert.deepEqual(await listed(app), [await docId("pl", TEXT)]);
+});
+
+test("the system user's API key, as smoke-key.ts writes it, signs it in; others don't", async () => {
+  const app = setup();
+  const key = "ab".repeat(32);
+  const run = (k: string) => local.env.DB.batch(smokeKeySql(k, "2026-11-04T00:00:00.000Z").map((q) => local.env.DB.prepare(q)));
+  await run("cd".repeat(32));
+  await run(key);
+  const me = await app.request(`${ORIGIN}/api/me`, { headers: { [API_KEY_HEADER]: key } });
+  assert.equal(me.status, 200);
+  assert.equal(((await me.json()) as { id: string }).id, SYSTEM_USER);
+  assert.equal((await importText(app, TEXT, { headers: { [API_KEY_HEADER]: key }, visibility: "private" })).status, 202);
+  // The key it replaced
+  assert.equal((await app.request(`${ORIGIN}/api/me`, { headers: { [API_KEY_HEADER]: "cd".repeat(32) } })).status, 401);
+  assert.equal((await importText(app, "Inny tekst.", { headers: { [API_KEY_HEADER]: "ef".repeat(32) } })).status, 401);
+});
+
+test("signed-in users can't make API keys", async () => {
+  const app = setup();
+  for (const path of ["create", "list"]) {
+    const response = await app.request(`${ORIGIN}/api/auth/api-key/${path}`, {
+      method: path === "create" ? "POST" : "GET",
+      headers: { cookie: importer.get("cookie") ?? "", "content-type": "application/json", origin: ORIGIN },
+      ...(path === "create" ? { body: "{}" } : {}),
+    });
+    assert.equal(response.status, 404, path);
+  }
+  const { results } = await local.env.DB.prepare("select id from apikey").all();
+  assert.deepEqual(results, []);
 });
