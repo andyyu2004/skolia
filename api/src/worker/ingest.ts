@@ -97,12 +97,6 @@ export class Ingester extends DurableObject<Env> {
         },
       });
       console.log("starting ingest:", image);
-      console.log("diagnostic lengths:", {
-        S3_ACCESS_KEY_ID: this.env.S3_ACCESS_KEY_ID?.length,
-        S3_SECRET_ACCESS_KEY: this.env.S3_SECRET_ACCESS_KEY?.length,
-        S3_ENDPOINT: this.env.S3_ENDPOINT?.length,
-        typeofKey: typeof this.env.S3_ACCESS_KEY_ID,
-      });
       this.ctx.waitUntil(
         container.monitor().then(
           () => console.log("ingest exited:", image),

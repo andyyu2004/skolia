@@ -129,8 +129,10 @@ deploy() {
   done
 
   chmod 600 "$secrets"
-  printf 'S3_ACCESS_KEY_ID=%s\nS3_SECRET_ACCESS_KEY=%s\n' \
-    "$(tf output -raw ingest_s3_access_key_id)" "$(tf output -raw ingest_s3_secret_access_key)" > "$secrets"
+  # JSON: wrangler (4.158) overrides a dotenv secrets file's values with the environment's,
+  # which has api/.env's local credentials loaded
+  jq -n --arg id "$(tf output -raw ingest_s3_access_key_id)" --arg key "$(tf output -raw ingest_s3_secret_access_key)" \
+    '{S3_ACCESS_KEY_ID: $id, S3_SECRET_ACCESS_KEY: $key}' > "$secrets"
   wrangler deploy -c "$config" --var "S3_ENDPOINT:$(tf output -raw r2_s3_endpoint)" --secrets-file "$secrets"
 }
 

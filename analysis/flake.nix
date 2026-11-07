@@ -211,16 +211,6 @@
         }
         // lib.optionalAttrs (lang == "en") { STANZA_RESOURCES_DIR = "${stanzaResources}"; };
 
-      # The command sets the image's Env too: under the durable_object scheduling policy,
-      # started with env of its own (api/src/worker/ingest.ts), the container exited with
-      # code 1 before listening, as it does without SKOLIA_HTTP_PORT
-      start =
-        lang:
-        pkgs.writeShellScript "skolia-ingest-${lang}" ''
-          ${lib.concatStringsSep "\n" (lib.mapAttrsToList (k: v: "export ${k}=${lib.escapeShellArg v}") (env lang))}
-          exec ${venv}/bin/skolia-ingest "$@"
-        '';
-
       # One layer per model (Cloudflare's registry times out committing a 3 GB layer),
       # PyTorch, the other dependencies and the lexicon; the code and the rest on top
       root = pkgs.runCommand "root" { } "mkdir -p $out/tmp";
@@ -257,7 +247,7 @@
             }
           ];
           config = {
-            Cmd = [ "${start lang}" ];
+            Cmd = [ "${venv}/bin/skolia-ingest" ];
             Env = lib.mapAttrsToList (k: v: "${k}=${v}") (env lang);
             ExposedPorts."8080/tcp" = { };
           };
