@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Builds each language's ingest image with Nix (analysis/flake.nix), pushes it to
 # Cloudflare's registry and deploys the ingest Worker with them:
-#   deploy-ingest.sh <env> build <lang>   build and push one language's image (CI runs
-#                                          one per language, in parallel)
+#   deploy-ingest.sh build <lang>         build and push one language's image, for every
+#                                          environment (CI runs one per language, in
+#                                          parallel, before any deploy)
 #   deploy-ingest.sh <env> deploy         deploy the ingest Worker with every language's
 #                                          image, which must be in the registry
 #   deploy-ingest.sh <env>                both, every language in turn
@@ -12,9 +13,13 @@
 # rebuilt, pushed nor redeployed, and a push sends only the layers the registry lacks.
 set -euo pipefail
 
-env=${1:-}
-usage="usage: deploy-ingest.sh <staging|production|pr-N> [build <lang> | deploy]"
-if [[ ! $env =~ ^(staging|production|pr-[0-9]+)$ ]]; then
+usage="usage: deploy-ingest.sh build <lang> | deploy-ingest.sh <staging|production|pr-N> [deploy]"
+env= mode= lang=
+if [ "${1:-}" = build ]; then
+  mode=build lang=${2:-}
+elif [[ ${1:-} =~ ^(staging|production|pr-[0-9]+)$ ]]; then
+  env=$1 mode=${2:-all}
+else
   echo "$usage" >&2
   exit 2
 fi
@@ -28,15 +33,18 @@ nix_sh=$root/analysis/scripts/nix.sh
 cd "$root"
 
 # One image per language, each named after it in wrangler.ingest.jsonc's images. CI's
-# matrix in .github/workflows/deploy.yml lists them too.
+# matrix in .github/workflows/ci.yml lists them too.
 langs=(pl en)
 repo=registry.cloudflare.com/$CLOUDFLARE_ACCOUNT_ID
 
 tag_of() { "$nix_sh" nix eval --raw "./analysis#ingest-$1.imageTag"; }
 
 registry=
+# Called in if conditions, where set -e doesn't apply: a failed listing exits by itself
 in_registry() {
-  [ -n "$registry" ] || registry=$(registry_wrangler containers images list --json)
+  if [ -z "$registry" ]; then
+    registry=$(registry_wrangler containers images list --json) || exit
+  fi
   jq -e --arg n "$1" --arg v "$2" '.[] | select(.name == $n) | .tags | index($v)' \
     <<<"$registry" >/dev/null
 }
@@ -44,14 +52,20 @@ in_registry() {
 # The durable_object scheduling policy takes images pinned by digest. --no-tags: listing
 # the repository's tags fails (Cloudflare's registry rejects skopeo's request).
 digest_of() {
-  registry_wrangler containers registries credentials registry.cloudflare.com --pull \
-    --expiration-minutes 10 | tail -n1 |
-    "$nix_sh" sh -c 'exec nix run ./analysis#skopeo -- inspect --no-tags --creds "v1:$(cat)" \
-      --format "{{.Digest}}" "$0"' "docker://$repo/$1"
+  local creds
+  creds=$(registry_credentials --pull --expiration-minutes 10) || exit
+  "$nix_sh" sh -c 'exec nix run ./analysis#skopeo -- inspect --no-tags --creds "v1:$(cat)" \
+    --format "{{.Digest}}" "$0"' "docker://$repo/$1" <<<"$creds"
+}
+
+# Fetched before skopeo starts, so a wrangler failure stops here instead of reaching the
+# registry as an authentication error
+registry_credentials() {
+  registry_wrangler containers registries credentials registry.cloudflare.com "$@" | tail -n1
 }
 
 build_lang() {
-  local lang=$1 name tag
+  local lang=$1 name tag creds
   name=skolia-ingest-$lang
   tag=$(tag_of "$lang")
   if in_registry "$name" "$tag"; then
@@ -64,10 +78,9 @@ build_lang() {
   # With the credentials wrangler containers push would use (user v1), on stdin. Cloudflare's
   # registry sometimes times out committing a large layer (on 2026-11-06 a 1 GB model layer
   # failed 3 times, then went through): skopeo retries.
-  registry_wrangler containers registries credentials registry.cloudflare.com --push --pull \
-    --expiration-minutes 60 | tail -n1 |
-    "$nix_sh" sh -c 'exec nix run "./analysis#ingest-$0.copyTo" -- --retry-times 5 \
-      --format v2s2 --dest-creds "v1:$(cat)" "$1"' "$lang" "docker://$repo/$name:$tag"
+  creds=$(registry_credentials --push --pull --expiration-minutes 60)
+  "$nix_sh" sh -c 'exec nix run "./analysis#ingest-$0.copyTo" -- --retry-times 5 \
+    --format v2s2 --dest-creds "v1:$(cat)" "$1"' "$lang" "docker://$repo/$name:$tag" <<<"$creds"
   # Everything the next build needs but the models, which would fill the cache
   if [ -n "${CACHIX_AUTH_TOKEN:-}" ]; then
     nix build --no-link --print-out-paths "./analysis#cacheable-$lang" | cachix push andyyu2004
@@ -136,9 +149,8 @@ deploy() {
   wrangler deploy -c "$config" --var "S3_ENDPOINT:$(tf output -raw r2_s3_endpoint)" --secrets-file "$secrets"
 }
 
-case ${2:-} in
+case $mode in
   build)
-    lang=${3:-}
     if [[ " ${langs[*]} " != *" $lang "* ]]; then
       echo "deploy-ingest.sh: build takes one of: ${langs[*]}" >&2
       exit 2
@@ -146,7 +158,7 @@ case ${2:-} in
     build_lang "$lang"
     ;;
   deploy) deploy ;;
-  "")
+  all)
     for lang in "${langs[@]}"; do build_lang "$lang"; done
     registry=
     deploy

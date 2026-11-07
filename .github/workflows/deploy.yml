@@ -1,11 +1,10 @@
 name: Deploy
 
-# One environment: Terraform and migrations, alongside each language's ingest image,
-# built in parallel; then the ingest Worker with those images; then the skolia Worker
-# (reader and API) and a smoke test. The ingest Worker consumes the queue the skolia
-# Worker feeds, so it goes first. Called by ci.yml. deploy-ingest only builds and pushes
-# an image whose inputs changed, and wrangler leaves an unchanged one as it is. Previews
-# (pr-<N>) share one GitHub environment, preview.
+# One environment: Terraform and migrations; then the ingest Worker with the images
+# ci.yml's build-ingest-image pushed; then the skolia Worker (reader and API) and a
+# smoke test. The ingest Worker consumes the queue the skolia Worker feeds, so it goes
+# first. Called by ci.yml, after the images are built. wrangler leaves an unchanged image
+# as it is. Previews (pr-<N>) share one GitHub environment, preview.
 
 on:
   workflow_call:
@@ -22,7 +21,7 @@ env:
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
 jobs:
-  infra:
+  deploy-infra:
     runs-on: ubuntu-24.04
     environment: ${{ startsWith(inputs.env, 'pr-') && 'preview' || inputs.env }}
     concurrency:
@@ -39,35 +38,9 @@ jobs:
       - uses: ./.github/actions/setup
       - run: just deploy-infra ${{ inputs.env }}
 
-  # The images are named by their inputs, not the environment, so a build for one
-  # environment is reused by the other
-  ingest-image:
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        # The languages in infra/deploy-ingest.sh
-        lang: [pl, en]
-    steps:
-      - uses: actions/checkout@v7
-      # The model downloads read HF_TOKEN (impureEnvVars) from the daemon, not this job
-      - uses: ./.github/actions/setup
-        with:
-          nix-conf: |
-            extra-experimental-features = configurable-impure-env
-            impure-env = HF_TOKEN=${{ secrets.HF_TOKEN }}
-      # deploy-ingest pushes to it
-      - uses: cachix/cachix-action@v17
-        with:
-          name: andyyu2004
-          skipPush: true
-      - run: infra/deploy-ingest.sh ${{ inputs.env }} build ${{ matrix.lang }}
-        env:
-          CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
-
-  # Reads the R2 credentials from Terraform, so after infra
-  ingest:
-    needs: [infra, ingest-image]
+  # Reads the R2 credentials from Terraform, so after deploy-infra
+  deploy-ingest:
+    needs: deploy-infra
     runs-on: ubuntu-24.04
     environment: ${{ startsWith(inputs.env, 'pr-') && 'preview' || inputs.env }}
     concurrency:
@@ -82,8 +55,8 @@ jobs:
       - uses: ./.github/actions/setup
       - run: infra/deploy-ingest.sh ${{ inputs.env }} deploy
 
-  web:
-    needs: ingest
+  deploy-web:
+    needs: deploy-ingest
     runs-on: ubuntu-24.04
     environment: ${{ startsWith(inputs.env, 'pr-') && 'preview' || inputs.env }}
     concurrency:
