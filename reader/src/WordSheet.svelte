@@ -68,7 +68,7 @@
           lemmaId: parsedId.success ? parsedId.data : null,
           said: pronunciationsOf(bundle, w.token.text, w.token.upos),
           lemmaSaid:
-            entry && entry.lemma !== w.token.text ? pronunciationsOf(bundle, entry.lemma, entry.upos) : [],
+            entry && !sameWord(entry.lemma, w.token.text) ? pronunciationsOf(bundle, entry.lemma, entry.upos) : [],
           partOfWord,
           role: role && head ? { role, head } : null,
           caseWhy: language.explainCase(tokens, w.index),
@@ -82,6 +82,11 @@
         };
       }),
   );
+
+  /** Cześć at the start of a sentence is still the lemma cześć */
+  function sameWord(a: string, b: string): boolean {
+    return a.toLocaleLowerCase() === b.toLocaleLowerCase();
+  }
 
   const STATUS_LABELS: [WordStatus, string][] = [
     ["active", "Learn"],
@@ -116,19 +121,43 @@
   {#each words as word (word.ref.index)}
     {@const token = word.ref.token}
     <section class="word">
-      <h2>
-        <span {lang}>{token.text}</span>
-        {#if token.lemma && token.lemma !== token.text}
-          <span class="lemma">(<span {lang}>{word.entry?.lemma ?? token.lemma}</span>)</span>
+      <div class="word-head">
+        <h2>
+          <span {lang}>{token.text}</span>
+          {#if token.lemma && !sameWord(token.lemma, token.text)}
+            <span class="lemma">(<span {lang}>{word.entry?.lemma ?? token.lemma}</span>)</span>
+          {/if}
+        </h2>
+        {#if known.byId && word.lemmaId && word.partOfWord === null}
+          {@const lemmaId = word.lemmaId}
+          {@const current = known.byId[lemmaId]}
+          <div class="word-status">
+            <div class="segmented" role="group" aria-label="Your word">
+              {#each STATUS_LABELS as [status, label] (status)}
+                <button
+                  type="button"
+                  aria-pressed={current?.status === status}
+                  disabled={saving !== null}
+                  onclick={() => mark(lemmaId, status)}>{label}</button
+                >
+              {/each}
+            </div>
+            {#if current?.status === "active"}
+              <span class="muted">{current.mature ? "known from your cards" : "learning"}</span>
+            {/if}
+          </div>
         {/if}
-      </h2>
+      </div>
+      {#if word.lemmaId && statusError?.lemmaId === word.lemmaId}
+        <p class="error" role="alert">{statusError.message}</p>
+      {/if}
       {#if word.said.length > 0 || word.lemmaSaid.length > 0}
         <p class="pronunciation">
           {#each word.said as p (p.ipa)}
             <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
           {/each}
           {#if word.lemmaSaid.length > 0 && word.entry}
-            <span class="muted"
+            <span class="lemma-said"
               ><span {lang}>{word.entry.lemma}</span>
               {#each word.lemmaSaid as p (p.ipa)}
                 <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
@@ -136,25 +165,6 @@
             >
           {/if}
         </p>
-      {/if}
-      {#if known.byId && word.lemmaId && word.partOfWord === null}
-        {@const lemmaId = word.lemmaId}
-        {@const current = known.byId[lemmaId]}
-        <div class="word-status" role="group" aria-label="Your word">
-          {#each STATUS_LABELS as [status, label] (status)}
-            <button
-              type="button"
-              class="quiet"
-              aria-pressed={current?.status === status}
-              disabled={saving !== null}
-              onclick={() => mark(lemmaId, status)}>{label}</button
-            >
-          {/each}
-          {#if current?.status === "active"}
-            <span class="muted">{current.mature ? "known from your cards" : "learning"}</span>
-          {/if}
-        </div>
-        {#if statusError?.lemmaId === lemmaId}<p class="error" role="alert">{statusError.message}</p>{/if}
       {/if}
       <p class="grammar">
         {[word.partOfWord ?? UPOS_LABEL[token.upos], ...featureWords(token.feats)].join(
