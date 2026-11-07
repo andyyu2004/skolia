@@ -27,7 +27,7 @@ export const NOW = "2026-11-04T00:00:00Z";
 export const TEXT = "Idę do starego psa.";
 export const ALICE = { name: "Alice", email: "alice@example.com" };
 
-export function setup({ maxImportsPerDay = 100, auth = local.auth }: { maxImportsPerDay?: number; auth?: Auth } = {}) {
+export function setup({ maxImportsPerDay = 100, auth = local.auth, at = NOW }: { maxImportsPerDay?: number; auth?: Auth; at?: string } = {}) {
   const { env } = local;
   return createApp({
     auth,
@@ -38,7 +38,7 @@ export function setup({ maxImportsPerDay = 100, auth = local.auth }: { maxImport
     blobs: new R2Blobs(env.BLOBS),
     queue: new CloudflareQueue(env.INGEST),
     version: "v1.2.3",
-    now: () => new Date(NOW),
+    now: () => new Date(at),
   });
 }
 

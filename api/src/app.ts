@@ -8,6 +8,7 @@ import {
   LANGS,
   MAX_TEXT_LENGTH,
   type ApiError,
+  type CardCounts,
   type DocumentList,
   type DocumentSummary,
   MAX_LOOKUP,
@@ -118,12 +119,19 @@ export function createApp(deps: Deps) {
         return c.body(null, 204);
       },
     )
-    .get("/api/me/cards/due", zValidator("query", schemas.DueQuery, badRequest("dayStart must be an ISO time")), async (c) => {
+    .get("/api/me/cards/counts", zValidator("query", schemas.CountsQuery, badRequest("dayStart must be an ISO time")), async (c) => {
       const user = await deps.auth.user(c.req.raw.headers);
       if (!user) return signInFirst(c);
+      const dayStart = new Date(c.req.valid("query").dayStart).toISOString();
+      return c.json((await deps.users.counts(user.id, now().toISOString(), dayStart)) satisfies CardCounts[], 200);
+    })
+    .get("/api/me/cards/due", zValidator("query", schemas.DueQuery, badRequest("lang must be a language and dayStart an ISO time")), async (c) => {
+      const user = await deps.auth.user(c.req.raw.headers);
+      if (!user) return signInFirst(c);
+      const { lang } = c.req.valid("query");
       // Stored times are toISOString()'s, compared as strings
       const dayStart = new Date(c.req.valid("query").dayStart).toISOString();
-      const { cards, newLeft } = await deps.users.due(user.id, now().toISOString(), dayStart, MAX_DUE);
+      const { cards, newLeft } = await deps.users.due(user.id, lang, now().toISOString(), dayStart, MAX_DUE);
       const entries = new Map<LemmaId, LexiconEntry>();
       const ids = [...new Set(cards.map((card) => card.lemmaId))];
       for (let i = 0; i < ids.length; i += MAX_LOOKUP) {

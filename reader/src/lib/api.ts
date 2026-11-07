@@ -6,6 +6,7 @@ import type { AppType } from "@skolia/api/app";
 import {
   isLang,
   type ApiError,
+  type CardCounts,
   type Due,
   type DocumentSummary,
   type ImportRequest,
@@ -117,10 +118,22 @@ export async function setWord(lemmaId: LemmaId, status: WordStatus): Promise<voi
   if (!response.ok) throw await failure(response);
 }
 
-/** Cards to review, counting today's new cards from the start of the local day. */
-export async function dueCards(now = new Date()): Promise<Due | null> {
-  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-  const response = await api.me.cards.due.$get({ query: { dayStart } });
+/** The start of the local day, which today's new cards count from. */
+function dayStartOf(now: Date): string {
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+}
+
+/** Each language's cards due and new today. */
+export async function cardCounts(now = new Date()): Promise<CardCounts[] | null> {
+  const response = await api.me.cards.counts.$get({ query: { dayStart: dayStartOf(now) } });
+  if (response.status === 401) return null;
+  if (!response.ok) throw await failure(response);
+  return response.json();
+}
+
+/** A language's cards to review. */
+export async function dueCards(lang: Lang, now = new Date()): Promise<Due | null> {
+  const response = await api.me.cards.due.$get({ query: { lang, dayStart: dayStartOf(now) } });
   if (response.status === 401) return null;
   if (!response.ok) throw await failure(response);
   // Hono's JSON type makes the entries' optional fields `| undefined`, which

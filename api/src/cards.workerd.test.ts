@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Due, LexiconEntry, Reviewed, Settings, Word } from "@skolia/shared/api";
+import type { CardCounts, Due, Lang, LexiconEntry, Reviewed, Settings, Word } from "@skolia/shared/api";
 import { ALICE, NOW, loadLexicon, local, lookUp, postReview, putSettings, putWord, setup, useLocal, type App } from "./testing/app.ts";
 import { ORIGIN } from "./testing/harness.ts";
 
@@ -12,10 +12,16 @@ async function signedIn(): Promise<Headers> {
   return local.signIn((await local.signUp(ALICE)).id);
 }
 
-async function due(app: App, headers: Headers, dayStart = DAY_START): Promise<Due> {
-  const response = await app.request(`${ORIGIN}/api/me/cards/due?dayStart=${encodeURIComponent(dayStart)}`, { headers });
+async function due(app: App, headers: Headers, lang: Lang, dayStart = DAY_START): Promise<Due> {
+  const response = await app.request(`${ORIGIN}/api/me/cards/due?lang=${lang}&dayStart=${encodeURIComponent(dayStart)}`, { headers });
   assert.equal(response.status, 200);
   return (await response.json()) as Due;
+}
+
+async function counts(app: App, headers: Headers): Promise<CardCounts[]> {
+  const response = await app.request(`${ORIGIN}/api/me/cards/counts?dayStart=${DAY_START}`, { headers });
+  assert.equal(response.status, 200);
+  return (await response.json()) as CardCounts[];
 }
 
 async function words(app: App, headers: Headers): Promise<Word[]> {
@@ -33,7 +39,7 @@ test("an active word gets a recognition and a production card, new and due now, 
   assert.equal((await putWord(app, headers, "pl:pies:NOUN", { status: "active" })).status, 204);
   assert.equal((await putWord(app, headers, "pl:pies:NOUN", { status: "active" })).status, 204);
   assert.equal((await putWord(app, headers, "pl:kot:NOUN", { status: "active" })).status, 204);
-  const { cards, newLeft } = await due(app, headers);
+  const { cards, newLeft } = await due(app, headers, "pl");
   assert.equal(newLeft, 20);
   assert.deepEqual(
     cards.map((c) => [c.lemmaId, c.kind, c.isNew, c.entry?.senses[0]?.gloss ?? null]),
@@ -56,12 +62,12 @@ test("known and ignored words have no cards to review, and active brings their c
   await putWord(app, headers, "pl:pies:NOUN", { status: "active" });
   await putWord(app, headers, "pl:kot:NOUN", { status: "known" });
   await putWord(app, headers, "pl:Ola:PROPN", { status: "ignored" });
-  assert.equal((await due(app, headers)).cards.length, 2);
+  assert.equal((await due(app, headers, "pl")).cards.length, 2);
   await putWord(app, headers, "pl:pies:NOUN", { status: "known" });
-  assert.equal((await due(app, headers)).cards.length, 0);
+  assert.equal((await due(app, headers, "pl")).cards.length, 0);
   await putWord(app, headers, "pl:pies:NOUN", { status: "active" });
   assert.deepEqual(
-    (await due(app, headers)).cards.map((c) => c.lemmaId),
+    (await due(app, headers, "pl")).cards.map((c) => c.lemmaId),
     ["pl:pies:NOUN", "pl:pies:NOUN"],
   );
   assert.deepEqual(
@@ -80,7 +86,7 @@ test("a review schedules the card, a retried review is counted once, and the day
   assert.deepEqual((await (await app.request(`${ORIGIN}/api/me/settings`, { headers })).json()) as Settings, { newPerDay: 20 });
   assert.equal((await putSettings(app, headers, { newPerDay: 1 })).status, 204);
   await putWord(app, headers, "pl:pies:NOUN", { status: "active" });
-  const [card] = (await due(app, headers)).cards;
+  const [card] = (await due(app, headers, "pl")).cards;
   assert.ok(card);
   const good = answer(card.id, 3);
   const response = await postReview(app, headers, good);
@@ -88,19 +94,45 @@ test("a review schedules the card, a retried review is counted once, and the day
   const reviewed = (await response.json()) as Reviewed;
   assert.ok(reviewed.dueAt > NOW);
   assert.deepEqual(await (await postReview(app, headers, good)).json(), reviewed);
-  const after = await due(app, headers);
+  const after = await due(app, headers, "pl");
   assert.deepEqual(after, { cards: [], newLeft: 0 });
   // The next day's allowance
-  assert.equal((await due(app, headers, "2026-11-04T00:00:00.001Z")).cards.length, 1);
+  assert.equal((await due(app, headers, "pl", "2026-11-04T00:00:00.001Z")).cards.length, 1);
   // A day start without milliseconds is the same time: compared as strings, "00Z" sorts after "00.000Z"
-  assert.equal((await due(app, headers, "2026-11-04T00:00:00Z")).newLeft, 0);
+  assert.equal((await due(app, headers, "pl", "2026-11-04T00:00:00Z")).newLeft, 0);
+});
+
+test("each language is reviewed on its own, with its own daily allowance of new cards", async () => {
+  const app = setup();
+  const headers = await signedIn();
+  await putSettings(app, headers, { newPerDay: 1 });
+  await putWord(app, headers, "pl:pies:NOUN", { status: "active" });
+  await putWord(app, headers, "en:dog:NOUN", { status: "active" });
+  await putWord(app, headers, "en:cat:NOUN", { status: "active" });
+  await putWord(app, headers, "en:bird:NOUN", { status: "known" });
+  assert.deepEqual(await counts(app, headers), [
+    { lang: "en", due: 0, new: 1 },
+    { lang: "pl", due: 0, new: 1 },
+  ]);
+  const [polish] = (await due(app, headers, "pl")).cards;
+  assert.equal(polish?.lemmaId, "pl:pies:NOUN");
+  assert.equal((await postReview(app, headers, answer(polish.id, 1))).status, 200);
+  // Again makes the Polish card due again within minutes; English still has its own new card
+  assert.deepEqual(await counts(setup({ at: "2026-11-04T00:30:00Z" }), headers), [
+    { lang: "en", due: 0, new: 1 },
+    { lang: "pl", due: 1, new: 0 },
+  ]);
+  assert.deepEqual(
+    (await due(app, headers, "en")).cards.map((c) => c.lemmaId),
+    ["en:cat:NOUN"],
+  );
 });
 
 test("Easy on a new card makes it mature, and its word shows as such", async () => {
   const app = setup();
   const headers = await signedIn();
   await putWord(app, headers, "pl:pies:NOUN", { status: "active" });
-  const recognition = (await due(app, headers)).cards.find((c) => c.kind === "recognition");
+  const recognition = (await due(app, headers, "pl")).cards.find((c) => c.kind === "recognition");
   assert.ok(recognition);
   assert.equal((await postReview(app, headers, answer(recognition.id, 4))).status, 200);
   assert.deepEqual(
@@ -114,7 +146,7 @@ test("a review needs a session, the user's card, a grade, and a time that isn't 
   assert.equal((await postReview(app, undefined, answer(crypto.randomUUID(), 3))).status, 401);
   const headers = await signedIn();
   await putWord(app, headers, "pl:pies:NOUN", { status: "active" });
-  const [card] = (await due(app, headers)).cards;
+  const [card] = (await due(app, headers, "pl")).cards;
   assert.ok(card);
   assert.equal((await postReview(app, headers, answer(crypto.randomUUID(), 3))).status, 404);
   assert.equal((await postReview(app, headers, answer(card.id, 0))).status, 400);
@@ -125,7 +157,7 @@ test("a review needs a session, the user's card, a grade, and a time that isn't 
   const first = answer(card.id, 3);
   assert.equal((await postReview(app, headers, first)).status, 200);
   assert.equal((await postReview(app, headers, answer(card.id, 3, "2026-11-03T00:00:00.000Z"))).status, 409);
-  const other = (await due(app, headers)).cards.find((c) => c.id !== card.id);
+  const other = (await due(app, headers, "pl")).cards.find((c) => c.id !== card.id);
   assert.ok(other);
   assert.equal((await postReview(app, headers, { ...first, cardId: other.id })).status, 409);
   const bob = await local.signIn((await local.signUp({ name: "Bob", email: "bob@example.com" })).id);
@@ -135,7 +167,8 @@ test("a review needs a session, the user's card, a grade, and a time that isn't 
 test("words, cards and settings need a session and valid input", async () => {
   const app = setup();
   assert.equal((await app.request(`${ORIGIN}/api/me/words`)).status, 401);
-  assert.equal((await app.request(`${ORIGIN}/api/me/cards/due?dayStart=${DAY_START}`)).status, 401);
+  assert.equal((await app.request(`${ORIGIN}/api/me/cards/due?lang=pl&dayStart=${DAY_START}`)).status, 401);
+  assert.equal((await app.request(`${ORIGIN}/api/me/cards/counts?dayStart=${DAY_START}`)).status, 401);
   assert.equal((await app.request(`${ORIGIN}/api/me/settings`)).status, 401);
   assert.equal((await putWord(app, undefined, "pl:pies:NOUN", { status: "known" })).status, 401);
   const headers = await signedIn();
@@ -146,7 +179,10 @@ test("words, cards and settings need a session and valid input", async () => {
   assert.equal((await putWord(app, headers, "pl:pies:NOUN", { status: "learning" })).status, 400);
   assert.equal((await putWord(app, headers, "pl:pies:NOUN", null)).status, 400);
   assert.equal((await app.request(`${ORIGIN}/api/me/cards/due`, { headers })).status, 400);
-  assert.equal((await app.request(`${ORIGIN}/api/me/cards/due?dayStart=today`, { headers })).status, 400);
+  assert.equal((await app.request(`${ORIGIN}/api/me/cards/due?lang=pl&dayStart=today`, { headers })).status, 400);
+  assert.equal((await app.request(`${ORIGIN}/api/me/cards/due?dayStart=${DAY_START}`, { headers })).status, 400);
+  assert.equal((await app.request(`${ORIGIN}/api/me/cards/due?lang=zz&dayStart=${DAY_START}`, { headers })).status, 400);
+  assert.equal((await app.request(`${ORIGIN}/api/me/cards/counts`, { headers })).status, 400);
   assert.equal((await putSettings(app, headers, { newPerDay: -1 })).status, 400);
   assert.equal((await putSettings(app, headers, { newPerDay: 1.5 })).status, 400);
   assert.equal((await putSettings(app, headers, { newPerDay: 1001 })).status, 400);

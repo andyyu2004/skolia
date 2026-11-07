@@ -74,7 +74,7 @@
           oninput={() => (saved = false)}
         />
         <span id="new-per-day-help" class="muted"
-          >How many words you haven't reviewed before come up each day. The default is {DEFAULT_NEW_PER_DAY}.</span
+          >How many cards you haven't reviewed before come up each day, in each language. The default is {DEFAULT_NEW_PER_DAY}.</span
         >
       </div>
       <div class="actions">

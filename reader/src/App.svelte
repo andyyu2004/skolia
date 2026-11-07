@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { User } from "@skolia/shared/api";
+  import { isLang, type Lang, type User } from "@skolia/shared/api";
   import Explore from "./Explore.svelte";
   import { currentUser } from "./lib/api.ts";
   import { clearWords, loadWords } from "./lib/words.svelte.ts";
@@ -10,11 +10,13 @@
   import Upload from "./Upload.svelte";
   import { versionUrl } from "./lib/version.ts";
 
-  type Route = { page: "explore" } | { page: "upload" } | { page: "review" } | { page: "settings" } | { page: "reader"; id: string };
+  type Route = { page: "explore" } | { page: "upload" } | { page: "review"; lang: Lang | null } | { page: "settings" } | { page: "reader"; id: string };
 
   function parse(hash: string): Route {
     if (hash === "#/upload") return { page: "upload" };
-    if (hash === "#/review") return { page: "review" };
+    if (hash === "#/review") return { page: "review", lang: null };
+    const review = /^#\/review\/([a-z]+)$/.exec(hash)?.[1];
+    if (review !== undefined && isLang(review)) return { page: "review", lang: review };
     if (hash === "#/settings") return { page: "settings" };
     const match = /^#\/doc\/([0-9a-f]{64})$/.exec(hash);
     return match?.[1] ? { page: "reader", id: match[1] } : { page: "explore" };
@@ -56,7 +58,7 @@
 {:else if route.page === "upload"}
   <Upload {user} />
 {:else if route.page === "review"}
-  <Review {user} />
+  <Review {user} lang={route.lang} />
 {:else if route.page === "settings"}
   <Settings {user} />
 {:else}

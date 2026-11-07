@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { CARD_KINDS, MATURE_DAYS, type LemmaId, type ReviewRequest, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
+import { CARD_KINDS, LANGS, MATURE_DAYS, type CardCounts, type Lang, type LemmaId, type ReviewRequest, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
 import * as schemas from "@skolia/shared/schemas";
 import type { DueCards, ReviewOutcome } from "../ports.ts";
 import { fromJson, fsrs, newCard, review, toJson } from "./scheduler.ts";
@@ -51,7 +51,8 @@ export class User extends DurableObject<object> {
       .map((row) => schemas.Word.parse({ ...row, mature: row["mature"] === 1 }));
   }
 
-  /** Active gives the word its cards, if it hasn't any. */
+  /** Active gives the word its cards, if it hasn't any; the cards are reviewed while their
+   * word is active (card.active, so the review queries need only card's indexes). */
   async setWord(lemmaId: LemmaId, status: WordStatus, now: string): Promise<void> {
     const s = await fsrs();
     this.ctx.storage.transactionSync(() => {
@@ -62,11 +63,13 @@ export class User extends DurableObject<object> {
         status,
         now,
       );
-      if (status !== "active") return;
+      const active = status === "active" ? 1 : 0;
+      this.sql.exec(`UPDATE card SET active = ? WHERE lemma_id = ?`, active, lemmaId);
+      if (!active) return;
       for (const kind of CARD_KINDS) {
         const id = crypto.randomUUID();
         this.sql.exec(
-          `INSERT INTO card (id, lemma_id, kind, created, fsrs) VALUES (?, ?, ?, ?, ?)
+          `INSERT INTO card (id, lemma_id, kind, created, active, fsrs) VALUES (?, ?, ?, ?, 1, ?)
            ON CONFLICT (lemma_id, kind) DO NOTHING`,
           id,
           lemmaId,
@@ -78,20 +81,47 @@ export class User extends DurableObject<object> {
     });
   }
 
-  /** Active words' cards due by now, soonest first, then new cards in the order their
-   * words were added, up to what's left of the day's allowance. A card counts against
-   * the day the server first had an answer for it, from dayStart. */
-  due(now: string, dayStart: string, limit: number): DueCards {
+  /** New cards a language has left today: the daily limit is per language. A card counts
+   * against the day the server first had an answer for it, from dayStart. */
+  #newLeft(lang: Lang, dayStart: string): number {
     const { newPerDay } = this.settings();
-    const introduced = this.sql.exec(`SELECT count(*) AS n FROM card WHERE first_reviewed >= ?`, dayStart).one()["n"];
-    const newLeft = Math.max(0, newPerDay - Number(introduced));
-    const select = `SELECT card.id, card.lemma_id AS "lemmaId", card.kind, card.schedule_status = 'new' AS "isNew", card.due_at AS "dueAt"
-      FROM card JOIN word ON word.lemma_id = card.lemma_id AND word.status = 'active'`;
+    const introduced = this.sql
+      .exec(`SELECT count(*) AS n FROM card WHERE lang = ? AND first_reviewed >= ?`, lang, dayStart)
+      .one()["n"];
+    return Math.max(0, newPerDay - Number(introduced));
+  }
+
+  /** A language's active cards due by now, soonest first, then its new cards in the order
+   * their words were added, up to what's left of the day's allowance. */
+  due(lang: Lang, now: string, dayStart: string, limit: number): DueCards {
+    const newLeft = this.#newLeft(lang, dayStart);
+    const select = `SELECT id, lemma_id AS "lemmaId", kind, schedule_status = 'new' AS "isNew", due_at AS "dueAt" FROM card`;
     const rows = [
-      ...this.sql.exec(`${select} WHERE card.schedule_status != 'new' AND card.due_at <= ? ORDER BY card.due_at LIMIT ?`, now, limit).toArray(),
-      ...this.sql.exec(`${select} WHERE card.schedule_status = 'new' ORDER BY card.created, card.lemma_id, card.kind DESC LIMIT ?`, newLeft).toArray(),
+      ...this.sql
+        .exec(`${select} WHERE lang = ? AND active = 1 AND schedule_status != 'new' AND due_at <= ? ORDER BY due_at LIMIT ?`, lang, now, limit)
+        .toArray(),
+      ...this.sql
+        .exec(
+          `${select} WHERE lang = ? AND active = 1 AND schedule_status = 'new' ORDER BY created, lemma_id, kind DESC LIMIT ?`,
+          lang,
+          Math.min(newLeft, limit),
+        )
+        .toArray(),
     ];
     return { cards: rows.slice(0, limit).map((row) => schemas.ScheduledCard.parse({ ...row, isNew: row["isNew"] === 1 })), newLeft };
+  }
+
+  /** Each language's cards due by now, and new cards it would show today. */
+  counts(now: string, dayStart: string): CardCounts[] {
+    return LANGS.map((lang) => {
+      const due = this.sql
+        .exec(`SELECT count(*) AS n FROM card WHERE lang = ? AND active = 1 AND schedule_status != 'new' AND due_at <= ?`, lang, now)
+        .one()["n"];
+      const fresh = this.sql
+        .exec(`SELECT count(*) AS n FROM card WHERE lang = ? AND active = 1 AND schedule_status = 'new'`, lang)
+        .one()["n"];
+      return { lang, due: Number(due), new: Math.min(Number(fresh), this.#newLeft(lang, dayStart)) };
+    });
   }
 
   /** Once per review id: a retry gets the card as it is. now: the server's time, which

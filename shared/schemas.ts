@@ -43,7 +43,8 @@ export const ReviewRequest = z.object({
 });
 
 /** The start of the reader's day, for counting today's new cards in its time zone. */
-export const DueQuery = z.object({ dayStart: IsoTime });
+export const CountsQuery = z.object({ dayStart: IsoTime });
+export const DueQuery = z.object({ lang: Lang, dayStart: IsoTime });
 
 export const ScheduledCard = z.object({
   id: z.uuid(),

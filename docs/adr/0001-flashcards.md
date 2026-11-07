@@ -33,7 +33,7 @@ A word replaces `known_lemma`. Each word has two cards, like Anki's note and its
 
 ```
 word(lemma_id, status, updated)               -- active | known | ignored
-card(id, lemma_id, kind, ...ts-fsrs card fields)
+card(id, lemma_id, lang, kind, active, ...ts-fsrs card fields)
 review(id, card_id, rating, review_time)      -- append-only
 ```
 
@@ -44,6 +44,8 @@ review(id, card_id, rating, review_time)      -- append-only
   - `production`: the glosses on the front, with hints that pin down one answer (aspect, sense tags), and the lemma on the back.
 - Adding a word from the reader creates the word and both cards. If they already exist, it does nothing. The two cards are scheduled independently, with no special handling of siblings.
 - `known` or `ignored` takes a word's cards out of reviews without deleting them or their history, and `active` brings them back. Marking a word known needs no cards. Known words aren't rated Easy, because Easy brings them back after 54 and 234 days, and those ratings would end up in the review log.
+- Each language is reviewed on its own, like an Anki deck per language, with its own daily allowance of new cards. `card.lang` is generated from the lemma id, and every card index starts with it.
+- `card.active` copies the word's status (active or not), which `setWord` keeps in step, so the review queries need only `card`'s partial indexes and don't join `word`.
 - Reviews have four buttons, Again, Hard, Good and Easy, which are ts-fsrs's ratings 1 to 4.
 - The `review` table is the source of truth. The ts-fsrs fields on `card` are a cache that `Reschedule` can rebuild. It is also what a per-user FSRS weight fit (`@open-spaced-repetition/binding`) would be trained on later.
 - The client makes each review's `id` (a UUID), and the server ignores an id it already has for that card, so a retried request isn't counted twice. The same id sent for another card gets a 409.
@@ -78,7 +80,8 @@ The lexicon SQLite is built by Nix (`analysis/flake.nix`, `lexicon`) and only ex
 ```
 GET  /api/me/words                    statuses and maturity, for the reader's colouring
 PUT  /api/me/words/:lemmaId           { status }; active creates the cards
-GET  /api/me/cards/due?dayStart=      due cards, then new ones, with the words' entries
+GET  /api/me/cards/counts?dayStart=   each language's due and new counts
+GET  /api/me/cards/due?lang=&dayStart= a language's due cards, then new ones, with the words' entries
 POST /api/me/reviews                  { id, cardId, rating, at }
 GET  /api/me/settings                 { newPerDay }
 PUT  /api/me/settings                 { newPerDay }

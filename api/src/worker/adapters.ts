@@ -1,7 +1,7 @@
 // The ports on Cloudflare: D1 for document metadata and the lexicon, R2 for blobs, Queues
 // for jobs, a Durable Object per user for their own data.
 import * as z from "zod";
-import { UPOS, type LemmaId, type LexiconEntry, type ReviewRequest, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
+import { UPOS, type CardCounts, type Lang, type LemmaId, type LexiconEntry, type ReviewRequest, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
 import type { IngestJob, Relation, Sense } from "@skolia/shared/schema";
 import { DocumentRow, LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
 import type {
@@ -34,8 +34,12 @@ export class DurableObjectUsers implements UserData {
     await this.users.getByName(userId).setWord(lemmaId, status, now);
   }
 
-  async due(userId: string, now: string, dayStart: string, limit: number): Promise<DueCards> {
-    return this.users.getByName(userId).due(now, dayStart, limit);
+  async due(userId: string, lang: Lang, now: string, dayStart: string, limit: number): Promise<DueCards> {
+    return this.users.getByName(userId).due(lang, now, dayStart, limit);
+  }
+
+  async counts(userId: string, now: string, dayStart: string): Promise<CardCounts[]> {
+    return this.users.getByName(userId).counts(now, dayStart);
   }
 
   async review(userId: string, request: ReviewRequest, now: string): Promise<ReviewOutcome> {

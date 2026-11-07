@@ -2,6 +2,7 @@
 // Object per user (src/worker/adapters.ts), Better Auth (src/auth.ts), and fakes in the
 // tests.
 import type {
+  CardCounts,
   Lang,
   LemmaId,
   LexiconEntry,
@@ -81,7 +82,8 @@ export type ReviewOutcome = ({ kind: "reviewed" } & Reviewed) | { kind: "no-card
 export interface UserData {
   words(userId: string): Promise<Word[]>;
   setWord(userId: string, lemmaId: LemmaId, status: WordStatus, now: string): Promise<void>;
-  due(userId: string, now: string, dayStart: string, limit: number): Promise<DueCards>;
+  due(userId: string, lang: Lang, now: string, dayStart: string, limit: number): Promise<DueCards>;
+  counts(userId: string, now: string, dayStart: string): Promise<CardCounts[]>;
   review(userId: string, request: ReviewRequest, now: string): Promise<ReviewOutcome>;
   settings(userId: string): Promise<Settings>;
   setSettings(userId: string, settings: Settings): Promise<void>;

@@ -219,6 +219,13 @@ export interface Due {
   newLeft: number;
 }
 
+/** A language's cards due now, and new cards it would show today. */
+export interface CardCounts {
+  lang: Lang;
+  due: number;
+  new: number;
+}
+
 /** A card after a review: when it's due next. */
 export interface Reviewed {
   cardId: string;
