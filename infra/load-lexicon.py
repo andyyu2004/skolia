@@ -4,16 +4,19 @@
 # dependencies = []
 # ///
 """Loads a language's lexicon into the lexicon D1 database (LEXICON in api/wrangler.jsonc):
-  load-lexicon.py <staging|production|local> <sqlite>
+  load-lexicon.py <staging|production|pr-N|local> <sqlite> [--sample N]
 sqlite is analysis's {lang}.sqlite (skolia-build-lexicon, or the Nix output
 analysis#lexicon-{lang}); its meta table gives the language and version. Skipped if D1
 already serves that version. The new version's rows go in beside the old ones, then
 loaded points at it and the old rows are deleted in batches (api/lexicon-migrations), so a
 load that stops part way leaves the old version serving and can be run again. local is wrangler
-dev's database. Needs the credentials infra/wrangler.sh needs.
+dev's database. --sample loads only N common words, for previews: the lexicon has no
+frequencies, so it takes the lowercase, non-proper-noun entries with the most senses, and
+their version ends in +sampleN. Needs the credentials infra/wrangler.sh needs.
 """
 
 import json
+import re
 import sqlite3
 import subprocess
 import sys
@@ -63,14 +66,26 @@ def serving(env: str, lang: str) -> str | None:
     return rows[0]["version"] if rows else None
 
 
-def statements(db: sqlite3.Connection, lang: str, version: str) -> list[str]:
+def selection(sample: int | None) -> str:
+    columns = "SELECT lemma_id, lemma, upos, senses, relations FROM entry"
+    if sample is None:
+        return columns
+    return (
+        f"{columns} WHERE upos != 'PROPN' AND lemma GLOB '[a-z]*' "
+        f"ORDER BY json_array_length(senses) DESC, lemma_id LIMIT {sample}"
+    )
+
+
+def statements(
+    db: sqlite3.Connection, lang: str, version: str, sample: int | None
+) -> list[str]:
     head = "INSERT INTO entry (lemma_id, version, lang, lemma, upos, senses, relations) VALUES\n"
     out = [f"DELETE FROM entry WHERE lang = {quote(lang)} AND version = {quote(version)};"]
     values: list[str] = []
     size = len(head)
     rows = cast(
         list[tuple[str, str, str, str, str]],
-        db.execute("SELECT lemma_id, lemma, upos, senses, relations FROM entry"),
+        db.execute(selection(sample)),
     )
     for lemma_id, lemma, upos, senses, relations in rows:
         columns = (lemma_id, version, lang, lemma, upos, senses, relations)
@@ -111,18 +126,26 @@ def remaining(env: str, count: str) -> int:
 
 
 def main() -> None:
-    if len(sys.argv) != 3 or sys.argv[1] not in ("staging", "production", "local"):
-        raise SystemExit("usage: load-lexicon.py <staging|production|local> <sqlite>")
-    env, path = sys.argv[1], Path(sys.argv[2])
+    args = sys.argv[1:]
+    sample: int | None = None
+    if len(args) == 4 and args[2] == "--sample" and args[3].isdigit():
+        sample, args = int(args[3]), args[:2]
+    if len(args) != 2 or not re.fullmatch(r"staging|production|pr-[0-9]+|local", args[0]):
+        raise SystemExit(
+            "usage: load-lexicon.py <staging|production|pr-N|local> <sqlite> [--sample N]"
+        )
+    env, path = args[0], Path(args[1])
     db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     lang, version = meta(db)
+    if sample is not None:
+        version = f"{version}+sample{sample}"
     if serving(env, lang) == version:
         print(f"{env}: {lang} already serves {version}")
         clean(env, lang, version)
         return
     with tempfile.TemporaryDirectory() as scratch:
         sql = Path(scratch) / f"lexicon-{lang}.sql"
-        sql.write_text("\n".join(statements(db, lang, version)) + "\n")
+        sql.write_text("\n".join(statements(db, lang, version, sample)) + "\n")
         print(f"{env}: loading {lang} {version} ({sql.stat().st_size / 1e6:.0f} MB of SQL)")
         wrangler(env, "--yes", "--file", str(sql))
     if serving(env, lang) != version:

@@ -8,9 +8,8 @@ resource "cloudflare_d1_database" "skolia" {
   name       = "skolia${local.suffix}"
 }
 
-# The lexicon for flashcards (infra/load-lexicon.py loads it). Previews bind staging's.
+# The lexicon for flashcards (infra/load-lexicon.py loads it)
 resource "cloudflare_d1_database" "lexicon" {
-  count      = startswith(var.env, "pr-") ? 0 : 1
   account_id = var.account_id
   name       = "skolia-lexicon${local.suffix}"
 }

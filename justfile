@@ -80,19 +80,21 @@ images:
 plan env:
     infra/tf.sh {{ env }} plan -input=false
 
-# Apply D1 migrations; the lexicon's too, except on a preview, which reads staging's
+# Apply D1 migrations
 migrate env:
     infra/wrangler.sh {{ env }} d1 migrations apply DB --remote
-    case {{ env }} in pr-*) ;; *) infra/wrangler.sh {{ env }} d1 migrations apply LEXICON --remote ;; esac
+    infra/wrangler.sh {{ env }} d1 migrations apply LEXICON --remote
 
 # The Nix store path must be readable here: Linux, or SKOLIA_NIX=host (analysis/scripts/nix.sh).
-# Load each language's lexicon into the lexicon database (staging, production or local), from the ingest images' Nix build
+# Load each language's lexicon into the lexicon database (staging, production, pr-N or local), from the ingest images' Nix build.
+# A preview gets 3,000 common English words only (infra/load-lexicon.py --sample).
 load-lexicon env:
     #!/usr/bin/env bash
     set -euo pipefail
-    for lang in pl en; do
+    case {{ env }} in pr-*) langs=(en) sample=(--sample 3000) ;; *) langs=(pl en) sample=() ;; esac
+    for lang in "${langs[@]}"; do
       out=$(analysis/scripts/nix.sh nix build --no-link --print-out-paths "./analysis#lexicon-$lang")
-      infra/load-lexicon.py {{ env }} "$out/$lang.sqlite"
+      infra/load-lexicon.py {{ env }} "$out/$lang.sqlite" "${sample[@]}"
     done
 
 # Terraform: storage, queue, ingest's R2 token, billing alerts

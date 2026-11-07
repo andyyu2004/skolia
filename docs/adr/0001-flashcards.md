@@ -59,7 +59,7 @@ review(id, card_id, rating, review_time)      -- append-only
 
 The lexicon SQLite is built by Nix (`analysis/flake.nix`, `lexicon`) and only exists inside the ingest images, so the API Worker can't read it. It goes into a separate D1 database, `skolia-lexicon`:
 
-- The columns are `lemma_id, version, lang, lemma, upos, senses, relations`, without paradigms (`api/lexicon-migrations`). Previews read staging's database rather than load their own.
+- The columns are `lemma_id, version, lang, lemma, upos, senses, relations`, without paradigms (`api/lexicon-migrations`). Each environment has its own, previews included. Every deploy runs `just load-lexicon` (`deploy.yml`, job `load-lexicon`), from the Nix build the images' job put in Cachix; a preview loads only 3,000 common English words (`--sample`), about 6,000 rows written against D1's 50 million a month included.
 - Sizes of the local lexicons (`data/lexicon/`):
 
   | | entries | senses + relations | paradigms |
@@ -98,5 +98,4 @@ These replace `/api/me/lemmas`. `dayStart` is the start of the reader's local da
 ## Open
 
 - How long a remote load takes. Only a local load of Polish has been tried. D1's limits page allows 100 bound parameters per query (the lookup takes at most 100 ids), 100,000-byte statements (the loader keeps them under 90,000), and a 5 GB file per `d1 execute`.
-- Loading the lexicon in CI: `just load-lexicon` needs the Nix build, which the deploy jobs don't have.
 - Showing words in the reader by status (new, learning, known), and offline review.

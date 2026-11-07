@@ -72,7 +72,6 @@
         {
           "binding": "LEXICON",
           "database_name": "skolia-lexicon-staging",
-          // Previews use it too (infra/preview.py)
           "migrations_dir": "lexicon-migrations"
         }
       ],

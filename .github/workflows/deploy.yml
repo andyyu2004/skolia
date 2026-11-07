@@ -4,7 +4,8 @@ name: Deploy
 # ci.yml's build-ingest-image pushed; then the skolia Worker (reader and API) and a
 # smoke test. The ingest Worker consumes the queue the skolia Worker feeds, so it goes
 # first. Called by ci.yml, after the images are built. wrangler leaves an unchanged image
-# as it is. Previews (pr-<N>) share one GitHub environment, preview.
+# as it is. The lexicon loads beside them, after the migrations; it's skipped when D1
+# already has its version. Previews (pr-<N>) share one GitHub environment, preview.
 
 on:
   workflow_call:
@@ -38,6 +39,24 @@ jobs:
       - uses: ./.github/actions/setup
       - run: just deploy-infra ${{ inputs.env }}
 
+  # The lexicon from the ingest images' Nix build, which ci.yml's build-ingest-image put
+  # in Cachix (just load-lexicon)
+  load-lexicon:
+    needs: deploy-infra
+    runs-on: ubuntu-24.04
+    environment: ${{ startsWith(inputs.env, 'pr-') && 'preview' || inputs.env }}
+    concurrency:
+      group: load-lexicon-${{ inputs.env }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - uses: cachix/cachix-action@v17
+        with:
+          name: andyyu2004
+          skipPush: true
+      - run: just load-lexicon ${{ inputs.env }}
+
   # Reads the R2 credentials from Terraform, so after deploy-infra
   deploy-ingest:
     needs: deploy-infra
@@ -62,8 +81,7 @@ jobs:
     concurrency:
       group: deploy-web-${{ inputs.env }}
       cancel-in-progress: false
-    # A preview's wrangler config is made in each job that needs it, with its D1 id from
-    # Terraform (infra/wrangler.sh)
+    # A preview's wrangler config is made in each job that needs it (infra/wrangler.sh)
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_ACCESS_KEY }}
