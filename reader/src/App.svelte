@@ -5,6 +5,7 @@
   import Nav from "./Nav.svelte";
   import Reader from "./Reader.svelte";
   import Upload from "./Upload.svelte";
+  import { versionUrl } from "./lib/version.ts";
 
   type Route = { page: "explore" } | { page: "upload" } | { page: "reader"; id: string };
 
@@ -15,6 +16,8 @@
   }
 
   let route = $state(parse(location.hash));
+  const version = import.meta.env.VITE_VERSION ?? "dev";
+  const versionLink = versionUrl(version);
   /** undefined while loading, null when signed out. */
   let user = $state<User | null | undefined>(undefined);
   let error = $state<string | null>(null);
@@ -45,4 +48,8 @@
   <Explore />
 {/if}
 
-<footer class="version muted">{import.meta.env.VITE_VERSION ?? "dev"}</footer>
+{#if versionLink}
+  <footer class="version muted"><a href={versionLink} rel="noreferrer">{version}</a></footer>
+{:else}
+  <footer class="version muted">{version}</footer>
+{/if}
