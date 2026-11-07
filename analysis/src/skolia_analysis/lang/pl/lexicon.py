@@ -12,9 +12,10 @@ from importlib.metadata import version
 from typing import TYPE_CHECKING
 
 from ...lexicon import senses as kaikki_senses
-from ...lexicon.kaikki import KaikkiEntry
-from ...lexicon.schema import Form, Paradigm, Relation
-from ...lexicon.source import Converted
+from ...lexicon.kaikki import KaikkiEntry, KaikkiSound
+from ...lexicon.pronunciation import pronunciations
+from ...lexicon.schema import Accent, Form, Paradigm, Relation
+from ...lexicon.source import Converted, Pronounced
 from ...schema import Feats, Upos
 from .morfeusz import MorfeuszCandidates, interpretation_readings, split_homonym
 from .nkjp import VERB_FORM_CLASSES, tag_class
@@ -23,7 +24,8 @@ if TYPE_CHECKING:
     from morfeusz2 import Morfeusz
 
 ATTRIBUTION = (
-    "Meanings from Wiktionary (https://en.wiktionary.org) via kaikki.org, CC BY-SA 4.0; "
+    "Meanings and pronunciations from Wiktionary (https://en.wiktionary.org) via kaikki.org, "
+    "CC BY-SA 4.0; "
     "forms from Morfeusz 2 / SGJP (http://morfeusz.sgjp.pl), BSD 2-clause; "
     "verb valency from Walenty, IPI PAN (http://zil.ipipan.waw.pl/Walenty), CC BY-SA 4.0"
 )
@@ -47,6 +49,9 @@ KAIKKI_POS: dict[str, tuple[Upos, ...]] = {
 }
 # Kaikki parts of speech left out: affixes, letters, punctuation; phrases and proverbs
 # become multi-word expressions later.
+
+NORMAL_SPEECH = "normal speech"
+PRESCRIPTIVE = "prescriptive"
 
 REFLEXIVE_SUFFIX = " się"
 """Wiktionary has entries like "bać się"; the analyser gives bać + się as two tokens."""
@@ -161,6 +166,14 @@ class Source:
         relations = list(derived) + list(_aspect_partners(entry, word))
         return Converted(word, self._upos(word, pos), senses, relations)
 
+    def pronounce(self, entry: KaikkiEntry) -> Pronounced | None:
+        word, pos = entry.get("word", ""), entry.get("pos", "")
+        if pos not in KAIKKI_POS or not word or " " in word:
+            return None
+        sounds = entry.get("sounds", [])
+        found = pronunciations(sounds, _standard) or pronunciations(sounds, _prescriptive)
+        return Pronounced(word, KAIKKI_POS[pos], found) if found else None
+
     def _upos(self, word: str, pos: str) -> tuple[Upos, ...]:
         """The analyser's UPOS for this headword: Morfeusz readings with this lemma whose
         UPOS fits the Kaikki part of speech, or the default for it."""
@@ -208,6 +221,21 @@ def _in_paradigm(entry_upos: Upos, form_upos: Upos, xpos: str) -> bool:
     if entry_upos in nominal:
         return form_upos in nominal
     return form_upos == entry_upos
+
+
+def _standard(sound: KaikkiSound) -> list[Accent] | None:
+    """Today's standard Polish: no tag (Middle Polish, Łowicz) and no note but "normal
+    speech". The regions are in notes."""
+    if sound.get("tags") or sound.get("note", NORMAL_SPEECH) != NORMAL_SPEECH:
+        return None
+    return []
+
+
+def _prescriptive(sound: KaikkiSound) -> list[Accent] | None:
+    """The textbook form, for words Wiktionary gives only that for (galaktyka)."""
+    if sound.get("tags") or sound.get("note") != PRESCRIPTIVE:
+        return None
+    return []
 
 
 def _gender(entry: KaikkiEntry) -> list[Feats]:

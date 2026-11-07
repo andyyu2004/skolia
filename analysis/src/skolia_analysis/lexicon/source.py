@@ -6,7 +6,7 @@ from typing import Protocol
 
 from ..schema import Upos
 from .kaikki import KaikkiEntry
-from .schema import Paradigm, Relation, Sense
+from .schema import Paradigm, Pronunciation, Relation, Sense
 
 
 @dataclass
@@ -20,6 +20,15 @@ class Converted:
     relations: list[Relation] = field(default_factory=lambda: list[Relation]())
     paradigms: list[Paradigm] = field(default_factory=lambda: list[Paradigm]())
     """Forms from Wiktionary, for a language without a generator (Polish has Morfeusz)."""
+
+
+@dataclass
+class Pronounced:
+    """How a Kaikki entry's word is said, for lemmas and inflected forms alike."""
+
+    word: str
+    upos: tuple[Upos, ...]
+    pronunciations: list[Pronunciation]
 
 
 class LexiconSource(Protocol):
@@ -36,6 +45,11 @@ class LexiconSource(Protocol):
 
     def convert(self, entry: KaikkiEntry) -> Converted | None:
         """None for entries the analyser never looks up: affixes, phrases, inflected forms."""
+        ...
+
+    def pronounce(self, entry: KaikkiEntry) -> Pronounced | None:
+        """None for entries without a pronunciation the reader shows, or that no token
+        would match: phrases, affixes."""
         ...
 
     def hand_entries(self) -> Iterable[Converted]:

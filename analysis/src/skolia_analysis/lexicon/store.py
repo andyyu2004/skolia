@@ -7,12 +7,12 @@ made (Polish, by Morfeusz) stores none.
 
 import json
 import sqlite3
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import NamedTuple, cast
 
 from ..schema import Upos
-from .schema import Paradigm, Relation, Sense
+from .schema import Paradigm, Pronunciation, Relation, Sense
 
 SCHEMA = """
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -27,6 +27,12 @@ CREATE TABLE entry (
 );
 CREATE INDEX entry_lemma ON entry (lemma);
 CREATE INDEX entry_lemma_lower ON entry (lemma_lower);
+CREATE TABLE pronunciation (
+    word TEXT NOT NULL,
+    upos TEXT NOT NULL,
+    pronunciations TEXT NOT NULL,
+    PRIMARY KEY (word, upos)
+);
 """
 
 
@@ -39,7 +45,21 @@ class Row(NamedTuple):
     paradigms: list[Paradigm]
 
 
-def write(path: Path, rows: Iterable[Row], meta: dict[str, str]) -> int:
+class PronunciationRow(NamedTuple):
+    word: str
+    """As written, an inflected form or a lemma: psa, pies."""
+    upos: Upos
+    pronunciations: list[Pronunciation]
+
+
+def write(
+    path: Path,
+    rows: Iterable[Row],
+    meta: dict[str, str],
+    pronunciations: Callable[[], Iterable[PronunciationRow]] = lambda: (),
+) -> int:
+    """pronunciations is called after rows is used up: the build collects both in one pass
+    over the Kaikki extract."""
     path.unlink(missing_ok=True)
     with sqlite3.connect(path) as db:
         db.executescript(SCHEMA)
@@ -59,6 +79,13 @@ def write(path: Path, rows: Iterable[Row], meta: dict[str, str]) -> int:
                 ),
             )
             count += 1
+        db.executemany(
+            "INSERT INTO pronunciation VALUES (?, ?, ?)",
+            (
+                (p.word, p.upos, json.dumps(p.pronunciations, ensure_ascii=False))
+                for p in pronunciations()
+            ),
+        )
     return count
 
 
@@ -88,6 +115,13 @@ class Lexicon:
     def by_lowercase(self, lemma: str) -> list[Row]:
         rows = self._select("WHERE lemma_lower = ?", lemma.lower())
         return sorted(rows, key=lambda r: -len(r.senses))
+
+    def pronunciations(self, word: str) -> dict[Upos, list[Pronunciation]]:
+        """By part of speech: lead is /lɛd/ as a noun, /liːd/ as a verb."""
+        found = self._db.execute(
+            "SELECT upos, pronunciations FROM pronunciation WHERE word = ?", (word,)
+        )
+        return {cast(Upos, upos): json.loads(p) for upos, p in found}
 
     def _select(self, where: str, value: str) -> Iterator[Row]:
         query = f"SELECT lemma_id, lemma, upos, senses, relations, paradigms FROM entry {where}"

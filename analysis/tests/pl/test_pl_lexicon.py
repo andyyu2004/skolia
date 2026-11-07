@@ -90,3 +90,33 @@ def test_paradigm_is_split_by_homonym(paradigms: lexicon_pl.Paradigms) -> None:
 def test_verb_paradigm_includes_participles(paradigms: lexicon_pl.Paradigms) -> None:
     forms = [f for p in paradigms("położyć", "VERB") for f in p["forms"]]
     assert any(f["form"] == "położony" and f["xpos"].startswith("ppas") for f in forms)
+
+
+def test_pronunciations_are_standard_polish(source: lexicon_pl.Source) -> None:
+    entry: KaikkiEntry = {
+        "word": "dziękuję",
+        "pos": "intj",
+        "sounds": [
+            {"note": "normal speech", "ipa": "/d͡ʑɛŋˈku.jɛ/"},
+            {"note": "prescriptive", "ipa": "/d͡ʑɛŋˈku.jɔw̃/"},
+            {"tags": ["Middle", "Polish"], "ipa": "/d͡ʑɛŋˈku.jɛ̃/"},
+            {"note": "Kuyavia", "ipa": "[d͡ʑɛŋˈku.jɛ]"},
+        ],
+    }
+    said = source.pronounce(entry)
+    assert said is not None and said.upos == ("INTJ",)
+    assert said.pronunciations == [{"ipa": "/d͡ʑɛŋˈku.jɛ/"}]
+
+
+def test_prescriptive_pronunciation_when_it_is_the_only_one(source: lexicon_pl.Source) -> None:
+    entry: KaikkiEntry = {
+        "word": "galaktyka",
+        "pos": "noun",
+        "sounds": [
+            {"note": "prescriptive", "ipa": "/ɡaˈlak.tɘ.ka/"},
+            {"note": "Kuyavia", "ipa": "[ɡaˈlak.tɘ.ka]"},
+        ],
+    }
+    said = source.pronounce(entry)
+    assert said is not None
+    assert said.pronunciations == [{"ipa": "/ɡaˈlak.tɘ.ka/"}]

@@ -10,14 +10,38 @@ form gets one feature set per person and number it serves.
 from collections.abc import Iterable, Iterator, Mapping
 
 from ...lexicon import senses as kaikki_senses
-from ...lexicon.kaikki import KaikkiEntry, KaikkiForm
-from ...lexicon.schema import Form, Paradigm
-from ...lexicon.source import Converted
+from ...lexicon.kaikki import KaikkiEntry, KaikkiForm, KaikkiSound
+from ...lexicon.pronunciation import pronunciations
+from ...lexicon.schema import Accent, Form, Paradigm
+from ...lexicon.source import Converted, Pronounced
 from ...schema import Feats, Mood, Number, Person, Tense, Upos
 
 ATTRIBUTION = (
-    "Meanings and forms from Wiktionary (https://en.wiktionary.org) via kaikki.org, CC BY-SA 4.0"
+    "Meanings, forms and pronunciations from Wiktionary (https://en.wiktionary.org) via "
+    "kaikki.org, CC BY-SA 4.0"
 )
+
+# Wiktionary's accent tags -> the accents the reader shows. British is Standard Southern
+# British, the newer name for Received Pronunciation.
+ACCENTS: tuple[Accent, ...] = ("UK", "US")
+ACCENT_TAGS: Mapping[str, Accent] = {
+    "Received-Pronunciation": "UK",
+    "UK": "UK",
+    "British": "UK",
+    "General-American": "US",
+    "US": "US",
+}
+# Some say the accent in a note instead: lead (the metal) has "Received Pronunciation,
+# General American, CA]"
+ACCENT_NOTES: Mapping[str, Accent] = {
+    "Received Pronunciation": "UK",
+    "General American": "US",
+}
+# Notes kept on a sound with no accent: a function word said stressed or not (of: /ɒv/,
+# /əv/). Any other note is a region or a merger, like the tags left out.
+FORM_NOTES = {"strong form", "weak form", "stressed form", "unstressed form"}
+# Not how the word is said today, even when also tagged UK or US
+NOT_TODAY_TAGS = {"obsolete", "archaic", "dialectal", "Early", "Middle"}
 
 # Kaikki part of speech -> the UPOS the analyser gives such a word. Where the analyser
 # differs (can, will as AUX), a bundle falls back to the same lemma under another UPOS.
@@ -120,8 +144,34 @@ class Source:
         paradigms: list[Paradigm] = [{"homonym": "", "forms": forms}] if len(forms) > 1 else []
         return Converted(word, (upos,), senses, relations, paradigms)
 
+    def pronounce(self, entry: KaikkiEntry) -> Pronounced | None:
+        word, pos = entry.get("word", ""), entry.get("pos", "")
+        upos = KAIKKI_POS.get(pos)
+        if pos == "suffix" and word in ENCLITICS:
+            word, upos = ENCLITICS[word]
+        if upos is None or not word or " " in word:
+            return None
+        found = pronunciations(entry.get("sounds", []), _accents)
+        return Pronounced(word, (upos,), found) if found else None
+
     def hand_entries(self) -> Iterable[Converted]:
         return ()
+
+
+def _accents(sound: KaikkiSound) -> list[Accent] | None:
+    """UK, US, or both from the tags, else from the note; every accent when there are
+    neither. None for other accents (Scotland, Australia) and older English."""
+    tags, note = sound.get("tags", []), sound.get("note", "")
+    if NOT_TODAY_TAGS.intersection(tags):
+        return None
+    accents: set[Accent]
+    if tags:
+        accents = {ACCENT_TAGS[t] for t in tags if t in ACCENT_TAGS}
+    elif note and note not in FORM_NOTES:
+        accents = {accent for text, accent in ACCENT_NOTES.items() if text in note}
+    else:
+        return []
+    return [a for a in ACCENTS if a in accents] or None
 
 
 def paradigm_forms(word: str, upos: Upos, kaikki_forms: Iterable[KaikkiForm]) -> Iterator[Form]:

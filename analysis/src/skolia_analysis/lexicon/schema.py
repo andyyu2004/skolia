@@ -61,6 +61,16 @@ class BundleParadigm(TypedDict):
     forms: list[FormRow]
 
 
+type Accent = Literal["UK", "US"]
+
+
+class Pronunciation(TypedDict):
+    ipa: str
+    """In the International Phonetic Alphabet, phonemic: /ˈpjɛs/."""
+    accents: NotRequired[list[Accent]]
+    """Absent when Wiktionary gives it for every accent (all of Polish's)."""
+
+
 class Entry(TypedDict):
     lemma: str
     upos: Upos
@@ -80,7 +90,7 @@ type Match = Literal[
 ]
 
 
-BUNDLE_SCHEMA = 1
+BUNDLE_SCHEMA = 2
 """The bundle's JSON shape. Bump it when the shape changes, so documents get new bundles
 and the reader can refuse one it doesn't know."""
 
@@ -106,3 +116,12 @@ class Bundle(TypedDict):
     """How each token lemma_id was resolved."""
     feats: list[Feats]
     """Every distinct feature set in the paradigms, referred to by index from FormRow."""
+    pronunciations: dict[str, list[Pronunciation]]
+    """By pronunciation_key(word, upos), for each token's text and each entry's lemma that
+    Wiktionary has one for. Words spelled alike can differ by part of speech (lead, the
+    metal, is /lɛd/; the verb is /liːd/)."""
+
+
+def pronunciation_key(word: str, upos: Upos) -> str:
+    """psa, NOUN -> psa:NOUN"""
+    return f"{word}:{upos}"
