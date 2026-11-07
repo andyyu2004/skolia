@@ -214,7 +214,13 @@
       # One layer per model (Cloudflare's registry times out committing a 3 GB layer),
       # PyTorch, the other dependencies and the lexicon; the code and the rest on top
       root = pkgs.runCommand "root" { } "mkdir -p $out/tmp";
-      torchLayer = n2c.nix2container.buildLayer { deps = [ pythonSet.torch ]; };
+      # Nested layers come first, so Python is the bottom layer: Cloudflare fails to unpack an
+      # image whose first layer is over about 504 MiB (cloudflare/containers#265)
+      pythonLayer = n2c.nix2container.buildLayer { deps = [ pkgs.python312 ]; };
+      torchLayer = n2c.nix2container.buildLayer {
+        deps = [ pythonSet.torch ];
+        layers = [ pythonLayer ];
+      };
       depsLayer = n2c.nix2container.buildLayer {
         deps = [ depsEnv ];
         layers = [ torchLayer ];
