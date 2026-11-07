@@ -27,8 +27,8 @@ registry_wrangler() { "$root/infra/wrangler.sh" account "$@"; }
 nix_sh=$root/analysis/scripts/nix.sh
 cd "$root"
 
-# One image per language, each for its container class in wrangler.ingest.jsonc,
-# Ingest{Lang}: IngestPl. CI's matrix in .github/workflows/deploy.yml lists them too.
+# One image per language, each named after it in wrangler.ingest.jsonc's images. CI's
+# matrix in .github/workflows/deploy.yml lists them too.
 langs=(pl en)
 repo=registry.cloudflare.com/$CLOUDFLARE_ACCOUNT_ID
 
@@ -41,7 +41,14 @@ in_registry() {
     <<<"$registry" >/dev/null
 }
 
-class_of() { echo "Ingest$(tr '[:lower:]' '[:upper:]' <<<"${1:0:1}")${1:1}"; }
+# The durable_object scheduling policy takes images pinned by digest. --no-tags: listing
+# the repository's tags fails (Cloudflare's registry rejects skopeo's request).
+digest_of() {
+  registry_wrangler containers registries credentials registry.cloudflare.com --pull \
+    --expiration-minutes 10 | tail -n1 |
+    "$nix_sh" sh -c 'exec nix run ./analysis#skopeo -- inspect --no-tags --creds "v1:$(cat)" \
+      --format "{{.Digest}}" "$0"' "docker://$repo/$1"
+}
 
 build_lang() {
   local lang=$1 name tag
@@ -68,18 +75,23 @@ build_lang() {
 }
 
 deploy() {
-  local lang tag images=() pair config secrets copies
+  local lang tag digest images=() pair config secrets copies
   for lang in "${langs[@]}"; do
     tag=$(tag_of "$lang")
     if ! in_registry "skolia-ingest-$lang" "$tag"; then
       echo "skolia-ingest-$lang:$tag isn't in the registry: build it first" >&2
       exit 1
     fi
-    images+=("$(class_of "$lang")=$repo/skolia-ingest-$lang:$tag")
+    digest=$(digest_of "skolia-ingest-$lang:$tag")
+    if [[ ! $digest =~ ^sha256:[0-9a-f]{64}$ ]]; then
+      echo "no digest for skolia-ingest-$lang:$tag: $digest" >&2
+      exit 1
+    fi
+    images+=("$lang=$repo/skolia-ingest-$lang@$digest")
   done
 
   # The committed config builds analysis/image/Dockerfile (for wrangler dev); deploy the
-  # pushed images, each in its place under its class_name
+  # pushed images, each under its language's name in images
   config=wrangler.ingest.deploy.jsonc
   secrets=$(mktemp)
   # Expanded now: the trap runs at exit, after deploy's locals are gone
@@ -88,20 +100,22 @@ deploy() {
     # A preview's config is JSON (infra/preview.py) and holds only the preview
     [ -f "$root/api/wrangler.ingest.$env.json" ] || "$root/infra/preview.py" config "$env" >&2
     jq --argjson image "$(jq -n '$ARGS.positional | map(split("=") | {(.[0]): .[1]}) | add' --args "${images[@]}")" '
-      .containers |= map(
-        if $image[.class_name] then .image = $image[.class_name] | del(.image_vars)
-        else error("no image for container class \(.class_name)") end)
+      .containers |= map(.images |= with_entries(
+        if $image[.key] then .value = {image: $image[.key]}
+        else error("no image for \(.key)") end))
     ' "$root/api/wrangler.ingest.$env.json" > "$root/api/$config"
     copies=1
   else
+    # Each language's image is on one line: "pl": { "dockerfile": ..., "build_vars": ... },
     awk -v images="$(IFS=,; echo "${images[*]}")" '
       BEGIN { n = split(images, pairs, ","); for (i = 1; i <= n; i++) { split(pairs[i], kv, "="); image[kv[1]] = kv[2] } }
-      match($0, /"class_name": "[^"]+"/) { class = substr($0, RSTART + 15, RLENGTH - 16) }
-      /"image": "\.\.\/analysis\/image\/Dockerfile",/ {
-        if (!(class in image)) { print "no image for container class " class > "/dev/stderr"; exit 1 }
-        sub(/"\.\.\/analysis\/image\/Dockerfile"/, "\"" image[class] "\"")
+      match($0, /^ *"[a-z]+": \{ "dockerfile": /) {
+        match($0, /"[a-z]+"/); lang = substr($0, RSTART + 1, RLENGTH - 2)
+        if (!(lang in image)) { print "no image for " lang > "/dev/stderr"; exit 1 }
+        indent = $0; sub(/[^ ].*/, "", indent)
+        print indent "\"" lang "\": { \"image\": \"" image[lang] "\" }" ($0 ~ /,$/ ? "," : "")
+        next
       }
-      /"image_vars"/ { next }
       { print }
     ' "$root/api/wrangler.ingest.jsonc" > "$root/api/$config"
     # Production and staging
@@ -115,8 +129,10 @@ deploy() {
   done
 
   chmod 600 "$secrets"
-  printf 'S3_ACCESS_KEY_ID=%s\nS3_SECRET_ACCESS_KEY=%s\n' \
-    "$(tf output -raw ingest_s3_access_key_id)" "$(tf output -raw ingest_s3_secret_access_key)" > "$secrets"
+  # JSON: wrangler (4.158) overrides a dotenv secrets file's values with the environment's,
+  # which has api/.env's local credentials loaded
+  jq -n --arg id "$(tf output -raw ingest_s3_access_key_id)" --arg key "$(tf output -raw ingest_s3_secret_access_key)" \
+    '{S3_ACCESS_KEY_ID: $id, S3_SECRET_ACCESS_KEY: $key}' > "$secrets"
   wrangler deploy -c "$config" --var "S3_ENDPOINT:$(tf output -raw r2_s3_endpoint)" --secrets-file "$secrets"
 }
 

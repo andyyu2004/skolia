@@ -1,7 +1,6 @@
-// skolia-ingest: the queue consumer and its analysis containers, one per language
+// skolia-ingest: the queue consumer and its analysis containers, one per language and image
 // (src/worker/ingest.ts). Deployed with wrangler, since Terraform's Cloudflare provider
 // has no container resource. The queue itself is created by Terraform (infra/).
-// infra/deploy-ingest.sh puts each class's pushed image in place of the Dockerfile.
 //
 // Secrets (from terraform output): S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY. See
 // infra/README.md for the deploy command.
@@ -14,40 +13,33 @@
   "workers_dev": false,
   "preview_urls": false,
   "observability": { "enabled": true },
-  // Each container application is named after its image; unnamed, it would be
-  // skolia-ingest-ingestpl
+  // One container application, whose Ingesters start each language's image
+  // (src/worker/ingest.ts). infra/deploy-ingest.sh puts the pushed images, pinned by
+  // digest, in place of the Dockerfiles, which are for wrangler dev.
   "containers": [
     {
-      "name": "skolia-ingest-pl",
-      "class_name": "IngestPl",
-      "image": "../analysis/image/Dockerfile",
-      "image_vars": { "SKOLIA_LANG": "pl" },
-      // 1 vCPU, 6 GiB: Polish ingest peaked at 4.3 GiB on a 2,800-word text (in Docker)
-      "instance_type": "standard-2",
-      "max_instances": 1
-    },
-    {
-      "name": "skolia-ingest-en",
-      "class_name": "IngestEn",
-      "image": "../analysis/image/Dockerfile",
-      "image_vars": { "SKOLIA_LANG": "en" },
-      // English ingest peaked at 4.7 GiB on the same text; the two
-      // languages in one container peaked at 6.7 GiB
-      "instance_type": "standard-2",
-      "max_instances": 1
+      "name": "skolia-ingest",
+      "class_name": "Ingester",
+      "scheduling_policy": "durable_object",
+      // Not inherited from the Worker's for this policy
+      "observability": { "logs": { "enabled": true } },
+      "images": {
+        "pl": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "pl" } },
+        "en": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "en" } }
+      }
     }
   ],
   "durable_objects": {
-    "bindings": [
-      { "name": "INGEST_PL", "class_name": "IngestPl" },
-      { "name": "INGEST_EN", "class_name": "IngestEn" }
-    ]
+    "bindings": [{ "name": "INGESTER", "class_name": "Ingester" }]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Ingest"] },
     // Ingest was Polish's before there were other languages; its container application
     // isn't deleted with it (wrangler containers delete)
-    { "tag": "v2", "deleted_classes": ["Ingest"], "new_sqlite_classes": ["IngestPl", "IngestEn"] }
+    { "tag": "v2", "deleted_classes": ["Ingest"], "new_sqlite_classes": ["IngestPl", "IngestEn"] },
+    // The default scheduling policy's classes, one per language; their container
+    // applications aren't deleted with them either
+    { "tag": "v3", "deleted_classes": ["IngestPl", "IngestEn"], "new_sqlite_classes": ["Ingester"] }
   ],
   "queues": {
     "consumers": [{ "queue": "skolia-ingest", "max_batch_size": 10, "max_retries": 10 }]
@@ -60,27 +52,19 @@
     "staging": {
       "containers": [
         {
-          "name": "skolia-ingest-pl-staging",
-          "class_name": "IngestPl",
-          "image": "../analysis/image/Dockerfile",
-          "image_vars": { "SKOLIA_LANG": "pl" },
-          "instance_type": "standard-2",
-          "max_instances": 1
-        },
-        {
-          "name": "skolia-ingest-en-staging",
-          "class_name": "IngestEn",
-          "image": "../analysis/image/Dockerfile",
-          "image_vars": { "SKOLIA_LANG": "en" },
-          "instance_type": "standard-2",
-          "max_instances": 1
+          "name": "skolia-ingest-staging",
+          "class_name": "Ingester",
+          "scheduling_policy": "durable_object",
+          // Not inherited from the Worker's for this policy
+          "observability": { "logs": { "enabled": true } },
+          "images": {
+            "pl": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "pl" } },
+            "en": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "en" } }
+          }
         }
       ],
       "durable_objects": {
-        "bindings": [
-          { "name": "INGEST_PL", "class_name": "IngestPl" },
-          { "name": "INGEST_EN", "class_name": "IngestEn" }
-        ]
+        "bindings": [{ "name": "INGESTER", "class_name": "Ingester" }]
       },
       "queues": {
         "consumers": [{ "queue": "skolia-ingest-staging", "max_batch_size": 10, "max_retries": 10 }]

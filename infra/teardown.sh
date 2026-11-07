@@ -23,9 +23,10 @@ bucket=skolia-$env
 # Listed first, so a failed listing stops the teardown rather than skipping a step
 workers=$(cf GET workers/scripts | jq -r '.result[].id')
 consumers=$(cf_pages queues | jq -r --arg q "$queue" 'select(.queue_name == $q) | .consumers[].script')
-# wrangler delete leaves them. Named skolia-ingest-{lang}-pr-N (api/wrangler.ingest.jsonc).
+# wrangler delete leaves them. Named skolia-ingest-pr-N (api/wrangler.ingest.jsonc), or
+# skolia-ingest-{lang}-pr-N before the durable_object scheduling policy.
 containers=$(wrangler containers list --json |
-  jq -r --arg re "^skolia-ingest-[a-z]+-$env\$" '.[] | select(.name | test($re)) | "\(.id) \(.name)"')
+  jq -r --arg re "^skolia-ingest(-[a-z]+)?-$env\$" '.[] | select(.name | test($re)) | "\(.id) \(.name)"')
 buckets=$(r2_buckets "$bucket")
 
 if grep -qx "$ingest" <<<"$consumers"; then
