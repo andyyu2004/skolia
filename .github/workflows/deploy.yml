@@ -52,7 +52,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup
+      # The model downloads read HF_TOKEN (impureEnvVars) from the daemon, not this job
       - uses: DeterminateSystems/determinate-nix-action@v3
+        with:
+          extra-conf: |
+            extra-experimental-features = configurable-impure-env
+            impure-env = HF_TOKEN=${{ secrets.HF_TOKEN }}
       # deploy-ingest pushes to it
       - uses: cachix/cachix-action@v17
         with:
