@@ -80,8 +80,9 @@ export async function importDocument(body: ImportRequest): Promise<DocumentSumma
   return response.json();
 }
 
-/** The reading by name, or "unsupported" when its shape or language is one this reader
- * doesn't know (an old analysis served while a new one is made, or a newer API). */
+/** The reading by name, or "unsupported" when its schema is newer than this reader
+ * knows (an API deployed ahead of the reader) or its language isn't one it has. Older
+ * schemas are read: documents keep theirs until ingest redoes them. */
 export async function loadReading(id: string, names: ReadingNames): Promise<Reading | "unsupported"> {
   const doc = api.documents[":id"];
   const [text, analysis, bundle] = await Promise.all([
@@ -92,6 +93,6 @@ export async function loadReading(id: string, names: ReadingNames): Promise<Read
   for (const response of [text, analysis, bundle]) if (!response.ok) throw await failure(response);
   const [a, b] = [(await analysis.json()) as Blob, (await bundle.json()) as Bundle];
   const lang = a.lang;
-  if (a.schema !== SCHEMA || b.schema !== BUNDLE_SCHEMA || !isLang(lang) || b.lang !== lang) return "unsupported";
+  if (a.schema > SCHEMA || b.schema > BUNDLE_SCHEMA || !isLang(lang) || b.lang !== lang) return "unsupported";
   return { lang, text: await text.text(), analysis: a, bundle: b };
 }

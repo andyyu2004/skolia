@@ -91,8 +91,10 @@ type Match = Literal[
 
 
 BUNDLE_SCHEMA = 1
-"""The bundle's JSON shape. Bump it when the shape changes, so documents get new bundles
-and the reader can refuse one it doesn't know."""
+"""The bundle's JSON shape. Documents keep their bundle until ingest redoes them, so the
+reader has to read every schema still stored. Add a field as NotRequired and bump
+BUNDLER_VERSION instead (pronunciations). Bump this only when the shape changes, and
+keep reading the older schema in the reader until a batch re-ingest retires it."""
 
 BUNDLER_VERSION = "3"
 """The bundle-making code's version (lexicon/bundle.py and the plugins' bundlers). Bump it
