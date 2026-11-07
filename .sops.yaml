@@ -1,0 +1,8 @@
+# Recipients of each encrypted file. Add a developer's age public key under
+# dev_recipients, then: sops updatekeys secrets/dev.env
+keys:
+  dev_recipients: &dev_recipients
+    - age1dzma2q25qhefts5cev94mquldrg2c3sq697f2n2xpv7d6m0c5shssw9a82 # andyyu2004
+creation_rules:
+  - path_regex: (^|/)secrets/dev\.env$
+    age: *dev_recipients
