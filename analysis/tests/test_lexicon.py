@@ -149,7 +149,7 @@ def test_bundle_pronounces_tokens_and_lemmas(tmp_path: Path) -> None:
         "hash": "",
         "sentences": [{"start": 0, "end": 3, "tokens": [token], "expressions": []}],
     }
-    assert bundle.make(blob, lexicon)["pronunciations"] == {
+    assert bundle.make(blob, lexicon).get("pronunciations") == {
         "led:VERB": [{"ipa": "/lɛd/"}],
         "lead:VERB": [{"ipa": "/liːd/"}],
     }

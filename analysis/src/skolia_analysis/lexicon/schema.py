@@ -90,11 +90,11 @@ type Match = Literal[
 ]
 
 
-BUNDLE_SCHEMA = 2
+BUNDLE_SCHEMA = 1
 """The bundle's JSON shape. Bump it when the shape changes, so documents get new bundles
 and the reader can refuse one it doesn't know."""
 
-BUNDLER_VERSION = "2"
+BUNDLER_VERSION = "3"
 """The bundle-making code's version (lexicon/bundle.py and the plugins' bundlers). Bump it
 when a change gives different bundles for the same analysis and lexicon (the lookup
 fallbacks, how paradigms are made). It's in every bundle's name, so a bump re-bundles each
@@ -116,8 +116,10 @@ class Bundle(TypedDict):
     """How each token lemma_id was resolved."""
     feats: list[Feats]
     """Every distinct feature set in the paradigms, referred to by index from FormRow."""
-    pronunciations: dict[str, list[Pronunciation]]
-    """By pronunciation_key(word, upos), for each token's text and each entry's lemma that
+    pronunciations: NotRequired[dict[str, list[Pronunciation]]]
+    """Absent from bundles made before bundler version 3.
+
+    By pronunciation_key(word, upos), for each token's text and each entry's lemma that
     Wiktionary has one for. Words spelled alike can differ by part of speech (lead, the
     metal, is /lɛd/; the verb is /liːd/)."""
 
