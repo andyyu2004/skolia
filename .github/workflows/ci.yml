@@ -1,9 +1,10 @@
 name: CI
 
-# Every push and pull request: checks and tests. Pull requests: a plan per environment,
+# Every push and pull request, and each merge group in main's merge queue: checks and
+# tests (the check job, which the queue requires). Pull requests: a plan per environment,
 # and a preview environment, pr-<number>, deployed and smoke-tested on each push and torn
-# down when the pull request closes (sweep.yml catches any left). main: deploy staging
-# and smoke-test it. A v* tag on a commit in main: staging, then production. The steps
+# down when the pull request closes (sweep.yml catches any left); it doesn't gate merging.
+# main: deploy staging and smoke-test it. A v* tag on a commit in main: staging, then production. The steps
 # are just recipes (justfile), so a deploy by hand runs the same commands.
 
 on:
@@ -12,6 +13,7 @@ on:
     tags: ["v*"]
   pull_request:
     types: [opened, synchronize, reopened, closed]
+  merge_group:
   workflow_dispatch:
 
 permissions:
