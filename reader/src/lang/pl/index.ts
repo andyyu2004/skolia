@@ -7,9 +7,6 @@ import { layout, mergeLabels } from "./paradigm.ts";
 const PERSON_ENDING = "aglt";
 
 export const polish: Language = {
-  name: "Polish",
-  endonym: "Polski",
-  flag: "🇵🇱",
   paradigm: layout,
   mergeLabels,
   explainCase: (tokens, index) => explainCase(tokens, index),

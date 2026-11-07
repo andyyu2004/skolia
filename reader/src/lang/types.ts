@@ -24,12 +24,6 @@ export interface Use {
 }
 
 export interface Language {
-  /** English name. */
-  name: string;
-  /** The language's name for itself, for language pickers. */
-  endonym: string;
-  /** A flag emoji shown beside the endonym. */
-  flag: string;
   paradigm: Layout;
   /** One label for merged table rows or columns; default: joined with "/". */
   mergeLabels?: MergeLabels;
