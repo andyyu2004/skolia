@@ -3,6 +3,7 @@ import { test } from "node:test";
 import { lemmaParam, type CardCounts, type Due, type Lang, type LemmaId, type Lookup, type Rating, type Reviewed, type ReviewRequestInput, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
 import { ALICE, NOW, client, loadLexicon, local, raw, setup, useLocal, type App } from "./testing/app.ts";
 import { ORIGIN } from "./testing/harness.ts";
+import { body } from "./testing/responses.ts";
 
 useLocal();
 
@@ -13,22 +14,16 @@ async function signedIn(): Promise<Headers> {
 }
 
 async function due(app: App, headers: Headers, lang: Lang, dayStart = DAY_START): Promise<Due> {
-  const response = await client(app, headers).me.cards.due.$get({ query: { lang, dayStart } });
-  assert.equal(response.status, 200);
   // Hono's JSON type makes the entries' optional fields `| undefined`; it's the same JSON
-  return (await response.json()) as Due;
+  return (await body("due", client(app, headers).me.cards.due.$get({ query: { lang, dayStart } }))) as Due;
 }
 
-async function counts(app: App, headers: Headers): Promise<CardCounts[]> {
-  const response = await client(app, headers).me.cards.counts.$get({ query: { dayStart: DAY_START } });
-  if (response.status !== 200) assert.fail(`counts: ${response.status}`);
-  return response.json();
+function counts(app: App, headers: Headers): Promise<CardCounts[]> {
+  return body("counts", client(app, headers).me.cards.counts.$get({ query: { dayStart: DAY_START } }));
 }
 
-async function words(app: App, headers: Headers): Promise<Word[]> {
-  const response = await client(app, headers).me.words.$get();
-  if (response.status !== 200) assert.fail(`words: ${response.status}`);
-  return response.json();
+function words(app: App, headers: Headers): Promise<Word[]> {
+  return body("words", client(app, headers).me.words.$get());
 }
 
 function mark(app: App, headers: Headers | undefined, lemmaId: LemmaId, status: WordStatus) {
@@ -108,18 +103,15 @@ test("known and ignored words have no cards to review, and active brings their c
 test("a review schedules the card, a retried review is counted once, and the day's new cards are limited by the setting", async () => {
   const app = setup();
   const headers = await signedIn();
-  assert.deepEqual(await (await client(app, headers).me.settings.$get()).json(), { newPerDay: 20 });
+  assert.deepEqual(await body("settings", client(app, headers).me.settings.$get()), { newPerDay: 20 });
   assert.equal((await saveSettings(app, headers, { newPerDay: 1 })).status, 204);
   await mark(app, headers, "pl:pies:NOUN", "active");
   const [card] = (await due(app, headers, "pl")).cards;
   assert.ok(card);
   const good = answer(card.id, 3);
-  const response = await review(app, headers, good);
-  assert.equal(response.status, 200);
-  assert.ok(response.ok);
-  const reviewed: Reviewed = await response.json();
+  const reviewed: Reviewed = await body("review", review(app, headers, good));
   assert.ok(reviewed.dueAt > NOW);
-  assert.deepEqual(await (await review(app, headers, good)).json(), reviewed);
+  assert.deepEqual(await body("review retried", review(app, headers, good)), reviewed);
   const after = await due(app, headers, "pl");
   assert.deepEqual(after, { cards: [], newLeft: 0, featureSets: {} });
   // The next day's allowance
@@ -236,9 +228,7 @@ test("a lexicon lookup gives each language's loaded version, leaving out ids it 
     [{ Case: "Nom", Number: "Sing" }, { Case: "Gen", Number: "Sing" }, { Case: "Acc", Number: "Sing" }, { Case: "Dat", Number: "Sing" }],
   );
   await loadLexicon("en", "lex/1", [{ lemmaId: "en:dog:NOUN", lemma: "dog", upos: "NOUN", gloss: "a domesticated canid" }]);
-  const response = await lookUp(app, ["pl:pies:NOUN", "en:dog:NOUN", "pl:kot:NOUN"]);
-  assert.equal(response.status, 200);
-  const { entries, featureSets } = (await response.json()) as Lookup;
+  const { entries, featureSets } = await body("lookup", lookUp(app, ["pl:pies:NOUN", "en:dog:NOUN", "pl:kot:NOUN"]));
   assert.deepEqual(
     entries.map((e) => [e.lemmaId, e.senses[0]?.gloss]).sort(),
     [
