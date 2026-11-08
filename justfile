@@ -32,11 +32,14 @@ build:
 [parallel]
 dev: dev-api dev-reader
 
+# migrations apply has no flag to skip its confirmation; without a TTY on stdin it doesn't ask
+
 # wrangler dev on :8787 with local state in api/.wrangler/state
 [working-directory('api')]
 dev-api: images env-local
-    pnpm exec wrangler d1 migrations apply DB --local --env=''
-    for lang in {{ langs }}; do pnpm exec wrangler d1 migrations apply "LEXICON_$(tr a-z A-Z <<<"$lang")" --local --env=''; done
+    pnpm --filter @skolia/reader build
+    pnpm exec wrangler d1 migrations apply DB --local --env='' </dev/null
+    for lang in {{ langs }}; do pnpm exec wrangler d1 migrations apply "LEXICON_$(tr a-z A-Z <<<"$lang")" --local --env='' </dev/null; done
     just lexicon-local
     pnpm exec wrangler dev -c wrangler.jsonc -c wrangler.ingest.jsonc --port 8787
 

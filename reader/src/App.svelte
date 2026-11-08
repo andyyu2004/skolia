@@ -47,23 +47,25 @@
 
 <Nav page={route.page} bind:user onerror={(message) => (error = message)} />
 
-{#if error}
-  <p class="error banner">{error}</p>
-{/if}
+<div class="content">
+  {#if error}
+    <p class="error banner">{error}</p>
+  {/if}
 
-{#if route.page === "reader"}
-  {#key route.id}
-    <Reader id={route.id} />
-  {/key}
-{:else if route.page === "upload"}
-  <Upload {user} />
-{:else if route.page === "review"}
-  <Review {user} lang={route.lang} />
-{:else if route.page === "settings"}
-  <Settings {user} />
-{:else}
-  <Explore />
-{/if}
+  {#if route.page === "reader"}
+    {#key route.id}
+      <Reader id={route.id} />
+    {/key}
+  {:else if route.page === "upload"}
+    <Upload {user} />
+  {:else if route.page === "review"}
+    <Review {user} lang={route.lang} />
+  {:else if route.page === "settings"}
+    <Settings {user} />
+  {:else}
+    <Explore {user} />
+  {/if}
+</div>
 
 {#if versionLink}
   <footer class="version muted"><a href={versionLink} rel="noreferrer">{version}</a></footer>
