@@ -63,7 +63,7 @@ export async function startLocal(): Promise<Local> {
   await worker.applyD1Migrations("DB");
   for (const lang of LANGS) await worker.applyD1Migrations(lexiconBinding(lang));
   const env = await worker.getEnv();
-  const recorder = await server.getWorker<object, { default: typeof IngestRecorder }>("ingest-recorder").getExport();
+  const recorder = await server.getWorker<object, { default: typeof IngestRecorder }>("skolia-ingest").getExport();
   const options = authOptions(authConfig(env.DB));
   const instance = betterAuth({ ...options, plugins: [...options.plugins, testUtils()] });
   const { test } = await instance.$context;

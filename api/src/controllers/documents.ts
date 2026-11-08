@@ -1,11 +1,21 @@
 // Documents: importing a text, listing and opening them, and their text, analysis and
 // bundle, queueing a document again when ingest makes other versions or its job is lost.
 import * as z from "zod";
-import { MAX_TITLE_LENGTH, isShareable, timestamp, type DocumentId, type DocumentList, type DocumentSummary, type Lang, type User } from "@skolia/shared/api";
+import {
+  MAX_TITLE_LENGTH,
+  isShareable,
+  timestamp,
+  type DocumentId,
+  type DocumentList,
+  type DocumentSummary,
+  type Lang,
+  type QueuePlace,
+  type User,
+} from "@skolia/shared/api";
 import { PART_ENCODING, docId, docPrefix, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { Status, Versions } from "@skolia/shared/schema";
 import * as schemas from "@skolia/shared/schemas";
-import type { BlobStore, Deps, DocumentRecord, Sharing, StoredDocument } from "../ports.ts";
+import type { BlobStore, Deps, DocumentRecord, IngestJobs, Sharing, StoredDocument } from "../ports.ts";
 import { NO_CONTENT, fail, ok, type BlobResult, type Failed, type Json, type NoContent, type Ok } from "./result.ts";
 
 const NAME = /^[a-z0-9-]{1,64}$/;
@@ -113,7 +123,18 @@ export async function remove(deps: Deps, user: User, id: string): Promise<NoCont
 export async function get(deps: Deps, id: string, viewer: User | null): Promise<Ok<DocumentSummary> | Failed<404>> {
   const record = await findDocument(deps, id);
   if (!record) return noSuchDocument();
-  return ok(await current(deps, record, versionsOf(deps.blobs), viewer));
+  const summary = await current(deps, record, versionsOf(deps.blobs), viewer);
+  if (summary.mine && (summary.state === "queued" || summary.state === "analysing")) {
+    summary.queue = placeIn(await deps.queue.jobs(record.lang), record.id);
+  }
+  return ok(summary);
+}
+
+/** No container running means one is about to start for this document. */
+export function placeIn(jobs: IngestJobs | null, id: DocumentId): QueuePlace {
+  if (jobs === null) return { starting: true, ahead: null };
+  const index = [...jobs.running, ...jobs.waiting].indexOf(id);
+  return { starting: jobs.loading, ahead: index < 0 ? null : index };
 }
 
 /** The id is the text's hash, so the text at this URL never changes. */

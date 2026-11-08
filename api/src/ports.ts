@@ -74,8 +74,19 @@ export interface BlobStore {
   deletePrefix(prefix: string): Promise<void>;
 }
 
+/** A language's ingest container's jobs (analysis/src/skolia_analysis/ingest/http.py
+ * JobsState): whether its pipelines are still loading, and the documents running and
+ * waiting, in the order they'll run. */
+export interface IngestJobs {
+  loading: boolean;
+  running: string[];
+  waiting: string[];
+}
+
 export interface JobQueue {
   send(job: IngestJob): Promise<void>;
+  /** Null when no container is running for the language, or it can't be asked. */
+  jobs(lang: Lang): Promise<IngestJobs | null>;
 }
 
 export interface DueCards {

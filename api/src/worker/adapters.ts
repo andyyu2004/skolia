@@ -22,6 +22,7 @@ import type {
   DocumentRecord,
   DocumentStore,
   DueCards,
+  IngestJobs,
   JobQueue,
   Lexicon,
   ReviewOutcome,
@@ -257,16 +258,32 @@ export class R2Blobs implements BlobStore {
   }
 }
 
+/** Asks a language's ingest container for its jobs: the ingest Worker's Ingester
+ * (worker/ingest.ts), or a fake in the tests. */
+export type JobsOf = (lang: Lang) => Promise<IngestJobs | null>;
+
 export class CloudflareQueue implements JobQueue {
   private readonly queue: Queue<IngestJob>;
+  private readonly jobsOf: JobsOf;
 
-  constructor(queue: Queue<IngestJob>) {
+  constructor(queue: Queue<IngestJob>, jobsOf: JobsOf) {
     this.queue = queue;
+    this.jobsOf = jobsOf;
   }
 
   async send(job: IngestJob): Promise<void> {
     // JSON, not the default Workers-only "v8" format, so a message can be read outside a
     // Worker (the dashboard, wrangler)
     await this.queue.send(job, { contentType: "json" });
+  }
+
+  async jobs(lang: Lang): Promise<IngestJobs | null> {
+    try {
+      return await this.jobsOf(lang);
+    } catch (error: unknown) {
+      // The ingest Worker not deployed or not answering: a summary without its place
+      console.error("asking ingest for its jobs failed:", error);
+      return null;
+    }
   }
 }

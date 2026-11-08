@@ -15,6 +15,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { isLang, type Lang } from "@skolia/shared/api";
 import type { IngestJob } from "@skolia/shared/schema";
+import type { IngestJobs } from "../ports.ts";
 
 interface Env {
   INGESTER: DurableObjectNamespace<Ingester>;
@@ -78,9 +79,37 @@ export class Ingester extends DurableObject<Env> {
   }
 
   async route(lang: Lang, jobs: IngestJob[]): Promise<Outcome[]> {
+    return await this.env.INGESTER.getByName(this.image(lang)).run(this.image(lang), jobs);
+  }
+
+  /** The language's container's jobs (GET /jobs), on the Ingester named after the
+   * language. Null when no container is running; it isn't started to find out. */
+  async jobs(lang: Lang): Promise<IngestJobs | null> {
+    return await this.env.INGESTER.getByName(this.image(lang)).state();
+  }
+
+  async state(): Promise<IngestJobs | null> {
+    const container = this.ctx.container;
+    if (!container?.running) return null;
+    try {
+      const response = await container
+        .getTcpPort(PORT)
+        .fetch("http://ingest/jobs", { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+      if (!response.ok) {
+        await response.body?.cancel();
+        return null;
+      }
+      return (await response.json()) as IngestJobs;
+    } catch {
+      // Not listening yet
+      return null;
+    }
+  }
+
+  private image(lang: Lang): string {
     const image = this.container().images[lang];
     if (image === undefined) throw new Error(`no ingest image for ${lang}`);
-    return await this.env.INGESTER.getByName(image).run(image, jobs);
+    return image;
   }
 
   async run(image: string, jobs: IngestJob[]): Promise<Outcome[]> {

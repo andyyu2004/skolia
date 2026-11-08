@@ -1,9 +1,14 @@
-// Test-only consumer of the local ingest queue, so tests can see what the API queued
+// Test-only stand-in for the ingest Worker: consumes the local ingest queue, so tests can see
+// what the API queued, and has the Ingester class the API's INGESTER binding names
 {
-  "name": "ingest-recorder",
+  "name": "skolia-ingest",
   "main": "ingest-recorder.ts",
   "compatibility_date": "2026-10-19",
   "queues": {
     "consumers": [{ "queue": "skolia-ingest", "max_batch_size": 100, "max_batch_timeout": 0 }]
-  }
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "INGESTER", "class_name": "Ingester" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Ingester"] }]
 }

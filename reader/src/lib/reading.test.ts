@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { timestamp, type DocumentSummary } from "@skolia/shared/api";
+import { timestamp, type DocumentSummary, type QueuePlace } from "@skolia/shared/api";
 import { DocumentId } from "@skolia/shared/schemas";
-import { MAX_RETRY_MS, POLL_MS, afterPoll, badge, notice, retryAfter } from "./reading.ts";
+import { MAX_RETRY_MS, POLL_MS, afterPoll, badge, notice, queueText, retryAfter } from "./reading.ts";
 
 const OLD = { analysis: "s2-a1", bundle: "b1-a1-l1" };
 const NEW = { analysis: "s2-a2", bundle: "b1-a2-l1" };
@@ -59,4 +59,16 @@ test("library badges", () => {
   assert.deepEqual(badge(summary("analysing")), { text: "processing…", failed: false });
   assert.deepEqual(badge(summary("analysing", OLD)), { text: "updating…", failed: false });
   assert.deepEqual(badge(summary("failed", OLD)), { text: "failed", failed: true });
+});
+
+test("the queue text says where your own document is", () => {
+  const at = (state: DocumentSummary["state"], queue?: QueuePlace) => queueText({ ...summary(state), ...(queue ? { queue } : {}) });
+  assert.equal(at("queued"), null);
+  assert.equal(at("ready", { starting: false, ahead: 1 }), null);
+  assert.match(at("queued", { starting: true, ahead: null }) ?? "", /starting/);
+  assert.match(at("queued", { starting: false, ahead: null }) ?? "", /pick it up/);
+  assert.equal(at("queued", { starting: false, ahead: 0 }), "next");
+  assert.equal(at("queued", { starting: false, ahead: 1 }), "1 text ahead of yours");
+  assert.equal(at("queued", { starting: false, ahead: 3 }), "3 texts ahead of yours");
+  assert.equal(at("analysing", { starting: false, ahead: 0 }), "analysing now");
 });

@@ -4,7 +4,8 @@ import { hc } from "hono/client";
 import { MAX_TEXT_LENGTH, type DocumentId, type DocumentSummary, type DocumentUpdate, type ImportRequest } from "@skolia/shared/api";
 import { docId, statusKey, textKey } from "@skolia/shared/keys";
 import type { AppType } from "./app.ts";
-import { ALICE, TEXT, client, importText, importer, listed, local, putJson, setup, summaryOf, useLocal, type App } from "./testing/app.ts";
+import type { IngestJobs } from "./ports.ts";
+import { ALICE, TEXT, client, importText, importer, listed, local, putJson, readyAt, setup, summaryOf, useLocal, type App } from "./testing/app.ts";
 import { ORIGIN } from "./testing/harness.ts";
 import { body, expectStatus } from "./testing/responses.ts";
 
@@ -261,4 +262,18 @@ test("a user's own documents are listed for them, private ones too, and nobody e
   const { documents } = await body("mine", client(app, importer).me.documents.$get());
   assert.deepEqual(documents.map((d) => d.id), [mine]);
   await expectStatus("signed out", client(app).me.documents.$get(), 401);
+});
+
+test("the importer sees where their document is in the queue; others don't", async () => {
+  const id = await imported(setup(), importer, TEXT, { visibility: "public", licence: "cc0" });
+  const other = "e".repeat(64);
+  const place = async (jobs: IngestJobs | null, headers?: Headers) =>
+    (await body("get", view(setup({ jobsOf: async () => jobs }), headers, id))).queue;
+  assert.deepEqual(await place(null, importer), { starting: true, ahead: null });
+  assert.deepEqual(await place({ loading: true, running: [], waiting: [id] }, importer), { starting: true, ahead: 0 });
+  assert.deepEqual(await place({ loading: false, running: [other], waiting: [other, id] }, importer), { starting: false, ahead: 2 });
+  assert.deepEqual(await place({ loading: false, running: [other], waiting: [] }, importer), { starting: false, ahead: null });
+  assert.equal(await place(null), undefined);
+  await readyAt(id, "1");
+  assert.equal(await place(null, importer), undefined);
 });

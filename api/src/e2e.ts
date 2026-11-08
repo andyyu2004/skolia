@@ -82,8 +82,12 @@ async function documents(base: string, key: string, lang: Lang): Promise<void> {
 
   const deadline = Date.now() + TIMEOUT_MS;
   for (;;) {
-    const summary = await body(`${lang} status`, anonymous.documents[":id"].$get({ param: { id } }));
-    console.log(`${lang}: ${summary.state}`);
+    // As the importer, who's told where it is in the queue (from the ingest Worker)
+    const summary = await body(`${lang} status`, api.documents[":id"].$get({ param: { id } }));
+    console.log(`${lang}: ${summary.state}${summary.queue ? ` ${JSON.stringify(summary.queue)}` : ""}`);
+    if (summary.state === "queued" || summary.state === "analysing") {
+      assert.ok(summary.queue, `${lang}: ${summary.state} without its place in the queue`);
+    }
     if (summary.state === "failed") throw new Error(`${lang} analysis failed: ${summary.error ?? ""}`);
     if (summary.state === "ready") {
       if (!summary.reading) throw new Error(`${lang}: ready without analysis and bundle names`);

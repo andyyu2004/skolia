@@ -137,12 +137,23 @@ export interface DocumentSummary {
   importerName: string;
   /** Whether the viewer imported it, so can change or delete it. */
   mine: boolean;
+  /** Where it is in its language's analysis queue: for the viewer's own document, while
+   * it's queued or analysing, when it's asked for on its own. */
+  queue?: QueuePlace | undefined;
   state: State;
   /** The analysis and bundle to show, by name (GET .../analysis/{name}): the current
    * ones, or while newer ones are queued or analysing (or failed), the previous ones.
    * Absent until a first analysis is ready. */
   reading?: ReadingNames | undefined;
   error?: string | undefined;
+}
+
+/** starting: the language's analyser is starting, its container booting or its model
+ * loading. ahead: how many texts it analyses before this one, the one it's analysing
+ * included; null when it hasn't been handed this one yet. */
+export interface QueuePlace {
+  starting: boolean;
+  ahead: number | null;
 }
 
 export interface ReadingNames {

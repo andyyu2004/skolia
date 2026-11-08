@@ -55,6 +55,18 @@ export function notice(summary: DocumentSummary | null, showing: boolean, error:
   return { kind: showing ? "updating" : "processing" };
 }
 
+/** Where the viewer's own document is while it waits, beside Processing…; null when the
+ * API didn't say (not theirs, or not waiting). */
+export function queueText(summary: DocumentSummary): string | null {
+  const place = summary.queue;
+  if (place === undefined || !isBusy(summary)) return null;
+  if (summary.state === "analysing") return "analysing now";
+  if (place.starting) return "the analyser is starting, which can take a couple of minutes";
+  if (place.ahead === null) return "waiting for the analyser to pick it up";
+  if (place.ahead === 0) return "next";
+  return `${place.ahead} ${place.ahead === 1 ? "text" : "texts"} ahead of yours`;
+}
+
 /** The library's badge for a document, if it needs one. */
 export function badge(summary: DocumentSummary): { text: string; failed: boolean } | null {
   if (summary.state === "failed") return { text: "failed", failed: true };

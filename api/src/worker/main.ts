@@ -5,6 +5,7 @@ import { createApp, parseImportCap } from "../app.ts";
 import { NO_AUTH, createAuth } from "../auth.ts";
 import type { Auth } from "../ports.ts";
 import { CloudflareQueue, D1Documents, D1Lexicon, DurableObjectUsers, R2Blobs, lexiconsOf, type LexiconBindings } from "./adapters.ts";
+import type { Ingester } from "./ingest.ts";
 import type { User } from "./user.ts";
 
 export { User } from "./user.ts";
@@ -17,6 +18,8 @@ interface Env extends LexiconBindings {
   USER: DurableObjectNamespace<User>;
   BLOBS: R2Bucket;
   INGEST: Queue<IngestJob>;
+  /** The ingest Worker's (worker/ingest.ts), for where a document is in its queue */
+  INGESTER: DurableObjectNamespace<Ingester>;
   /** wrangler vars (api/wrangler.jsonc); a preview's from infra/preview.py */
   MAX_IMPORTS_PER_DAY?: string;
   BASE_URL?: string;
@@ -60,7 +63,7 @@ export default {
       version: VERSION,
       documents: new D1Documents(env.DB),
       blobs: new R2Blobs(env.BLOBS),
-      queue: new CloudflareQueue(env.INGEST),
+      queue: new CloudflareQueue(env.INGEST, (lang) => env.INGESTER.getByName(lang).jobs(lang)),
       now: () => new Date(),
     });
     return app.fetch(request, env, ctx);

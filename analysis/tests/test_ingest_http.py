@@ -34,6 +34,28 @@ def test_a_released_job_comes_back() -> None:
     assert again is not None and again.job == JOB
 
 
+def test_state_lists_running_then_waiting_documents_in_order() -> None:
+    jobs = HttpJobs()
+    first, second, third = ({"doc": c * 64, "lang": "pl"} for c in "abc")
+    for job in (first, second, third):
+        jobs.add(json.dumps(job))
+    assert jobs.state() == {
+        "loading": True,
+        "running": [],
+        "waiting": ["a" * 64, "b" * 64, "c" * 64],
+    }
+    jobs.loaded()
+    received = jobs.receive(0.1)
+    assert received is not None
+    assert jobs.state() == {
+        "loading": False,
+        "running": ["a" * 64],
+        "waiting": ["b" * 64, "c" * 64],
+    }
+    jobs.ack(received)
+    assert jobs.state() == {"loading": False, "running": [], "waiting": ["b" * 64, "c" * 64]}
+
+
 def request(port: int, method: str, path: str, body: bytes | None = None) -> tuple[int, object]:
     req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data=body, method=method)
     try:
@@ -56,6 +78,10 @@ def test_jobs_are_posted_and_busy_reported(server: tuple[HttpJobs, int]) -> None
     assert request(port, "GET", "/busy") == (200, {"busy": False})
     assert request(port, "POST", "/jobs", json.dumps(JOB).encode()) == (202, {"accepted": True})
     assert request(port, "GET", "/busy") == (200, {"busy": True})
+    assert request(port, "GET", "/jobs") == (
+        200,
+        {"loading": True, "running": [], "waiting": [JOB["doc"]]},
+    )
     received = jobs.receive(0.1)
     assert received is not None and received.job == JOB
 

@@ -51,10 +51,11 @@ flowchart LR
   API -->|"job"| Q
   API -->|"RPC: words, cards, reviews, settings"| UDO
   API -->|"entries for due cards"| LX
+  API -->|"RPC: a document's place in the queue"| IDO
   Q --> CON
   CON --> IDO
-  IDO -->|"POST /jobs, GET /busy"| CPL
-  IDO -->|"POST /jobs, GET /busy"| CEN
+  IDO -->|"POST /jobs, GET /busy, GET /jobs"| CPL
+  IDO -->|"POST /jobs, GET /busy, GET /jobs"| CEN
   CPL -->|"S3 API"| R2
   CEN -->|"S3 API"| R2
 ```
@@ -62,7 +63,7 @@ flowchart LR
 - **Open a document:** D1 has its metadata and R2's `status.json` the names of its current analysis and bundle, which the reader then fetches from R2 through the API, as stored. Browsers cache them by HTTP (`immutable`); there's no IndexedDB yet.
 - **Tap a word:** local, from the bundle already loaded (`shared/lexicon`, `shared/paradigm`). Setting a word's status goes to the User DO.
 - **Review:** the User DO gives the due cards and the API adds their entries from its language's lexicon D1. The DO never reads the lexicon, and the reader's word sheet never reads the lexicon D1s, so the two can show different lexicon versions until a document is re-bundled.
-- **Import:** the API puts the text in R2, the metadata in D1, a queued `status.json` and the job on the queue. The consumer hands it to the Ingester named after its language's image, so a deploy that changes an image starts a new container.
+- **Import:** the API puts the text in R2, the metadata in D1, a queued `status.json` and the job on the queue. The consumer hands it to the Ingester named after its language's image, so a deploy that changes an image starts a new container. While it waits, the importer's summary says where it is: the API asks the language's Ingester (a Durable Object binding to the ingest Worker), which asks a running container for its jobs (`GET /jobs`) and never starts one.
 - The ingest Worker has no R2 or D1 binding: containers reach R2 over its S3 API, with a token Terraform makes.
 - Lexicon lookups only see the rows of each language's version in `loaded`.
 

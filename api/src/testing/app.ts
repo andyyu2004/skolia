@@ -5,7 +5,7 @@ import type { DocumentId, DocumentList, DocumentSummary, Lang } from "@skolia/sh
 import { partKey, statusKey, versionsKey } from "@skolia/shared/keys";
 import { createApp, type AppType } from "../app.ts";
 import type { Auth } from "../ports.ts";
-import { CloudflareQueue, D1Documents, D1Lexicon, DurableObjectUsers, R2Blobs, lexiconsOf } from "../worker/adapters.ts";
+import { CloudflareQueue, D1Documents, D1Lexicon, DurableObjectUsers, R2Blobs, lexiconsOf, type JobsOf } from "../worker/adapters.ts";
 import { ORIGIN, startLocal, type Local } from "./harness.ts";
 
 export let local: Local;
@@ -28,7 +28,13 @@ export const NOW = "2026-11-04T00:00:00Z";
 export const TEXT = "Idę do starego psa.";
 export const ALICE = { name: "Alice", email: "alice@example.com" };
 
-export function setup({ maxImportsPerDay = 100, auth = local.auth, at = NOW }: { maxImportsPerDay?: number; auth?: Auth; at?: string } = {}) {
+/** jobsOf: what the ingest container answers about its jobs; none is running unless given. */
+export function setup({
+  maxImportsPerDay = 100,
+  auth = local.auth,
+  at = NOW,
+  jobsOf = async () => null,
+}: { maxImportsPerDay?: number; auth?: Auth; at?: string; jobsOf?: JobsOf } = {}) {
   const { env } = local;
   return createApp({
     auth,
@@ -37,7 +43,7 @@ export function setup({ maxImportsPerDay = 100, auth = local.auth, at = NOW }: {
     maxImportsPerDay,
     documents: new D1Documents(env.DB),
     blobs: new R2Blobs(env.BLOBS),
-    queue: new CloudflareQueue(env.INGEST),
+    queue: new CloudflareQueue(env.INGEST, jobsOf),
     version: "v1.2.3",
     now: () => new Date(at),
   });
