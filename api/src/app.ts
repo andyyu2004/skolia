@@ -19,6 +19,7 @@ import {
   type LexiconEntry,
   type Lookup,
   type Reviewed,
+  type ScheduledCard,
   type Settings,
   type User,
   type Version,
@@ -134,16 +135,7 @@ export function createApp(deps: Deps) {
       // Stored times are toISOString()'s, compared as strings
       const dayStart = new Date(c.req.valid("query").dayStart).toISOString();
       const { cards, newLeft } = await deps.users.due(user.id, lang, now().toISOString(), dayStart, MAX_DUE);
-      const entries = new Map<LemmaId, LexiconEntry>();
-      const featureSets: FeatureSets = {};
-      const ids = [...new Set(cards.map((card) => card.lemmaId))];
-      for (let i = 0; i < ids.length; i += MAX_LOOKUP) {
-        const found = await deps.lexicon.entries(ids.slice(i, i + MAX_LOOKUP));
-        for (const entry of found.entries) entries.set(entry.lemmaId, entry);
-        Object.assign(featureSets, found.featureSets[lang]);
-      }
-      const due = cards.map((card) => ({ ...card, entry: entries.get(card.lemmaId) ?? null }));
-      return c.json({ cards: due, newLeft, featureSets } satisfies Due, 200);
+      return c.json({ ...(await withEntries(deps.lexicon, lang, cards)), newLeft } satisfies Due, 200);
     })
     .post("/api/me/reviews", zValidator("json", schemas.ReviewRequest, badRequest()), async (c) => {
       const user = await deps.auth.user(c.req.raw.headers);
@@ -246,6 +238,20 @@ export function createApp(deps: Deps) {
     .get("/api/documents/:id/bundle/:name", (c) => sendPart(c, "bundle", c.req.param("id"), c.req.param("name")));
 
   return app;
+}
+
+/** The cards with their lexicon entries, and the feature sets the entries' paradigms use,
+ * looked up MAX_LOOKUP lemmas at a time. */
+async function withEntries(lexicon: Lexicon, lang: Lang, cards: ScheduledCard[]): Promise<Pick<Due, "cards" | "featureSets">> {
+  const entries = new Map<LemmaId, LexiconEntry>();
+  const featureSets: FeatureSets = {};
+  const ids = [...new Set(cards.map((card) => card.lemmaId))];
+  for (let i = 0; i < ids.length; i += MAX_LOOKUP) {
+    const found = await lexicon.entries(ids.slice(i, i + MAX_LOOKUP));
+    for (const entry of found.entries) entries.set(entry.lemmaId, entry);
+    Object.assign(featureSets, found.featureSets[lang]);
+  }
+  return { cards: cards.map((card) => ({ ...card, entry: entries.get(card.lemmaId) ?? null })), featureSets };
 }
 
 async function findDocument(deps: Deps, id: string): Promise<StoredDocument | null> {
