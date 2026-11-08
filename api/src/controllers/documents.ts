@@ -1,0 +1,213 @@
+// Documents: importing a text, listing and opening them, and their text, analysis and
+// bundle, queueing a document again when ingest makes other versions or its job is lost.
+import * as z from "zod";
+import type { DocumentList, DocumentSummary, Lang, User } from "@skolia/shared/api";
+import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
+import type { Status, Versions } from "@skolia/shared/schema";
+import * as schemas from "@skolia/shared/schemas";
+import type { BlobStore, Deps, DocumentRecord, Sharing, StoredDocument } from "../ports.ts";
+import { fail, ok, type BlobResult, type Failed, type Json, type Ok } from "./result.ts";
+
+const ID = /^[0-9a-f]{64}$/;
+const NAME = /^[a-z0-9-]{1,64}$/;
+const MAX_TITLE_LENGTH = 200;
+const JSON_TYPE = "application/json";
+
+export async function list(deps: Deps, viewer: User | null): Promise<Ok<DocumentList>> {
+  const records = await deps.documents.list(viewer?.id ?? null);
+  const versions = versionsOf(deps.blobs);
+  return ok({ documents: await Promise.all(records.map((r) => current(deps, r, versions))) });
+}
+
+/** 202 if the text is queued, 200 if it's already here and not failed (a failed import is
+ * retried by importing the same text again). */
+export async function importText(
+  deps: Deps,
+  user: User,
+  body: z.output<typeof schemas.ImportRequest>,
+): Promise<Json<DocumentSummary, 200> | Json<DocumentSummary, 202> | Failed<429>> {
+  const request = { ...body, title: body.title?.trim().slice(0, MAX_TITLE_LENGTH) || firstWords(body.text) };
+  const sharing: Sharing = {
+    licence: body.licence,
+    author: body.author?.trim() || null,
+    source: body.source ?? null,
+    licensor: user.id,
+  };
+  const id = await docId(request.lang, request.text);
+  let existing = await deps.documents.get(id);
+  if (existing?.visibility === "private" && request.visibility === "public") {
+    await deps.documents.share(id, sharing);
+    existing = { ...existing, ...sharing, visibility: "public" };
+  }
+  if (existing) {
+    const summary = await current(deps, existing, versionsOf(deps.blobs));
+    if (summary.state !== "failed") return ok(summary);
+  } else {
+    const today = deps.now().toISOString().slice(0, 10);
+    if ((await deps.documents.countImportedSince(today)) >= deps.maxImportsPerDay) {
+      return fail(429, "Today's imports are used up. Try again tomorrow.");
+    }
+    await deps.blobs.put(textKey(id), request.text, "text/plain; charset=utf-8");
+    await deps.documents.add({
+      id,
+      title: request.title,
+      lang: request.lang,
+      imported: deps.now().toISOString(),
+      words: countWords(request.text),
+      importer: user.id,
+      visibility: request.visibility,
+      ...sharing,
+    });
+  }
+  const record = existing ?? (await deps.documents.get(id));
+  if (!record) throw new Error(`document ${id} vanished after insert`);
+  const queued = await requeue(deps, record, await readStatus(deps.blobs, id), deps.now());
+  return { status: 202, body: summarize(record, queued) };
+}
+
+export async function get(deps: Deps, id: string): Promise<Ok<DocumentSummary> | Failed<404>> {
+  const record = await findDocument(deps, id);
+  if (!record) return noSuchDocument();
+  return ok(await current(deps, record, versionsOf(deps.blobs)));
+}
+
+/** The id is the text's hash, so the text at this URL never changes. */
+export async function text(deps: Deps, id: string): Promise<BlobResult | Failed<404 | 500>> {
+  const record = await findDocument(deps, id);
+  if (!record) return noSuchDocument();
+  const blob = await deps.blobs.get(textKey(record.id));
+  if (!blob) return fail(500, "missing text");
+  return { status: 200, blob, encoding: undefined };
+}
+
+/** An analysis or bundle by name (DocumentSummary.reading): a name is a version, so
+ * what's at the URL never changes, and the reader gets an analysis and bundle that
+ * belong together. */
+export async function part(deps: Deps, id: string, which: "analysis" | "bundle", name: string): Promise<BlobResult | Failed<404>> {
+  const record = await findDocument(deps, id);
+  if (!record || !NAME.test(name)) return noSuchDocument();
+  const blob = await deps.blobs.get(partKey(record.id, which, name));
+  if (!blob) return fail(404, `no ${which} ${name}`);
+  return { status: 200, blob, encoding: PART_ENCODING };
+}
+
+function noSuchDocument(): Failed<404> {
+  return fail(404, "no such document");
+}
+
+async function findDocument(deps: Deps, id: string): Promise<StoredDocument | null> {
+  return ID.test(id) ? deps.documents.get(id) : null;
+}
+
+/** The summary, after queueing the document again if ingest now produces other
+ * versions, or if its job seems lost. */
+async function current(deps: Deps, record: StoredDocument, versions: VersionsOf): Promise<DocumentSummary> {
+  const status = await readStatus(deps.blobs, record.id);
+  const now = deps.now();
+  if (status !== null && (isStuck(status, now) || isOutdated(status, await versions(record.lang)))) {
+    return summarize(record, await requeue(deps, record, status, now));
+  }
+  return summarize(record, status);
+}
+
+/** Queue the document, keeping the last analysis readable until the new one is ready. */
+async function requeue(deps: Deps, record: DocumentRecord, status: Status | null, at: Date): Promise<Status> {
+  const queued: Status = { state: "queued", updated: at.toISOString() };
+  for (const key of ["analyzer", "lexicon", "analysis", "bundle"] as const) {
+    const value = status?.[key];
+    if (value !== undefined) queued[key] = value;
+  }
+  await deps.blobs.put(statusKey(record.id), JSON.stringify(queued), JSON_TYPE);
+  await deps.queue.send({ doc: record.id, lang: record.lang });
+  return queued;
+}
+
+/** A ready document whose analysis or bundle isn't what ingest makes now. Unknown
+ * until ingest has published its versions. */
+export function isOutdated(status: Status, latest: Versions | null): boolean {
+  if (status.state !== "ready" || latest === null) return false;
+  return nameOf(status.analysis) !== latest.analysis || nameOf(status.bundle) !== latest.bundle;
+}
+
+/** Longer than any job takes (a text at the limit takes about a minute on a laptop),
+ * so a document queued or analysing for this long has lost its job. Queueing it again is
+ * safe: ingest reuses blobs that already exist. */
+export const STUCK_AFTER_MS = 30 * 60 * 1000;
+
+export function isStuck(status: Status, at: Date): boolean {
+  if (status.state !== "queued" && status.state !== "analysing") return false;
+  const updated = Date.parse(status.updated);
+  return Number.isNaN(updated) || at.getTime() - updated > STUCK_AFTER_MS;
+}
+
+/** The name in a blob key: doc/{id}/analysis/{name}.json.br -> {name}. */
+export function nameOf(key: string | undefined): string | undefined {
+  return key?.match(/\/([^/]+)\.json\.br$/u)?.[1];
+}
+
+type VersionsOf = (lang: Lang) => Promise<Versions | null>;
+
+/** Each language's versions, read once per request. Null until ingest has started and
+ * published them; documents aren't queued again until then. */
+function versionsOf(blobs: BlobStore): VersionsOf {
+  const read = new Map<Lang, Promise<Versions | null>>();
+  return (lang) => {
+    let versions = read.get(lang);
+    if (versions === undefined) {
+      versions = blobs.get(versionsKey(lang)).then((blob) => (blob ? parseVersions(new TextDecoder().decode(blob.body)) : null));
+      read.set(lang, versions);
+    }
+    return versions;
+  };
+}
+
+/** Malformed JSON, or JSON that doesn't fit the schema, counts as missing. */
+export function parseJson<T extends z.ZodType>(schema: T, raw: string): z.output<T> | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const result = schema.safeParse(value);
+  return result.success ? result.data : null;
+}
+
+export function parseVersions(raw: string): Versions | null {
+  return parseJson(schemas.Versions, raw);
+}
+
+function summarize({ importer: _, licensor: __, ...record }: StoredDocument, status: Status | null): DocumentSummary {
+  const summary: DocumentSummary = { ...record, state: status?.state ?? "failed" };
+  const analysis = nameOf(status?.analysis);
+  const bundle = nameOf(status?.bundle);
+  if (analysis !== undefined && bundle !== undefined) summary.reading = { analysis, bundle };
+  if (status === null) summary.error = "no status";
+  else if (status.error !== undefined) summary.error = status.error;
+  return summary;
+}
+
+export async function readStatus(blobs: BlobStore, id: string): Promise<Status | null> {
+  const blob = await blobs.get(statusKey(id));
+  if (!blob) return null;
+  return parseStatus(new TextDecoder().decode(blob.body));
+}
+
+/** The status blob ingest writes. */
+export function parseStatus(raw: string): Status | null {
+  return parseJson(schemas.Status, raw);
+}
+
+export function countWords(text: string): number {
+  return text.split(/\s+/u).filter((w) => /\p{L}/u.test(w)).length;
+}
+
+const TITLE_WORDS = 6;
+const TITLE_CHARS = 60;
+
+function firstWords(text: string): string {
+  const all = text.trim().split(/\s+/u);
+  const words = all.slice(0, TITLE_WORDS).join(" ");
+  if (words.length > TITLE_CHARS) return `${words.slice(0, TITLE_CHARS)}…`;
+  return all.length > TITLE_WORDS ? `${words}…` : words;
+}

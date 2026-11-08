@@ -62,6 +62,7 @@ export default {
       documents: new D1Documents(env.DB),
       blobs: new R2Blobs(env.BLOBS),
       queue: new CloudflareQueue(env.INGEST),
+      now: () => new Date(),
     });
     return app.fetch(request, env, ctx);
   },

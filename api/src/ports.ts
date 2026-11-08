@@ -98,3 +98,18 @@ export interface Auth {
   handle(request: Request): Promise<Response>;
   user(headers: Headers): Promise<User | null>;
 }
+
+export interface Deps {
+  auth: Auth;
+  users: UserData;
+  lexicon: Lexicon;
+  documents: DocumentStore;
+  blobs: BlobStore;
+  queue: JobQueue;
+  /** New texts accepted per UTC day, across everyone: analysis time is what costs
+   * money. Importing a text that's already here doesn't count. */
+  maxImportsPerDay: number;
+  /** git describe of the build */
+  version: string;
+  now: () => Date;
+}
