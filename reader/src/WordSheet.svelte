@@ -76,13 +76,7 @@
           entry,
           lemmaId: parsedId.success ? parsedId.data : null,
           said: mainPronunciations(pronunciationsOf(bundle, w.token.text, w.token.upos)),
-          lemmaSaid:
-            entry && !sameWord(entry.lemma, w.token.text)
-              ? mainPronunciations(pronunciationsOf(bundle, entry.lemma, entry.upos))
-              : [],
           heard: recordingsOf(bundle, w.token.text, w.token.upos).slice(0, 1),
-          lemmaHeard:
-            entry && !sameWord(entry.lemma, w.token.text) ? recordingsOf(bundle, entry.lemma, entry.upos).slice(0, 1) : [],
           partOfWord,
           role: role && head ? { role, head } : null,
           caseWhy: language.explainCase(tokens, w.index),
@@ -179,21 +173,12 @@
           >
         {/each}
       {/snippet}
-      {#if word.said.length > 0 || word.lemmaSaid.length > 0 || word.heard.length > 0 || word.lemmaHeard.length > 0}
+      {#if word.said.length > 0 || word.heard.length > 0}
         <p class="pronunciation">
           {#each word.said as p (p.ipa)}
             <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
           {/each}
           {@render speakers(word.heard, token.text)}
-          {#if (word.lemmaSaid.length > 0 || word.lemmaHeard.length > 0) && word.entry}
-            <span class="lemma-said"
-              ><span {lang}>{word.entry.lemma}</span>
-              {#each word.lemmaSaid as p (p.ipa)}
-                <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
-              {/each}
-              {@render speakers(word.lemmaHeard, word.entry.lemma)}</span
-            >
-          {/if}
         </p>
       {/if}
       <p class="grammar">
