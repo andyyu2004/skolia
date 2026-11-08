@@ -39,7 +39,7 @@ test("a failed re-analysis keeps the old reading and stops polling", () => {
 
 test("the notice says what's going on", () => {
   assert.deepEqual(notice(null, false, null), { kind: "none" });
-  assert.deepEqual(notice(summary("queued"), false, null), { kind: "waiting" });
+  assert.deepEqual(notice(summary("queued"), false, null), { kind: "queued" });
   assert.deepEqual(notice(summary("analysing"), false, null), { kind: "analysing" });
   assert.deepEqual(notice(summary("queued", OLD), true, null), { kind: "updating" });
   assert.deepEqual(notice(summary("ready", OLD), true, null), { kind: "none" });
@@ -55,9 +55,9 @@ test("failed requests are retried, backing off", () => {
 
 test("library badges", () => {
   assert.equal(badge(summary("ready", OLD)), null);
-  assert.deepEqual(badge(summary("queued")), { text: "waiting…", failed: false });
-  assert.deepEqual(badge(summary("analysing")), { text: "analysing…", failed: false });
-  assert.deepEqual(badge(summary("analysing", OLD)), { text: "updating…", failed: false });
+  assert.deepEqual(badge(summary("queued")), { text: "queued", failed: false });
+  assert.deepEqual(badge(summary("analysing")), { text: "analysing", failed: false });
+  assert.deepEqual(badge(summary("analysing", OLD)), { text: "updating", failed: false });
   assert.deepEqual(badge(summary("failed", OLD)), { text: "failed", failed: true });
 });
 

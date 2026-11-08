@@ -35,11 +35,11 @@ export function isBusy(summary: DocumentSummary): boolean {
   return summary.state === "queued" || summary.state === "analysing";
 }
 
-/** What the page says beside the text. waiting and analysing: the plain text is shown
+/** What the page says beside the text. queued and analysing: the plain text is shown
  * until the first reading is ready. updating: a newer reading is on its way. */
 export type Notice =
   | { kind: "none" }
-  | { kind: "waiting" }
+  | { kind: "queued" }
   | { kind: "analysing" }
   | { kind: "updating" }
   | { kind: "failed"; error: string; previous: boolean }
@@ -54,10 +54,10 @@ export function notice(summary: DocumentSummary | null, showing: boolean, error:
   }
   if (!isBusy(summary)) return { kind: "none" };
   if (showing) return { kind: "updating" };
-  return { kind: summary.state === "analysing" ? "analysing" : "waiting" };
+  return { kind: summary.state === "analysing" ? "analysing" : "queued" };
 }
 
-/** Where the viewer's own document is while it waits, beside Waiting or Updating; null when the
+/** Where the viewer's own document is while it waits, beside Queued or Updating; null when the
  * API didn't say (not theirs, or not waiting). */
 export function queueText(summary: DocumentSummary): string | null {
   const place = summary.queue;
@@ -73,6 +73,6 @@ export function queueText(summary: DocumentSummary): string | null {
 export function badge(summary: DocumentSummary): { text: string; failed: boolean } | null {
   if (summary.state === "failed") return { text: "failed", failed: true };
   if (!isBusy(summary)) return null;
-  if (summary.reading) return { text: "updating…", failed: false };
-  return { text: summary.state === "analysing" ? "analysing…" : "waiting…", failed: false };
+  if (summary.reading) return { text: "updating", failed: false };
+  return { text: summary.state === "analysing" ? "analysing" : "queued", failed: false };
 }
