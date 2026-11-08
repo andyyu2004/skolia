@@ -138,6 +138,21 @@
     return { arc, path, arrow, x: (ax + 2 * cx + bx) / 4, y: (ay + 2 * cy + by) / 4 + 3.5 };
   }
 
+  /** A tree line, as in an org chart: down from under the head's labels to a bar shared
+   * with its other dependents, along it, and down to the dependent's dot. */
+  function elbow(arc: Arc) {
+    const a = centre.get(arc.from);
+    const b = centre.get(arc.to);
+    if (!a || !b) return null;
+    const from = underLabels(a.depth);
+    const to = dotY(b.depth);
+    const bar = from + (dotY(a.depth + 1) - from) / 2;
+    return { arc, path: `M ${a.cx} ${from} V ${bar} H ${b.cx} V ${to}` };
+  }
+
+  /** Tree layout: the sentence again along the bottom, each word under its own column. */
+  const readingRow = $derived(dotY(depth) + DOT + 2 + labels + 34);
+
   const arcsBottom = $derived(top + labels + 4);
   /** Only the selected word's case arcs: drawn for every word they mostly repeat the dependencies. */
   const cases = $derived(
@@ -146,7 +161,16 @@
   const height = $derived(
     shape === "arcs"
       ? arcsBottom + Math.max(0, ...cases.map((c) => c.arc.level)) * LEVEL + PAD
-      : dotY(depth) + DOT + 2 + labels + PAD,
+      : readingRow + 6 + PAD,
+  );
+  const near = (arc: Arc): boolean => selected.has(arc.from) || selected.has(arc.to);
+  /** Highlighted lines last, so where siblings share a stem and bar the highlight shows */
+  const elbows = $derived(
+    shape === "tree"
+      ? tree.arcs
+          .flatMap((a) => elbow(a) ?? [])
+          .sort((x, y) => Number(near(x.arc)) - Number(near(y.arc)))
+      : [],
   );
 
   /** The words the selection is linked to: its head and its dependents. */
@@ -188,16 +212,21 @@
         </g>
       {/each}
     {:else}
-      {#each tree.arcs as arc (arc.to)}
-        {@const a = centre.get(arc.from)}
-        {@const b = centre.get(arc.to)}
-        {#if a && b}
-          <g class="arc" class:near={selected.has(arc.from) || selected.has(arc.to)}>
-            <title>{arc.raw}</title>
-            <path d="M {a.cx} {underLabels(a.depth)} L {b.cx} {dotY(b.depth)}" />
-          </g>
-        {/if}
+      <!-- Each word drops to its place in the sentence along the bottom -->
+      {#each columns.words as word (word.index)}
+        <path class="projection" d="M {word.cx} {underLabels(word.depth)} V {readingRow - 14}" />
       {/each}
+      {#each elbows as { arc, path } (arc.to)}
+        <g class="arc" class:near={near(arc)}>
+          <title>{arc.raw}</title>
+          <path d={path} />
+        </g>
+      {/each}
+      <g class="reading-row" {lang}>
+        {#each columns.words as word (word.index)}
+          <text class:selected={selected.has(word.index)} x={word.cx} y={readingRow}>{word.token.text}</text>
+        {/each}
+      </g>
     {/if}
     {#each cases as { arc, path, arrow, x, y } (arc.to)}
       <g class="arc case">
@@ -225,7 +254,7 @@
       >
         <title>{word.pos}{word.relation ? `, ${word.relation}` : ""}</title>
         <rect x={word.cx - word.width / 2 - 4} y={y + 2} width={word.width + 8} height={labels} rx="5" />
-        {#if shape === "tree"}
+        {#if shape === "tree" && !word.root}
           <circle class="dot" cx={word.cx} cy={dotY(word.depth)} r={DOT} />
         {/if}
         <text class="form" {lang} x={word.cx} y={y + 19} font-size={WORD_SIZE}>{word.token.text}</text>
