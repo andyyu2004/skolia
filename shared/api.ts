@@ -30,8 +30,8 @@ export { MAX_TEXT_LENGTH } from "./schema.gen.ts";
 
 export type ImportRequest = z.input<typeof schemas.ImportRequest>;
 
-/** A change to a document's title, licence, author or source, by its importer. A field
- * left out stays as it is; null clears author or source. */
+/** A change to a document's title, licence, author, source or visibility, by its
+ * importer. A field left out stays as it is; null clears author or source. */
 export type DocumentUpdate = z.input<typeof schemas.DocumentUpdate>;
 
 /** A document's. private: left out of other users' libraries, though anyone with its id
@@ -135,6 +135,8 @@ export interface DocumentSummary {
   source: string | null;
   /** The display name of the user who first imported it. */
   importerName: string;
+  /** Whether the viewer imported it, so can change or delete it. */
+  mine: boolean;
   state: State;
   /** The analysis and bundle to show, by name (GET .../analysis/{name}): the current
    * ones, or while newer ones are queued or analysing (or failed), the previous ones.

@@ -56,7 +56,7 @@ export interface DocumentStore {
   share(id: DocumentId, sharing: Sharing): Promise<void>;
   /** The documents this user imported, public or private. */
   importedBy(importer: UserId): Promise<StoredDocument[]>;
-  update(id: DocumentId, fields: Pick<DocumentRecord, "title" | "licence" | "author" | "source" | "licensor">): Promise<void>;
+  update(id: DocumentId, fields: Pick<DocumentRecord, "title" | "licence" | "author" | "source" | "visibility" | "licensor">): Promise<void>;
   delete(id: DocumentId): Promise<void>;
   /** How many documents were imported at or after this time, by users who aren't system users. */
   countImportedSince(since: Timestamp): Promise<number>;

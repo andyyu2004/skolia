@@ -1,16 +1,8 @@
 <script lang="ts">
   import type { Lang, Licence, User } from "@skolia/shared/api";
-  import {
-    LANGS,
-    LANGUAGE_INFO,
-    LICENCES,
-    LICENCE_INFO,
-    MAX_AUTHOR_LENGTH,
-    MAX_SOURCE_LENGTH,
-    MAX_TEXT_LENGTH,
-    isShareable,
-  } from "@skolia/shared/api";
+  import { LANGS, LANGUAGE_INFO, MAX_TEXT_LENGTH, isShareable } from "@skolia/shared/api";
   import { importDocument, signIn } from "./lib/api.ts";
+  import SourceFields from "./SourceFields.svelte";
 
   let { user }: { user: User | null | undefined } = $props();
 
@@ -77,41 +69,7 @@
       ></textarea>
       <div class="muted small count">{text.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}</div>
 
-      <fieldset>
-        <legend>Where it's from</legend>
-        <label>
-          Licence
-          <select bind:value={licence} required>
-            <option value="" disabled>Choose a licence</option>
-            {#each LICENCES.filter((l) => l !== "unknown") as l (l)}
-              <option value={l}>{LICENCE_INFO[l].label}</option>
-            {/each}
-          </select>
-        </label>
-        <label class="check">
-          <input type="checkbox" bind:checked={ownWork} />
-          I wrote this text
-        </label>
-        {#if !ownWork}
-          <label>
-            <span>Author <span class="muted">(optional)</span></span>
-            <input bind:value={author} maxlength={MAX_AUTHOR_LENGTH} />
-          </label>
-        {/if}
-        <label>
-          <span>Source URL <span class="muted">(optional)</span></span>
-          <input type="url" bind:value={source} placeholder="https://" maxlength={MAX_SOURCE_LENGTH} />
-        </label>
-        <label class="check" class:muted={!shareable}>
-          <input type="checkbox" bind:checked={share} disabled={!shareable} />
-          Share it in Explore. I confirm the text is under the licence above.
-        </label>
-        {#if licence !== "" && !shareable}
-          <p class="muted small">
-            Only public domain and Creative Commons texts can be shared. This one stays private to you.
-          </p>
-        {/if}
-      </fieldset>
+      <SourceFields bind:licence bind:ownWork bind:author bind:source bind:share />
 
       <div class="row end">
         <button type="submit" class="primary" disabled={importing || !ready}>

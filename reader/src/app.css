@@ -89,6 +89,18 @@ button.quiet {
   background: transparent;
 }
 
+button.danger {
+  color: var(--error);
+}
+
+button.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: default;
@@ -397,6 +409,14 @@ textarea {
 
 .upload fieldset p {
   margin: -0.4rem 0 0;
+}
+
+.upload.edit {
+  margin-bottom: 1.5rem;
+}
+
+.upload .spacer {
+  flex: 1;
 }
 
 .credit {

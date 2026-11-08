@@ -108,6 +108,7 @@ export const DocumentUpdate = z.object({
   licence: Licence.optional(),
   author: z.string().trim().max(MAX_AUTHOR_LENGTH).nullable().optional(),
   source: Source.nullable().optional(),
+  visibility: Visibility.optional(),
 });
 
 export const State = z.enum(["queued", "analysing", "ready", "failed"]);

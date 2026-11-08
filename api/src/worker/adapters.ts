@@ -205,11 +205,11 @@ export class D1Documents implements DocumentStore {
 
   async update(
     id: DocumentId,
-    { title, licence, author, source, licensor }: Pick<DocumentRecord, "title" | "licence" | "author" | "source" | "licensor">,
+    { title, licence, author, source, visibility, licensor }: Pick<DocumentRecord, "title" | "licence" | "author" | "source" | "visibility" | "licensor">,
   ): Promise<void> {
     await this.db
-      .prepare("UPDATE document SET title = ?, licence = ?, author = ?, source = ?, licensor = ? WHERE id = ?")
-      .bind(title, licence, author, source, licensor, id)
+      .prepare("UPDATE document SET title = ?, licence = ?, author = ?, source = ?, visibility = ?, licensor = ? WHERE id = ?")
+      .bind(title, licence, author, source, visibility, licensor, id)
       .run();
   }
 

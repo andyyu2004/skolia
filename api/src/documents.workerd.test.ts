@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hc } from "hono/client";
-import { MAX_TEXT_LENGTH, type DocumentList, type DocumentSummary } from "@skolia/shared/api";
+import { MAX_TEXT_LENGTH, type DocumentId, type DocumentSummary, type DocumentUpdate, type ImportRequest } from "@skolia/shared/api";
 import { docId, statusKey, textKey } from "@skolia/shared/keys";
 import type { AppType } from "./app.ts";
-import { ALICE, TEXT, importText, importer, listed, local, putJson, raw, setup, summaryOf, useLocal } from "./testing/app.ts";
+import { ALICE, TEXT, client, importText, importer, listed, local, putJson, setup, summaryOf, useLocal, type App } from "./testing/app.ts";
 import { ORIGIN } from "./testing/harness.ts";
+import { body, expectStatus } from "./testing/responses.ts";
 
 useLocal();
 
@@ -182,50 +183,82 @@ test("a public import of a private text makes it public under the new licence cl
   assert.equal((await summaryOf(app, summary.id)).licence, "public-domain");
 });
 
+/** Imports the text as the signed-in user, with these fields, and returns its id. */
+async function imported(app: App, headers: Headers, text: string, fields: Partial<ImportRequest> = {}): Promise<DocumentId> {
+  return (await body("import", client(app, headers).documents.$post({ json: { text, lang: "pl", ...fields } }), 202)).id;
+}
+
+function patch(app: App, headers: Headers | undefined, id: string, json: DocumentUpdate) {
+  return client(app, headers).documents[":id"].$patch({ param: { id }, json });
+}
+
+function remove(app: App, headers: Headers | undefined, id: string) {
+  return client(app, headers).documents[":id"].$delete({ param: { id } });
+}
+
+function view(app: App, headers: Headers | undefined, id: string) {
+  return client(app, headers).documents[":id"].$get({ param: { id } });
+}
+
 test("the importer changes a document's title, licence, author and source; nobody else can", async () => {
   const app = setup();
-  const { id } = (await (await importText(app, TEXT, { visibility: "public", licence: "cc0", author: "A", source: "https://example.org/a" })).json()) as DocumentSummary;
-  const changed = await raw(app, "PATCH", `/api/documents/${id}`, importer, { title: " Nowy tytuł ", licence: "cc-by", author: null });
-  assert.equal(changed.status, 200);
-  const summary = (await changed.json()) as DocumentSummary;
-  assert.deepEqual(
-    { title: summary.title, licence: summary.licence, author: summary.author, source: summary.source },
-    { title: "Nowy tytuł", licence: "cc-by", author: null, source: "https://example.org/a" },
-  );
-  assert.equal((await summaryOf(app, id)).title, "Nowy tytuł");
-  assert.equal((await raw(app, "PATCH", `/api/documents/${id}`, importer, { licence: "all-rights-reserved" })).status, 400);
-  assert.equal((await raw(app, "PATCH", `/api/documents/${id}`, importer, { title: "  " })).status, 400);
+  const id = await imported(app, importer, TEXT, { visibility: "public", licence: "cc0", author: "A", source: "https://example.org/a" });
+  const { title, licence, author, source } = await body("patch", patch(app, importer, id, { title: " Nowy tytuł ", licence: "cc-by", author: null }));
+  assert.deepEqual({ title, licence, author, source }, { title: "Nowy tytuł", licence: "cc-by", author: null, source: "https://example.org/a" });
+  await expectStatus("unshareable licence", patch(app, importer, id, { licence: "all-rights-reserved" }), 400);
+  await expectStatus("blank title", patch(app, importer, id, { title: "  " }), 400);
   const alice = await local.signIn((await local.signUp(ALICE)).id);
-  assert.equal((await raw(app, "PATCH", `/api/documents/${id}`, alice, { title: "Mój" })).status, 403);
-  assert.equal((await raw(app, "PATCH", `/api/documents/${id}`, undefined, { title: "Mój" })).status, 401);
-  assert.equal((await raw(app, "PATCH", `/api/documents/${"0".repeat(64)}`, importer, { title: "Mój" })).status, 404);
-  assert.equal((await summaryOf(app, id)).title, "Nowy tytuł");
+  await expectStatus("someone else", patch(app, alice, id, { title: "Mój" }), 403);
+  await expectStatus("signed out", patch(app, undefined, id, { title: "Mój" }), 401);
+  await expectStatus("unknown id", patch(app, importer, "0".repeat(64), { title: "Mój" }), 404);
+  assert.equal((await body("get", view(app, undefined, id))).title, "Nowy tytuł");
+});
+
+test("the importer makes a document public under a shareable licence, and private again", async () => {
+  const app = setup();
+  const id = await imported(app, importer, TEXT);
+  const alice = await local.signIn((await local.signUp(ALICE)).id);
+  await expectStatus("public without a licence", patch(app, importer, id, { visibility: "public" }), 400);
+  await expectStatus("public", patch(app, importer, id, { visibility: "public", licence: "cc-by-sa" }), 200);
+  assert.deepEqual(await listed(app, alice), [id]);
+  await expectStatus("private", patch(app, importer, id, { visibility: "private" }), 200);
+  assert.deepEqual(await listed(app, alice), []);
+  assert.equal((await body("get", view(app, importer, id))).licence, "cc-by-sa");
+});
+
+test("a summary says whether the viewer imported it", async () => {
+  const app = setup();
+  const id = await imported(app, importer, TEXT, { visibility: "public", licence: "cc0" });
+  const alice = await local.signIn((await local.signUp(ALICE)).id);
+  const mine = async (headers?: Headers) => (await body("get", view(app, headers, id))).mine;
+  assert.deepEqual([await mine(importer), await mine(alice), await mine()], [true, false, false]);
+  const { documents } = await body("list", client(app, importer).documents.$get());
+  assert.deepEqual(documents.map((d) => d.mine), [true]);
 });
 
 test("the importer deletes a document and everything stored for it; nobody else can", async () => {
   const app = setup();
-  const { id } = (await (await importText(app)).json()) as DocumentSummary;
+  const id = await imported(app, importer, TEXT);
   await local.takeQueued();
   const alice = await local.signIn((await local.signUp(ALICE)).id);
-  assert.equal((await app.request(`${ORIGIN}/api/documents/${id}`, { method: "DELETE", headers: alice })).status, 403);
-  assert.equal((await app.request(`${ORIGIN}/api/documents/${id}`, { method: "DELETE" })).status, 401);
-  assert.equal((await app.request(`${ORIGIN}/api/documents/${id}`, { method: "DELETE", headers: importer })).status, 204);
-  assert.equal((await app.request(`${ORIGIN}/api/documents/${id}`)).status, 404);
-  assert.equal((await app.request(`${ORIGIN}/api/documents/${id}`, { method: "DELETE", headers: importer })).status, 404);
+  await expectStatus("someone else", remove(app, alice, id), 403);
+  await expectStatus("signed out", remove(app, undefined, id), 401);
+  await expectStatus("delete", remove(app, importer, id), 204);
+  await expectStatus("get after delete", view(app, importer, id), 404);
+  await expectStatus("delete again", remove(app, importer, id), 404);
   assert.deepEqual((await local.env.BLOBS.list({ prefix: `doc/${id}/` })).objects, []);
   assert.deepEqual(await listed(app, importer), []);
   // Importing it again starts over
-  assert.equal((await importText(app)).status, 202);
+  await imported(app, importer, TEXT);
   assert.equal((await local.takeQueued()).length, 1);
 });
 
 test("a user's own documents are listed for them, private ones too, and nobody else's", async () => {
   const app = setup();
-  const { id: mine } = (await (await importText(app, "Mój tekst.")).json()) as DocumentSummary;
+  const mine = await imported(app, importer, "Mój tekst.");
   const alice = await local.signIn((await local.signUp(ALICE)).id);
-  await importText(app, "Tekst Alicji.", { headers: alice, visibility: "public", licence: "cc0" });
-  const response = await app.request(`${ORIGIN}/api/me/documents`, { headers: importer });
-  assert.equal(response.status, 200);
-  assert.deepEqual(((await response.json()) as DocumentList).documents.map((d) => d.id), [mine]);
-  assert.equal((await app.request(`${ORIGIN}/api/me/documents`)).status, 401);
+  await imported(app, alice, "Tekst Alicji.", { visibility: "public", licence: "cc0" });
+  const { documents } = await body("mine", client(app, importer).me.documents.$get());
+  assert.deepEqual(documents.map((d) => d.id), [mine]);
+  await expectStatus("signed out", client(app).me.documents.$get(), 401);
 });

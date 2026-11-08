@@ -76,7 +76,9 @@ export function createApp(deps: Deps) {
     .post("/api/documents", limit, zValidator("json", schemas.ImportRequest, badRequest()), (c) =>
       signedIn(c, (user) => documents.importText(deps, user, c.req.valid("json")), "sign in to import"),
     )
-    .get("/api/documents/:id", async (c) => send(c, await documents.get(deps, c.req.param("id"))))
+    .get("/api/documents/:id", async (c) =>
+      send(c, await documents.get(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers))),
+    )
     .patch("/api/documents/:id", zValidator("json", schemas.DocumentUpdate, badRequest()), (c) =>
       signedIn(c, (user) => documents.update(deps, user, c.req.param("id"), c.req.valid("json"))),
     )
