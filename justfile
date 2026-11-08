@@ -40,19 +40,27 @@ dev-api: images env-local
     just lexicon-local
     pnpm exec wrangler dev -c wrangler.jsonc -c wrangler.ingest.jsonc --port 8787
 
-# Load data/lexicon/{lang}.sqlite (DEVELOP.md says how to build them) into wrangler dev's lexicon
-# databases for cards, through {lang}.cards.sqlite, rebuilt when the lexicon is newer; a language
-# without one is left empty, and an unchanged one is skipped
-lexicon-local:
+# An unchanged one is skipped.
+# Load each data/lexicon/{lang}.cards.sqlite into wrangler dev's lexicon databases for cards
+lexicon-local: cards-local
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for lang in {{ langs }}; do
+      cards=data/lexicon/$lang.cards.sqlite
+      [ ! -f "$cards" ] || infra/load-lexicon.py local "$cards"
+    done
+
+# Rebuilt when the lexicon is newer; a language without one has none, so its cards will have no meanings.
+# Build data/lexicon/{lang}.cards.sqlite from {lang}.sqlite (DEVELOP.md says how to build them)
+cards-local:
     #!/usr/bin/env bash
     set -euo pipefail
     for lang in {{ langs }}; do
       lexicon=data/lexicon/$lang.sqlite cards=data/lexicon/$lang.cards.sqlite
       if [ -f "$lexicon" ]; then
         [ "$cards" -nt "$lexicon" ] || (cd analysis && uv run skolia-build-cards "$lang" "../$lexicon" "../$cards")
-        infra/load-lexicon.py local "$cards"
       else
-        echo "lexicon-local: no data/lexicon/$lang.sqlite; cards in $lang will have no meanings" >&2
+        echo "cards-local: no data/lexicon/$lang.sqlite; cards in $lang will have no meanings" >&2
       fi
     done
 
@@ -74,9 +82,9 @@ env-local:
 dev-reader:
     pnpm --filter @skolia/reader dev --port 5173 --strictPort
 
-# Import a text through wrangler dev with fresh local state and wait until it's ready
-e2e: build images
-    api/scripts/e2e.sh
+# The smoke test's API journeys (api/src/smoke.ts) against wrangler dev with fresh local state
+e2e: build images cards-local
+    api/scripts/e2e.sh {{ langs }}
 
 # Build each language's ingest image with Nix and load it into Docker for wrangler dev
 images:
@@ -93,11 +101,11 @@ migrate env:
 
 # The Nix store path must be readable here: Linux, or SKOLIA_NIX=host (analysis/scripts/nix.sh).
 # Load each language's lexicon into its database (staging, production, pr-N or local), from its Nix build for cards.
-# A preview gets English only, for wordfreq's 3,000 most common words (infra/load-lexicon.py --sample).
+# A preview gets each language's entries for wordfreq's 3,000 most common words (infra/load-lexicon.py --sample).
 load-lexicon env:
     #!/usr/bin/env bash
     set -euo pipefail
-    case {{ env }} in pr-*) langs=(en) sample=(--sample 3000) ;; *) langs=({{ langs }}) sample=() ;; esac
+    case {{ env }} in pr-*) langs=({{ langs }}) sample=(--sample 3000) ;; *) langs=({{ langs }}) sample=() ;; esac
     for lang in "${langs[@]}"; do
       out=$(analysis/scripts/nix.sh nix build --no-link --print-out-paths "./analysis#cards-lexicon-$lang")
       infra/load-lexicon.py {{ env }} "$out/$lang.cards.sqlite" "${sample[@]}"
@@ -133,8 +141,9 @@ deploy-web env:
 deploy-ingest env:
     infra/deploy-ingest.sh {{ env }}
 
-# Check the environment serves this checkout's version, then import a new text and wait until it's ready.
-# Writes a new API key for the system user to the environment's D1 first.
+# Check the environment serves this checkout's version, then the API's journeys (api/src/smoke.ts): import
+# a new text and wait until it's ready, auth, the lexicon, cards. Writes new API keys for the system user
+# and a new smoke user to the environment's D1 first (api/src/smoke-key.ts).
 smoke env:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -143,8 +152,8 @@ smoke env:
       staging) url=https://staging.skolia.io ;;
       *) url=$(infra/preview.py url {{ env }}) || exit ;;
     esac
-    SMOKE_API_KEY=$(openssl rand -hex 32)
-    export SMOKE_API_KEY
+    SMOKE_API_KEY=$(openssl rand -hex 32) SMOKE_USER_KEY=$(openssl rand -hex 32)
+    export SMOKE_API_KEY SMOKE_USER_KEY
     dir=$(mktemp -d)
     trap 'rm -rf "$dir"' EXIT
     sql=$dir/smoke-key.sql

@@ -74,8 +74,9 @@ jobs:
       - uses: ./.github/actions/setup
       - run: infra/deploy-ingest.sh ${{ inputs.env }} deploy
 
+  # After the lexicon is loaded: the smoke test's card and lexicon journeys read it
   deploy-web:
-    needs: deploy-ingest
+    needs: [deploy-ingest, load-lexicon]
     runs-on: ubuntu-24.04
     environment: ${{ startsWith(inputs.env, 'pr-') && 'preview' || inputs.env }}
     concurrency:
