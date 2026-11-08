@@ -105,14 +105,22 @@ export const LICENCE_INFO: Record<Licence, LicenceInfo> = {
 export const MAX_AUTHOR_LENGTH = 200;
 export const MAX_SOURCE_LENGTH = 2000;
 
+export type Timestamp = z.output<typeof schemas.Timestamp>;
+export type UserId = z.output<typeof schemas.UserId>;
+export type DocumentId = z.output<typeof schemas.DocumentId>;
+export type CardId = z.output<typeof schemas.CardId>;
+export type ReviewId = z.output<typeof schemas.ReviewId>;
+
+export function timestamp(date: Date): Timestamp {
+  return date.toISOString() as Timestamp;
+}
+
 export interface DocumentSummary {
-  /** sha256 hex of the language and text (docId in keys.ts): the same text imported
-   * twice in one language is one document. */
-  id: string;
+  /** The same text imported twice in one language is one document. */
+  id: DocumentId;
   title: string;
   lang: Lang;
-  /** ISO 8601 time of import. */
-  imported: string;
+  imported: Timestamp;
   words: number;
   visibility: Visibility;
   licence: Licence;
@@ -202,6 +210,8 @@ export type Word = z.output<typeof schemas.Word>;
 export type Settings = z.output<typeof schemas.Settings>;
 
 export type ReviewRequest = z.output<typeof schemas.ReviewRequest>;
+/** What the reader sends: the same, before the API's validation brands its ids. */
+export type ReviewRequestInput = z.input<typeof schemas.ReviewRequest>;
 
 /** A lexicon entry: what a card shows. Its paradigms' forms point into feature sets,
  * ["psa", [50, 51]], which the response carries (FeatureSets). */
@@ -250,12 +260,12 @@ export interface CardCounts {
 
 /** A card after a review: when it's due next. */
 export interface Reviewed {
-  cardId: string;
-  dueAt: string;
+  cardId: CardId;
+  dueAt: Timestamp;
 }
 
 export interface User {
-  id: string;
+  id: UserId;
   name: string;
   email: string;
   image: string | null;

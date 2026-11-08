@@ -2,6 +2,7 @@ import { apiKey } from "@better-auth/api-key";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { APIError } from "better-auth/api";
 import type { User } from "@skolia/shared/api";
+import { UserId } from "@skolia/shared/schemas";
 import type { Auth } from "./ports.ts";
 
 export interface AuthConfig {
@@ -51,7 +52,7 @@ export function toAuth(auth: Pick<ReturnType<typeof betterAuth>, "handler" | "ap
       }
       if (!session) return null;
       const { id, name, email, image } = session.user;
-      return { id, name, email, image: image ?? null } satisfies User;
+      return { id: UserId.parse(id), name, email, image: image ?? null } satisfies User;
     },
   };
 }

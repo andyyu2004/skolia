@@ -5,11 +5,14 @@ import {
   LANGS,
   UPOS,
   type CardCounts,
+  type DocumentId,
   type FeatureSets,
   type Lang,
   type LemmaId,
   type LexiconEntry,
   type Lookup,
+  type Timestamp,
+  type UserId,
   type ReviewRequest, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
 import type { BundleParadigm, IngestJob, Pronunciation, Relation, Sense } from "@skolia/shared/schema";
 import { DocumentRow, LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
@@ -35,31 +38,31 @@ export class DurableObjectUsers implements UserData {
     this.users = users;
   }
 
-  async words(userId: string): Promise<Word[]> {
+  async words(userId: UserId): Promise<Word[]> {
     return this.users.getByName(userId).words();
   }
 
-  async setWord(userId: string, lemmaId: LemmaId, status: WordStatus, now: string): Promise<void> {
+  async setWord(userId: UserId, lemmaId: LemmaId, status: WordStatus, now: Timestamp): Promise<void> {
     await this.users.getByName(userId).setWord(lemmaId, status, now);
   }
 
-  async due(userId: string, lang: Lang, now: string, dayStart: string, limit: number): Promise<DueCards> {
+  async due(userId: UserId, lang: Lang, now: Timestamp, dayStart: Timestamp, limit: number): Promise<DueCards> {
     return this.users.getByName(userId).due(lang, now, dayStart, limit);
   }
 
-  async counts(userId: string, now: string, dayStart: string): Promise<CardCounts[]> {
+  async counts(userId: UserId, now: Timestamp, dayStart: Timestamp): Promise<CardCounts[]> {
     return this.users.getByName(userId).counts(now, dayStart);
   }
 
-  async review(userId: string, request: ReviewRequest, now: string): Promise<ReviewOutcome> {
+  async review(userId: UserId, request: ReviewRequest, now: Timestamp): Promise<ReviewOutcome> {
     return this.users.getByName(userId).review(request, now);
   }
 
-  async settings(userId: string): Promise<Settings> {
+  async settings(userId: UserId): Promise<Settings> {
     return this.users.getByName(userId).settings();
   }
 
-  async setSettings(userId: string, settings: Settings): Promise<void> {
+  async setSettings(userId: UserId, settings: Settings): Promise<void> {
     await this.users.getByName(userId).setSettings(settings);
   }
 }
@@ -146,7 +149,7 @@ export class D1Documents implements DocumentStore {
     this.db = db;
   }
 
-  async list(viewer: string | null): Promise<StoredDocument[]> {
+  async list(viewer: UserId | null): Promise<StoredDocument[]> {
     const { results } = await this.db
       .prepare(`${SELECT_DOCUMENT} WHERE document.visibility = 'public' OR document.importer = ? ORDER BY document.imported DESC`)
       .bind(viewer)
@@ -154,7 +157,7 @@ export class D1Documents implements DocumentStore {
     return results.map((row) => DocumentRow.parse(row));
   }
 
-  async get(id: string): Promise<StoredDocument | null> {
+  async get(id: DocumentId): Promise<StoredDocument | null> {
     const row = await this.db.prepare(`${SELECT_DOCUMENT} WHERE document.id = ?`).bind(id).first();
     return row ? DocumentRow.parse(row) : null;
   }
@@ -168,15 +171,14 @@ export class D1Documents implements DocumentStore {
       .run();
   }
 
-  async share(id: string, { licence, author, source, licensor }: Sharing): Promise<void> {
+  async share(id: DocumentId, { licence, author, source, licensor }: Sharing): Promise<void> {
     await this.db
       .prepare("UPDATE document SET visibility = 'public', licence = ?, author = ?, source = ?, licensor = ? WHERE id = ?")
       .bind(licence, author, source, licensor, id)
       .run();
   }
 
-  async countImportedSince(since: string): Promise<number> {
-    // ISO 8601 UTC strings sort in time order
+  async countImportedSince(since: Timestamp): Promise<number> {
     const row = await this.db.prepare("SELECT COUNT(*) AS n FROM document WHERE imported >= ?").bind(since).first();
     return z.object({ n: z.number() }).parse(row).n;
   }

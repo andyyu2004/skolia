@@ -2,6 +2,7 @@
 // the lexicon entries the cards show.
 import {
   MAX_LOOKUP,
+  timestamp,
   type CardCounts,
   type Due,
   type FeatureSets,
@@ -13,6 +14,7 @@ import {
   type ReviewRequest,
   type ScheduledCard,
   type Settings,
+  type Timestamp,
   type User,
   type Word,
   type WordStatus,
@@ -30,23 +32,23 @@ export async function words(deps: Deps, user: User): Promise<Ok<Word[]>> {
 }
 
 export async function setWord(deps: Deps, user: User, lemmaId: LemmaId, status: WordStatus): Promise<NoContent> {
-  await deps.users.setWord(user.id, lemmaId, status, deps.now().toISOString());
+  await deps.users.setWord(user.id, lemmaId, status, timestamp(deps.now()));
   return NO_CONTENT;
 }
 
 /** dayStart: when the user's day started, any ISO time; today's new cards count from it. */
 export async function counts(deps: Deps, user: User, dayStart: string): Promise<Ok<CardCounts[]>> {
-  return ok(await deps.users.counts(user.id, deps.now().toISOString(), stored(dayStart)));
+  return ok(await deps.users.counts(user.id, timestamp(deps.now()), stored(dayStart)));
 }
 
 export async function due(deps: Deps, user: User, lang: Lang, dayStart: string): Promise<Ok<Due>> {
-  const { cards, newLeft } = await deps.users.due(user.id, lang, deps.now().toISOString(), stored(dayStart), MAX_DUE);
+  const { cards, newLeft } = await deps.users.due(user.id, lang, timestamp(deps.now()), stored(dayStart), MAX_DUE);
   return ok({ ...(await withEntries(deps.lexicon, lang, cards)), newLeft });
 }
 
 export async function review(deps: Deps, user: User, request: ReviewRequest): Promise<Ok<Reviewed> | Failed<400 | 404 | 409>> {
   if (Date.parse(request.at) > deps.now().getTime() + MAX_CLOCK_SKEW_MS) return fail(400, "review is in the future");
-  const outcome = await deps.users.review(user.id, request, deps.now().toISOString());
+  const outcome = await deps.users.review(user.id, request, timestamp(deps.now()));
   switch (outcome.kind) {
     case "reviewed":
       return ok({ cardId: outcome.cardId, dueAt: outcome.dueAt });
@@ -72,9 +74,8 @@ export async function lookUp(deps: Deps, ids: LemmaId[]): Promise<Ok<Lookup>> {
   return ok(await deps.lexicon.entries(ids));
 }
 
-/** Stored times are toISOString()'s, compared as strings. */
-function stored(time: string): string {
-  return new Date(time).toISOString();
+function stored(time: string): Timestamp {
+  return timestamp(new Date(time));
 }
 
 /** The cards with their lexicon entries, and the feature sets the entries' paradigms use,

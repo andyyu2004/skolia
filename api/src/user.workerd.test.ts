@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
+import type { Timestamp } from "@skolia/shared/api";
+import * as schemas from "@skolia/shared/schemas";
 import { startLocal, type Local } from "./testing/harness.ts";
 import { MIGRATIONS } from "./user/migrations/index.ts";
 import { checksum } from "./user/migrator.ts";
@@ -24,8 +26,8 @@ async function tables(name: string): Promise<string[]> {
 
 test("each user's Durable Object keeps its own words", async () => {
   const alice = local.env.USER.getByName("alice");
-  await alice.setWord("pl:pies:NOUN", "active", "2026-11-06T00:00:00.000Z");
-  await alice.setWord("pl:pies:NOUN", "known", "2026-11-06T01:00:00.000Z");
+  await alice.setWord("pl:pies:NOUN", "active", schemas.Timestamp.parse("2026-11-06T00:00:00.000Z"));
+  await alice.setWord("pl:pies:NOUN", "known", schemas.Timestamp.parse("2026-11-06T01:00:00.000Z"));
   assert.deepEqual(await alice.words(), [
     { lemmaId: "pl:pies:NOUN", status: "known", updated: "2026-11-06T01:00:00.000Z", mature: false },
   ]);
@@ -102,9 +104,10 @@ test("the tables are STRICT, the user's are WITHOUT ROWID, and timestamps must b
       { name: "word", strict: 1, wr: 1 },
     ],
   );
-  await heidi.setWord("pl:pies:NOUN", "known", "2026-11-07T00:00:00.000Z");
+  await heidi.setWord("pl:pies:NOUN", "known", schemas.Timestamp.parse("2026-11-07T00:00:00.000Z"));
   for (const updated of ["2026-11-07T00:00:00Z", "2026-11-07 00:00:00", "yesterday"]) {
-    await assert.rejects(heidi.setWord("pl:kot:NOUN", "known", updated));
+    // Past the types, to check the table refuses them
+    await assert.rejects(heidi.setWord("pl:kot:NOUN", "known", updated as Timestamp));
   }
   await assert.rejects(storage.exec("insert into word values ('pl:kot:NOUN', x'00', '2026-11-07T00:00:00.000Z')"), /cannot store BLOB/);
   assert.equal((await heidi.words()).length, 1);
@@ -112,7 +115,7 @@ test("the tables are STRICT, the user's are WITHOUT ROWID, and timestamps must b
 
 test("an active word's cards are stored with their ts-fsrs state, which gives their due time", async () => {
   const ivan = local.env.USER.getByName("ivan");
-  await ivan.setWord("pl:pies:NOUN", "active", "2026-11-07T00:00:00.000Z");
+  await ivan.setWord("pl:pies:NOUN", "active", schemas.Timestamp.parse("2026-11-07T00:00:00.000Z"));
   const storage = await storageOf("ivan");
   const rows = await storage.exec<{ kind: string; due_at: string; schedule_status: string; fsrs: string }>(
     "select kind, due_at, schedule_status, fsrs from card order by kind",

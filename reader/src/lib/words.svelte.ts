@@ -1,6 +1,6 @@
 // The signed-in user's word statuses. App loads them when someone signs in and clears them
 // on sign-out; the word sheet reads and changes them.
-import type { LemmaId, Word, WordStatus } from "@skolia/shared/api";
+import { timestamp, type LemmaId, type Word, type WordStatus } from "@skolia/shared/api";
 import { listWords, setWord } from "./api.ts";
 
 /** byId is null while loading or when signed out. */
@@ -24,5 +24,5 @@ export async function setStatus(lemmaId: LemmaId, status: WordStatus): Promise<v
   await setWord(lemmaId, status);
   if (words.byId === null) return;
   const mature = words.byId[lemmaId]?.mature ?? false;
-  words.byId[lemmaId] = { lemmaId, status, mature, updated: new Date().toISOString() };
+  words.byId[lemmaId] = { lemmaId, status, mature, updated: timestamp(new Date()) };
 }

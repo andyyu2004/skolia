@@ -3,22 +3,22 @@
 // versions_key, analysis_key, bundle_key).
 // Ingest writes the analysis and bundle under the same prefix; the API finds their
 // keys in the status.
-import type { Lang } from "./api.ts";
+import type { DocumentId, Lang } from "./api.ts";
 
-export function docPrefix(doc: string): string {
+export function docPrefix(doc: DocumentId): string {
   return `doc/${doc}/`;
 }
 
-export function textKey(doc: string): string {
+export function textKey(doc: DocumentId): string {
   return `${docPrefix(doc)}text.txt`;
 }
 
-export function statusKey(doc: string): string {
+export function statusKey(doc: DocumentId): string {
   return `${docPrefix(doc)}status.json`;
 }
 
 /** An analysis or bundle by name (Versions.analysis, Versions.bundle). */
-export function partKey(doc: string, part: "analysis" | "bundle", name: string): string {
+export function partKey(doc: DocumentId, part: "analysis" | "bundle", name: string): string {
   return `${docPrefix(doc)}${part}/${name}.json.br`;
 }
 
@@ -34,7 +34,7 @@ export function versionsKey(lang: Lang): string {
 
 /** Document id: sha256 hex of the UTF-8 "{lang}\n{text}", as ingest's doc_id. The same
  * text imported in two languages is two documents. */
-export async function docId(lang: Lang, text: string): Promise<string> {
+export async function docId(lang: Lang, text: string): Promise<DocumentId> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${lang}\n${text}`));
-  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("") as DocumentId;
 }

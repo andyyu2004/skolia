@@ -1,14 +1,13 @@
 // Documents: importing a text, listing and opening them, and their text, analysis and
 // bundle, queueing a document again when ingest makes other versions or its job is lost.
 import * as z from "zod";
-import type { DocumentList, DocumentSummary, Lang, User } from "@skolia/shared/api";
+import { timestamp, type DocumentId, type DocumentList, type DocumentSummary, type Lang, type User } from "@skolia/shared/api";
 import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { Status, Versions } from "@skolia/shared/schema";
 import * as schemas from "@skolia/shared/schemas";
 import type { BlobStore, Deps, DocumentRecord, Sharing, StoredDocument } from "../ports.ts";
 import { fail, ok, type BlobResult, type Failed, type Json, type Ok } from "./result.ts";
 
-const ID = /^[0-9a-f]{64}$/;
 const NAME = /^[a-z0-9-]{1,64}$/;
 const MAX_TITLE_LENGTH = 200;
 const JSON_TYPE = "application/json";
@@ -43,8 +42,9 @@ export async function importText(
     const summary = await current(deps, existing, versionsOf(deps.blobs));
     if (summary.state !== "failed") return ok(summary);
   } else {
-    const today = deps.now().toISOString().slice(0, 10);
-    if ((await deps.documents.countImportedSince(today)) >= deps.maxImportsPerDay) {
+    const today = new Date(deps.now());
+    today.setUTCHours(0, 0, 0, 0);
+    if ((await deps.documents.countImportedSince(timestamp(today))) >= deps.maxImportsPerDay) {
       return fail(429, "Today's imports are used up. Try again tomorrow.");
     }
     await deps.blobs.put(textKey(id), request.text, "text/plain; charset=utf-8");
@@ -52,7 +52,7 @@ export async function importText(
       id,
       title: request.title,
       lang: request.lang,
-      imported: deps.now().toISOString(),
+      imported: timestamp(deps.now()),
       words: countWords(request.text),
       importer: user.id,
       visibility: request.visibility,
@@ -96,7 +96,8 @@ function noSuchDocument(): Failed<404> {
 }
 
 async function findDocument(deps: Deps, id: string): Promise<StoredDocument | null> {
-  return ID.test(id) ? deps.documents.get(id) : null;
+  const parsed = schemas.DocumentId.safeParse(id);
+  return parsed.success ? deps.documents.get(parsed.data) : null;
 }
 
 /** The summary, after queueing the document again if ingest now produces other
@@ -112,7 +113,7 @@ async function current(deps: Deps, record: StoredDocument, versions: VersionsOf)
 
 /** Queue the document, keeping the last analysis readable until the new one is ready. */
 async function requeue(deps: Deps, record: DocumentRecord, status: Status | null, at: Date): Promise<Status> {
-  const queued: Status = { state: "queued", updated: at.toISOString() };
+  const queued: Status = { state: "queued", updated: timestamp(at) };
   for (const key of ["analyzer", "lexicon", "analysis", "bundle"] as const) {
     const value = status?.[key];
     if (value !== undefined) queued[key] = value;
@@ -187,7 +188,7 @@ function summarize({ importer: _, licensor: __, ...record }: StoredDocument, sta
   return summary;
 }
 
-export async function readStatus(blobs: BlobStore, id: string): Promise<Status | null> {
+export async function readStatus(blobs: BlobStore, id: DocumentId): Promise<Status | null> {
   const blob = await blobs.get(statusKey(id));
   if (!blob) return null;
   return parseStatus(new TextDecoder().decode(blob.body));

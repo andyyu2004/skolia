@@ -19,25 +19,44 @@ import type { Status as StatusType, Versions as VersionsType } from "./schema.ge
 
 export const Lang = z.enum(LANGS);
 
+/** A time as toISOString() writes it, 2026-11-08T10:00:00.000Z: what's stored, and
+ * compared as strings, which sort in time order. timestamp() makes one. */
+export const Timestamp = z.iso.datetime({ precision: 3 }).brand<"Timestamp">();
+
+/** Better Auth's user id. */
+export const UserId = z.string().min(1).brand<"UserId">();
+
+/** sha256 hex of a document's language and text (docId in keys.ts). */
+export const DocumentId = z
+  .string()
+  .regex(/^[0-9a-f]{64}$/u)
+  .brand<"DocumentId">();
+
+export const CardId = z.uuid().brand<"CardId">();
+
+/** Made by the client, so a retried review isn't counted twice. */
+export const ReviewId = z.uuid().brand<"ReviewId">();
+
 export const Visibility = z.enum(VISIBILITIES);
 
 export const LemmaId = z.templateLiteral([Lang, ":", z.string().min(1).max(MAX_LEMMA_LENGTH), ":", z.enum(UPOS)]);
 
 export const WordStatus = z.enum(WORD_STATUSES);
 
-export const Word = z.object({ lemmaId: LemmaId, status: WordStatus, updated: z.string(), mature: z.boolean() });
+export const Word = z.object({ lemmaId: LemmaId, status: WordStatus, updated: Timestamp, mature: z.boolean() });
 
 export const SetWord = z.object({ status: WordStatus });
 
 export const Settings = z.object({ newPerDay: z.number().int().min(0).max(MAX_NEW_PER_DAY) });
 
+/** An ISO 8601 UTC time as a client sends it, any precision; timestamp(new Date(t)) for
+ * the stored form. */
 const IsoTime = z.iso.datetime();
 
-/** id: made by the client, so a retried review isn't counted twice. at: when it was
- * answered. */
+/** at: when it was answered. */
 export const ReviewRequest = z.object({
-  id: z.uuid(),
-  cardId: z.uuid(),
+  id: ReviewId,
+  cardId: CardId,
   rating: z.union(RATINGS.map((r) => z.literal(r))),
   at: IsoTime,
 });
@@ -47,11 +66,11 @@ export const CountsQuery = z.object({ dayStart: IsoTime });
 export const DueQuery = z.object({ lang: Lang, dayStart: IsoTime });
 
 export const ScheduledCard = z.object({
-  id: z.uuid(),
+  id: CardId,
   lemmaId: LemmaId,
   kind: z.enum(CARD_KINDS),
   isNew: z.boolean(),
-  dueAt: z.string(),
+  dueAt: Timestamp,
 });
 
 export const LookupRequest = z.object({ ids: z.array(LemmaId).min(1).max(MAX_LOOKUP) });
@@ -101,16 +120,16 @@ export const Versions = z.object({
 }) satisfies z.ZodType<VersionsType>;
 
 export const DocumentRow = z.object({
-  id: z.string(),
+  id: DocumentId,
   title: z.string(),
   lang: Lang,
-  imported: z.string(),
+  imported: Timestamp,
   words: z.number().int(),
-  importer: z.string(),
+  importer: UserId,
   visibility: Visibility,
   licence: Licence,
   author: z.string().nullable(),
   source: z.string().nullable(),
-  licensor: z.string(),
+  licensor: UserId,
   importerName: z.string(),
 });

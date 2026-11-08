@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { lemmaParam, type CardCounts, type Due, type Lang, type LemmaId, type Lookup, type Rating, type Reviewed, type ReviewRequest, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
+import { lemmaParam, type CardCounts, type Due, type Lang, type LemmaId, type Lookup, type Rating, type Reviewed, type ReviewRequestInput, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
 import { ALICE, NOW, client, loadLexicon, local, raw, setup, useLocal, type App } from "./testing/app.ts";
 import { ORIGIN } from "./testing/harness.ts";
 
@@ -35,7 +35,7 @@ function mark(app: App, headers: Headers | undefined, lemmaId: LemmaId, status: 
   return client(app, headers).me.words[":lemmaId"].$put({ param: { lemmaId: lemmaParam(lemmaId) }, json: { status } });
 }
 
-function review(app: App, headers: Headers | undefined, json: ReviewRequest) {
+function review(app: App, headers: Headers | undefined, json: ReviewRequestInput) {
   return client(app, headers).me.reviews.$post({ json });
 }
 
@@ -47,7 +47,7 @@ function lookUp(app: App, ids: LemmaId[]) {
   return client(app).lexicon.entries.$post({ json: { ids } });
 }
 
-function answer(cardId: string, rating: Rating, at = NOW): ReviewRequest {
+function answer(cardId: string, rating: Rating, at = NOW): ReviewRequestInput {
   return { id: crypto.randomUUID(), cardId, rating, at };
 }
 

@@ -1,7 +1,7 @@
 import { after, before, beforeEach } from "node:test";
 import { brotliCompressSync } from "node:zlib";
 import { hc } from "hono/client";
-import type { DocumentList, DocumentSummary } from "@skolia/shared/api";
+import type { DocumentId, DocumentList, DocumentSummary } from "@skolia/shared/api";
 import { partKey, statusKey, versionsKey } from "@skolia/shared/keys";
 import { createApp, type AppType } from "../app.ts";
 import type { Auth } from "../ports.ts";
@@ -120,7 +120,7 @@ export async function listed(app: App, headers: HeadersInit = {}): Promise<strin
 }
 
 /** A ready document whose analysis and bundle were made by version v, as ingest leaves it. */
-export async function readyAt(id: string, v: string, state = "ready"): Promise<void> {
+export async function readyAt(id: DocumentId, v: string, state = "ready"): Promise<void> {
   const blobs = new R2Blobs(local.env.BLOBS);
   for (const [part, name] of [["analysis", `s2-a${v}`], ["bundle", `b1-a${v}-l1`]] as const) {
     await blobs.put(partKey(id, part, name), new Uint8Array(brotliCompressSync(`{"${part}":"${v}"}`)), "application/json");

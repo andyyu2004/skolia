@@ -3,6 +3,9 @@
 // tests.
 import type {
   CardCounts,
+  DocumentId,
+  Timestamp,
+  UserId,
   Lang,
   LemmaId,
   Lookup,
@@ -20,19 +23,19 @@ import type { IngestJob } from "@skolia/shared/schema";
 
 /** A document's metadata, owned by the API. Its state lives in the status blob. */
 export interface DocumentRecord {
-  id: string;
+  id: DocumentId;
   title: string;
   lang: Lang;
-  imported: string;
+  imported: Timestamp;
   words: number;
   /** The user who first imported it. */
-  importer: string;
+  importer: UserId;
   visibility: Visibility;
   licence: Licence;
   author: string | null;
   source: string | null;
   /** The user who claimed the licence: the importer, or whoever made it public. */
-  licensor: string;
+  licensor: UserId;
 }
 
 /** A licence claim, which makes a private document public. */
@@ -45,14 +48,14 @@ export interface StoredDocument extends DocumentRecord {
 
 export interface DocumentStore {
   /** Public documents, and the viewer's own private ones. */
-  list(viewer: string | null): Promise<StoredDocument[]>;
-  get(id: string): Promise<StoredDocument | null>;
+  list(viewer: UserId | null): Promise<StoredDocument[]>;
+  get(id: DocumentId): Promise<StoredDocument | null>;
   /** Insert, or keep the existing record if the id is already there. */
   add(record: DocumentRecord): Promise<void>;
   /** Make it public under this licence claim. */
-  share(id: string, sharing: Sharing): Promise<void>;
-  /** How many documents were imported at or after this ISO time. */
-  countImportedSince(since: string): Promise<number>;
+  share(id: DocumentId, sharing: Sharing): Promise<void>;
+  /** How many documents were imported at or after this time. */
+  countImportedSince(since: Timestamp): Promise<number>;
 }
 
 export interface StoredBlob {
@@ -78,15 +81,17 @@ export interface DueCards {
  * id-reused: the review id is another card's. */
 export type ReviewOutcome = ({ kind: "reviewed" } & Reviewed) | { kind: "no-card" } | { kind: "out-of-order" } | { kind: "id-reused" };
 
-/** A user's words, cards and settings, in their own Durable Object. */
+/** A user's words, cards and settings, in their own Durable Object. now: the request's
+ * time by the API's clock (Deps.now), which the tests set. dayStart: when the user's
+ * day started in their time zone; today's new cards count from it. */
 export interface UserData {
-  words(userId: string): Promise<Word[]>;
-  setWord(userId: string, lemmaId: LemmaId, status: WordStatus, now: string): Promise<void>;
-  due(userId: string, lang: Lang, now: string, dayStart: string, limit: number): Promise<DueCards>;
-  counts(userId: string, now: string, dayStart: string): Promise<CardCounts[]>;
-  review(userId: string, request: ReviewRequest, now: string): Promise<ReviewOutcome>;
-  settings(userId: string): Promise<Settings>;
-  setSettings(userId: string, settings: Settings): Promise<void>;
+  words(userId: UserId): Promise<Word[]>;
+  setWord(userId: UserId, lemmaId: LemmaId, status: WordStatus, now: Timestamp): Promise<void>;
+  due(userId: UserId, lang: Lang, now: Timestamp, dayStart: Timestamp, limit: number): Promise<DueCards>;
+  counts(userId: UserId, now: Timestamp, dayStart: Timestamp): Promise<CardCounts[]>;
+  review(userId: UserId, request: ReviewRequest, now: Timestamp): Promise<ReviewOutcome>;
+  settings(userId: UserId): Promise<Settings>;
+  setSettings(userId: UserId, settings: Settings): Promise<void>;
 }
 
 /** The lexicon, with the feature sets its entries' paradigms use. Ids it doesn't have are left out. */

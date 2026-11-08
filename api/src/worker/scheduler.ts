@@ -1,6 +1,6 @@
 // ts-fsrs, pinned in package.json: docs/adr/0001-flashcards.md says what was checked.
 import { DefaultScheduler, type DefaultSchedulerCard } from "ts-fsrs";
-import type { Rating } from "@skolia/shared/api";
+import type { CardId, Rating } from "@skolia/shared/api";
 
 export type FsrsCard = DefaultSchedulerCard;
 
@@ -14,7 +14,7 @@ export function fsrs(): Promise<DefaultScheduler> {
 }
 
 /** A new card under our id, which also seeds its fuzz. */
-export function newCard(s: DefaultScheduler, id: string, now: Date): FsrsCard {
+export function newCard(s: DefaultScheduler, id: CardId, now: Date): FsrsCard {
   return s.newCard({ now, cardId: id });
 }
 
