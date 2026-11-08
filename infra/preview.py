@@ -27,6 +27,9 @@ type JsonObject = dict[str, Json]
 API = Path(__file__).resolve().parent.parent / "api"
 # The end-to-end tests take one per language, so ten deploys a day
 MAX_IMPORTS_PER_DAY = "20"
+# A preview's only jobs are its deploy's (the end-to-end tests, then the seed), so its
+# containers needn't wait long for more
+PREVIEW_SLEEP_AFTER = "10s"
 
 
 def as_object(value: Json, what: str) -> JsonObject:
@@ -91,7 +94,9 @@ def config(env: str) -> None:
     web["workers_dev"] = True
     web["preview_urls"] = False
     web["vars"] = {**as_object(web.get("vars"), "vars"), "MAX_IMPORTS_PER_DAY": MAX_IMPORTS_PER_DAY, "BASE_URL": url(env)}
-    configs = {f"wrangler.{env}.json": web, f"wrangler.ingest.{env}.json": promote("wrangler.ingest.jsonc", env)}
+    ingest = promote("wrangler.ingest.jsonc", env)
+    ingest["vars"] = {**as_object(ingest.get("vars"), "vars"), "SLEEP_AFTER": PREVIEW_SLEEP_AFTER}
+    configs = {f"wrangler.{env}.json": web, f"wrangler.ingest.{env}.json": ingest}
     for file, content in configs.items():
         text = json.dumps(content, indent=2)
         if "staging" in text:

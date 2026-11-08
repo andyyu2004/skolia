@@ -53,7 +53,9 @@ def pipeline(code: str, data: Path) -> Pipeline:
 
 def stop_on_sigterm(_signum: int, _frame: FrameType | None) -> None:
     log.info("SIGTERM: stopping")
-    sys.exit(0)
+    # Skips the interpreter's teardown, which took up to 5.6 s; a stopped container's
+    # jobs are lost either way
+    os._exit(0)
 
 
 def job_source() -> HttpJobs:
