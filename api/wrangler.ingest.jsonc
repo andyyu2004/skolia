@@ -25,7 +25,8 @@
       "observability": { "logs": { "enabled": true } },
       "images": {
         "pl": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "pl" } },
-        "en": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "en" } }
+        "en": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "en" } },
+        "fr": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "fr" } }
       }
     }
   ],
@@ -59,7 +60,8 @@
           "observability": { "logs": { "enabled": true } },
           "images": {
             "pl": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "pl" } },
-            "en": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "en" } }
+            "en": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "en" } },
+            "fr": { "dockerfile": "../analysis/image/Dockerfile", "build_vars": { "SKOLIA_LANG": "fr" } }
           }
         }
       ],

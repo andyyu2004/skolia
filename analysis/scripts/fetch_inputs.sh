@@ -10,10 +10,11 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 nix_sh=$root/analysis/scripts/nix.sh
 mkdir -p "$root/data/inputs"
 
-[ $# -gt 0 ] || set -- en pl
+[ $# -gt 0 ] || set -- en fr pl
 for lang in "$@"; do
   case $lang in
     en) names=" kaikki.org-dictionary-English.jsonl " ;;
+    fr) names=" kaikki.org-dictionary-French.jsonl " ;;
     pl) names=" kaikki.org-dictionary-Polish.jsonl walenty_20180630-text.zip " ;;
     *) echo "fetch_inputs.sh: unknown language $lang" >&2; exit 2 ;;
   esac

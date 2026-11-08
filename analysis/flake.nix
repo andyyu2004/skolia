@@ -130,25 +130,53 @@
             "sha256-68UE7QouKQsWJ6Qqums8FjEKdT5HCCb6z+RIGwehqQ8="
           )
         ];
+        # The CamemBERT Stanza's French models are built on, the revision and files
+        # Stanza 1.15.0 loaded when they were scored (EVALUATION.md)
+        fr = [
+          (hfModel "camembert-large" "camembert/camembert-large"
+            "c6e4955c7654931d38dd1b103e8a83fc69e46b53"
+            [
+              "added_tokens.json"
+              "config.json"
+              "model.safetensors"
+              "sentencepiece.bpe.model"
+              "special_tokens_map.json"
+              "tokenizer.json"
+              "tokenizer_config.json"
+            ]
+            "sha256-Fo8HSG6OTLS/IZyDshh1UMdlUh6aO5YjLlNV7u0B8VA="
+          )
+        ];
       };
       # Stanza's default_accurate models for stanza 1.15.0 (uv.lock), which it finds
-      # through resources.json
-      stanzaModels = fetched "stanza-en" "sha256-CF2X1eOj/xrBEmj1g7yvokAgvpNVCgcighkYFdIib0U=" ''
-        python ${./scripts/fetch_stanza.py} $out en 4003b0a5a175588fd8f6cb17fde741350f5fd725 \
-          tokenize/combined_charlm.pt mwt/combined.pt lemma/combined_charlm.pt \
-          pos/combined_electra-large.pt depparse/combined_electra-large.pt \
-          pretrain/conll17.pt forward_charlm/1billion.pt backward_charlm/1billion.pt
-      '';
-      stanzaResources = pkgs.runCommand "stanza-resources" { } ''
-        mkdir $out
-        ln -s ${stanzaModels}/en $out/en
-        ln -s ${
-          pkgs.fetchurl {
-            url = "https://raw.githubusercontent.com/stanfordnlp/stanza-resources/main/resources_1.15.0.json";
-            sha256 = "ed01f17735f351e8f08fda331c3208091657d79420a2a10b4f9cfbc685f3d65d";
-          }
-        } $out/resources.json
-      '';
+      # through resources.json. French's revision is stanza-fr's v1.15.0 tag, where
+      # Stanza 1.15.0 downloads from.
+      stanzaModels = {
+        en = fetched "stanza-en" "sha256-CF2X1eOj/xrBEmj1g7yvokAgvpNVCgcighkYFdIib0U=" ''
+          python ${./scripts/fetch_stanza.py} $out en 4003b0a5a175588fd8f6cb17fde741350f5fd725 \
+            tokenize/combined_charlm.pt mwt/combined.pt lemma/combined_charlm.pt \
+            pos/combined_electra-large.pt depparse/combined_electra-large.pt \
+            pretrain/conll17.pt forward_charlm/1billion.pt backward_charlm/1billion.pt
+        '';
+        fr = fetched "stanza-fr" "sha256-i8LqEOaRCGOun137tZl/MaVWqZt0ppeW8ui29igLIqo=" ''
+          python ${./scripts/fetch_stanza.py} $out fr 8fe630b3494cb98b6eb4374ede125b241d74cd94 \
+            tokenize/combined_charlm.pt mwt/combined.pt lemma/combined_charlm.pt \
+            pos/combined_camembert-large.pt depparse/combined_camembert-large.pt \
+            pretrain/conll17.pt forward_charlm/newswiki.pt backward_charlm/newswiki.pt
+        '';
+      };
+      stanzaResources =
+        lang:
+        pkgs.runCommand "stanza-resources" { } ''
+          mkdir $out
+          ln -s ${stanzaModels.${lang}}/${lang} $out/${lang}
+          ln -s ${
+            pkgs.fetchurl {
+              url = "https://raw.githubusercontent.com/stanfordnlp/stanza-resources/main/resources_1.15.0.json";
+              sha256 = "ed01f17735f351e8f08fda331c3208091657d79420a2a10b4f9cfbc685f3d65d";
+            }
+          } $out/resources.json
+        '';
       # A language's models merged into one Hub cache
       hub =
         lang:
@@ -179,6 +207,10 @@
         en = pkgs.runCommand "skolia-lexicon-en" { nativeBuildInputs = [ venv ]; } ''
           mkdir $out
           skolia-build-lexicon en ${input."kaikki.org-dictionary-English.jsonl"} $out/en.sqlite
+        '';
+        fr = pkgs.runCommand "skolia-lexicon-fr" { nativeBuildInputs = [ venv ]; } ''
+          mkdir $out
+          skolia-build-lexicon fr ${input."kaikki.org-dictionary-French.jsonl"} $out/fr.sqlite
         '';
         pl =
           pkgs.runCommand "skolia-lexicon-pl"
@@ -218,7 +250,9 @@
           SKOLIA_LANGS = lang;
           SKOLIA_DATA = "${lexicon.${lang}}";
         }
-        // lib.optionalAttrs (lang == "en") { STANZA_RESOURCES_DIR = "${stanzaResources}"; };
+        // lib.optionalAttrs (stanzaModels ? ${lang}) {
+          STANZA_RESOURCES_DIR = "${stanzaResources lang}";
+        };
 
       # One layer per model (Cloudflare's registry times out committing a 3 GB layer),
       # PyTorch, the other dependencies and the lexicon; the code and the rest on top
@@ -240,7 +274,7 @@
           name = "skolia-ingest-${lang}";
           layers =
             map (m: n2c.nix2container.buildLayer { deps = [ m ]; }) (
-              hfModels.${lang} ++ lib.optional (lang == "en") stanzaModels
+              hfModels.${lang} ++ lib.optional (stanzaModels ? ${lang}) stanzaModels.${lang}
             )
             ++ [
               torchLayer
@@ -292,6 +326,7 @@
           map (lang: lib.nameValuePair "${f.prefix}-${lang}" (f.value lang)) [
             "pl"
             "en"
+            "fr"
           ]
         );
       packages =
@@ -328,6 +363,6 @@
     in
     {
       packages = lib.genAttrs [ "x86_64-linux" "aarch64-darwin" ] packages;
-      checks.${system} = lib.genAttrs [ "pl" "en" ] check;
+      checks.${system} = lib.genAttrs [ "pl" "en" "fr" ] check;
     };
 }
