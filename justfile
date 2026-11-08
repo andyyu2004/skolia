@@ -5,7 +5,7 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # Each has its own lexicon database, LEXICON_{LANG} (shared/api.ts LANGS)
-langs := "en pl"
+langs := "en fr pl"
 
 _default:
     @just --list

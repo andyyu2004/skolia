@@ -16,5 +16,5 @@ locals {
   # names the ingest Worker the same way for its "staging" environment.
   suffix = var.env == "production" ? "" : "-${var.env}"
   # shared/api.ts LANGS
-  langs = ["en", "pl"]
+  langs = ["en", "fr", "pl"]
 }

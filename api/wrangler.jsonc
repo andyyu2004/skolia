@@ -34,6 +34,11 @@
       "migrations_dir": "lexicon-migrations"
     },
     {
+      "binding": "LEXICON_FR",
+      "database_name": "skolia-lexicon-fr",
+      "migrations_dir": "lexicon-migrations"
+    },
+    {
       "binding": "LEXICON_PL",
       "database_name": "skolia-lexicon-pl",
       "migrations_dir": "lexicon-migrations"
@@ -82,6 +87,11 @@
         {
           "binding": "LEXICON_EN",
           "database_name": "skolia-lexicon-en-staging",
+          "migrations_dir": "lexicon-migrations"
+        },
+        {
+          "binding": "LEXICON_FR",
+          "database_name": "skolia-lexicon-fr-staging",
           "migrations_dir": "lexicon-migrations"
         },
         {
