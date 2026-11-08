@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import type { Lang } from "@skolia/shared/api";
   import type { Bundle, Token } from "@skolia/shared/schema";
   import { LANGUAGES } from "@skolia/shared/lang";
@@ -88,6 +89,9 @@
     return a.toLocaleLowerCase() === b.toLocaleLowerCase();
   }
 
+  /** Not added on a tap: names, numbers and symbols aren't vocabulary. */
+  const UNLEARNABLE: ReadonlySet<string> = new Set(["PROPN", "NUM", "SYM", "PUNCT", "X"]);
+
   const STATUS_LABELS: [WordStatus, string][] = [
     ["active", "Learn"],
     ["known", "Known"],
@@ -96,6 +100,29 @@
   /** The word whose status is being saved, and the last failure, by lemma id. */
   let saving = $state<LemmaId | null>(null);
   let statusError = $state<{ lemmaId: LemmaId; message: string } | null>(null);
+
+  /** Tried in this sheet: a failed save shows its error rather than being retried. */
+  const tried = new Set<LemmaId>();
+
+  /** A word you tap and have never marked is one to learn; Known or Ignore opts out. */
+  $effect(() => {
+    if (!known.byId) return;
+    const fresh = words.flatMap((w) =>
+      w.lemmaId &&
+      w.partOfWord === null &&
+      !UNLEARNABLE.has(w.ref.token.upos) &&
+      known.byId?.[w.lemmaId] === undefined &&
+      !tried.has(w.lemmaId)
+        ? [w.lemmaId]
+        : [],
+    );
+    for (const lemmaId of fresh) tried.add(lemmaId);
+    untrack(() => {
+      void (async () => {
+        for (const lemmaId of fresh) await mark(lemmaId, "active");
+      })();
+    });
+  });
 
   async function mark(lemmaId: LemmaId, status: WordStatus): Promise<void> {
     if (saving !== null) return;

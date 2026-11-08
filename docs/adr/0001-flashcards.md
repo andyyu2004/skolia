@@ -42,7 +42,7 @@ review(id, card_id, rating, review_time)      -- append-only
 - There are two kinds of card:
   - `recognition`: the lemma on the front, its meanings on the back.
   - `production`: the English word on the front (the first sense's translations without their definitions, `clue` in `reader/src/lib/review.ts`) with the part of speech and aspect, and the lemma and its meanings on the back. Form-of glosses ("verbal noun of dopracować") make poor clues.
-- Adding a word from the reader creates the word and both cards. If they already exist, it does nothing. The two cards are scheduled independently, with no special handling of siblings.
+- Tapping a word you've never marked adds it: a tap suggests you didn't know it, and Known or Ignore opts out. Proper nouns, numbers and symbols aren't added (`WordSheet.svelte`). Adding a word creates the word and both cards. If they already exist, it does nothing. The two cards are scheduled independently, with no special handling of siblings.
 - `known` or `ignored` takes a word's cards out of reviews without deleting them or their history, and `active` brings them back. Marking a word known needs no cards. Known words aren't rated Easy, because Easy brings them back after 54 and 234 days, and those ratings would end up in the review log.
 - Each language is reviewed on its own, like an Anki deck per language, with its own daily allowance of new cards. `card.lang` is generated from the lemma id, and every card index starts with it.
 - `card.active` copies the word's status (active or not), which `setWord` keeps in step, so the review queries need only `card`'s partial indexes and don't join `word`.
