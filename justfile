@@ -149,19 +149,42 @@ e2e env="local":
       just build images cards-local
       exec api/scripts/e2e.sh {{ langs }}
     fi
-    case {{ env }} in
-      production) url=https://skolia.io ;;
-      staging) url=https://staging.skolia.io ;;
-      *) url=$(infra/preview.py url {{ env }}) || exit ;;
-    esac
+    url=$(just url {{ env }})
     E2E_API_KEY=$(openssl rand -hex 32) E2E_USER_KEY=$(openssl rand -hex 32)
     export E2E_API_KEY E2E_USER_KEY
+    just d1-sql {{ env }} api/src/e2e-keys.ts
+    node api/src/e2e.ts "$url" "$(git describe --tags --always --dirty)"
+
+# Make the curated user's documents match texts/ (api/src/seed.ts); with --check, only list what that takes.
+# Writes a new API key for the curated user to the environment's D1 first (api/src/seed-key.ts).
+seed env *flags:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    url=$(just url {{ env }})
+    SEED_API_KEY=$(openssl rand -hex 32)
+    export SEED_API_KEY
+    just d1-sql {{ env }} api/src/seed-key.ts
+    node api/src/seed.ts "$url" texts {{ flags }}
+
+# The environment's URL
+[private]
+url env:
+    #!/usr/bin/env bash
+    case {{ env }} in
+      production) echo https://skolia.io ;;
+      staging) echo https://staging.skolia.io ;;
+      *) infra/preview.py url {{ env }} ;;
+    esac
+
+# Runs the SQL a script prints (its API keys) on the environment's D1
+[private]
+d1-sql env script:
+    #!/usr/bin/env bash
+    set -euo pipefail
     dir=$(mktemp -d)
     trap 'rm -rf "$dir"' EXIT
-    sql=$dir/e2e-keys.sql
-    node api/src/e2e-keys.ts > "$sql"
-    infra/wrangler.sh {{ env }} d1 execute DB --remote --yes --file "$sql" >/dev/null
-    node api/src/e2e.ts "$url" "$(git describe --tags --always --dirty)"
+    node {{ script }} > "$dir/keys.sql"
+    infra/wrangler.sh {{ env }} d1 execute DB --remote --yes --file "$dir/keys.sql" >/dev/null
 
 # Delete a preview (pr-<N>): its Workers, container applications, storage, queue and Terraform state
 teardown env:

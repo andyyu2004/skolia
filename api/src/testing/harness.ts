@@ -4,7 +4,8 @@ import { betterAuth } from "better-auth";
 import { testUtils } from "better-auth/plugins";
 import { createTestHarness, type TestHarness } from "wrangler";
 import { LANGS, type User } from "@skolia/shared/api";
-import { UserId } from "@skolia/shared/schemas";
+import { UserId, UserType } from "@skolia/shared/schemas";
+import * as z from "zod";
 import type { IngestJob } from "@skolia/shared/schema";
 import { authOptions, toAuth, type AuthConfig } from "../auth.ts";
 import type { Auth } from "../ports.ts";
@@ -87,8 +88,10 @@ export async function startLocal(): Promise<Local> {
     env,
     auth: toAuth(instance),
     async signUp(fields) {
-      const { id, name, email, image } = await test.saveUser(test.createUser(fields));
-      return { id: UserId.parse(id), name, email, image: image ?? null };
+      const saved = await test.saveUser(test.createUser(fields));
+      const { id, name, email, image } = saved;
+      const { type } = z.object({ type: UserType }).parse(saved);
+      return { id: UserId.parse(id), name, email, image: image ?? null, type };
     },
     signIn: (userId) => test.getAuthHeaders({ userId }),
     takeQueued,
@@ -96,8 +99,8 @@ export async function startLocal(): Promise<Local> {
       const tables = ["document", "apikey", "session", "account", "verification"];
       await env.DB.batch([
         ...tables.map((t) => env.DB.prepare(`DELETE FROM "${t}"`)),
-        // The system user is the migrations'
-        env.DB.prepare(`DELETE FROM "user" WHERE "id" != 'system'`),
+        // The system users are the migrations'
+        env.DB.prepare(`DELETE FROM "user" WHERE "type" != 'system'`),
       ]);
       for (const db of Object.values(lexiconsOf(env))) {
         await db.batch(["entry", "featureset", "loaded"].map((t) => db.prepare(`DELETE FROM ${t}`)));

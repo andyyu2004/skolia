@@ -1,8 +1,9 @@
 import { apiKey } from "@better-auth/api-key";
 import { betterAuth, type BetterAuthOptions } from "better-auth";
 import { APIError } from "better-auth/api";
-import type { User } from "@skolia/shared/api";
-import { UserId } from "@skolia/shared/schemas";
+import { USER_TYPES, type User } from "@skolia/shared/api";
+import { UserId, UserType } from "@skolia/shared/schemas";
+import * as z from "zod";
 import type { Auth } from "./ports.ts";
 
 export interface AuthConfig {
@@ -14,7 +15,7 @@ export interface AuthConfig {
 }
 
 /** The header an API key is sent in. Keys are made only by writing them to D1
- * (e2e-keys.ts), for the system user. */
+ * (e2e-keys.ts, seed-key.ts), for the end-to-end tests and the seed. */
 export const API_KEY_HEADER = "x-api-key";
 
 /** The API key plugin's routes, for making and managing keys as a signed-in user. Nobody
@@ -28,6 +29,7 @@ export function authOptions(config: AuthConfig) {
     secret: config.secret,
     socialProviders: config.google ? { google: config.google } : {},
     account: { encryptOAuthTokens: true },
+    user: { additionalFields: { type: { type: [...USER_TYPES], required: false, defaultValue: "standard", input: false } } },
     disabledPaths: API_KEY_PATHS,
     plugins: [apiKey({ apiKeyHeaders: API_KEY_HEADER, enableSessionForAPIKeys: true, rateLimit: { enabled: false } })],
     telemetry: { enabled: false },
@@ -52,7 +54,8 @@ export function toAuth(auth: Pick<ReturnType<typeof betterAuth>, "handler" | "ap
       }
       if (!session) return null;
       const { id, name, email, image } = session.user;
-      return { id: UserId.parse(id), name, email, image: image ?? null } satisfies User;
+      const { type } = z.object({ type: UserType }).parse(session.user);
+      return { id: UserId.parse(id), name, email, image: image ?? null, type } satisfies User;
     },
   };
 }

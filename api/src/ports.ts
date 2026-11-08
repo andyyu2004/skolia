@@ -54,7 +54,11 @@ export interface DocumentStore {
   add(record: DocumentRecord): Promise<void>;
   /** Make it public under this licence claim. */
   share(id: DocumentId, sharing: Sharing): Promise<void>;
-  /** How many documents were imported at or after this time. */
+  /** The documents this user imported, public or private. */
+  importedBy(importer: UserId): Promise<StoredDocument[]>;
+  update(id: DocumentId, fields: Pick<DocumentRecord, "title" | "licence" | "author" | "source" | "licensor">): Promise<void>;
+  delete(id: DocumentId): Promise<void>;
+  /** How many documents were imported at or after this time, by users who aren't system users. */
   countImportedSince(since: Timestamp): Promise<number>;
 }
 
@@ -66,6 +70,8 @@ export interface StoredBlob {
 export interface BlobStore {
   get(key: string): Promise<StoredBlob | null>;
   put(key: string, body: Uint8Array<ArrayBuffer> | string, contentType: string): Promise<void>;
+  /** Every blob whose key starts with this. */
+  deletePrefix(prefix: string): Promise<void>;
 }
 
 export interface JobQueue {

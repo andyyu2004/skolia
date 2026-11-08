@@ -1,15 +1,14 @@
 // Documents: importing a text, listing and opening them, and their text, analysis and
 // bundle, queueing a document again when ingest makes other versions or its job is lost.
 import * as z from "zod";
-import { timestamp, type DocumentId, type DocumentList, type DocumentSummary, type Lang, type User } from "@skolia/shared/api";
-import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
+import { MAX_TITLE_LENGTH, isShareable, timestamp, type DocumentId, type DocumentList, type DocumentSummary, type Lang, type User } from "@skolia/shared/api";
+import { PART_ENCODING, docId, docPrefix, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { Status, Versions } from "@skolia/shared/schema";
 import * as schemas from "@skolia/shared/schemas";
 import type { BlobStore, Deps, DocumentRecord, Sharing, StoredDocument } from "../ports.ts";
-import { fail, ok, type BlobResult, type Failed, type Json, type Ok } from "./result.ts";
+import { NO_CONTENT, fail, ok, type BlobResult, type Failed, type Json, type NoContent, type Ok } from "./result.ts";
 
 const NAME = /^[a-z0-9-]{1,64}$/;
-const MAX_TITLE_LENGTH = 200;
 const JSON_TYPE = "application/json";
 
 export async function list(deps: Deps, viewer: User | null): Promise<Ok<DocumentList>> {
@@ -44,7 +43,7 @@ export async function importText(
   } else {
     const today = new Date(deps.now());
     today.setUTCHours(0, 0, 0, 0);
-    if ((await deps.documents.countImportedSince(timestamp(today))) >= deps.maxImportsPerDay) {
+    if (user.type !== "system" && (await deps.documents.countImportedSince(timestamp(today))) >= deps.maxImportsPerDay) {
       return fail(429, "Today's imports are used up. Try again tomorrow.");
     }
     await deps.blobs.put(textKey(id), request.text, "text/plain; charset=utf-8");
@@ -63,6 +62,49 @@ export async function importText(
   if (!record) throw new Error(`document ${id} vanished after insert`);
   const queued = await requeue(deps, record, await readStatus(deps.blobs, id), deps.now());
   return { status: 202, body: summarize(record, queued) };
+}
+
+/** The documents the user imported, public or private. */
+export async function mine(deps: Deps, user: User): Promise<Ok<DocumentList>> {
+  const records = await deps.documents.importedBy(user.id);
+  const versions = versionsOf(deps.blobs);
+  return ok({ documents: await Promise.all(records.map((r) => current(deps, r, versions))) });
+}
+
+/** Its importer changes its title, licence, author or source. Changing the licence makes
+ * them its licensor. */
+export async function update(
+  deps: Deps,
+  user: User,
+  id: string,
+  body: z.output<typeof schemas.DocumentUpdate>,
+): Promise<Ok<DocumentSummary> | Failed<400 | 403 | 404>> {
+  const record = await findDocument(deps, id);
+  if (!record) return noSuchDocument();
+  if (record.importer !== user.id) return fail(403, "only the document's importer can change it");
+  const fields = {
+    title: body.title ?? record.title,
+    licence: body.licence ?? record.licence,
+    author: body.author === undefined ? record.author : body.author || null,
+    source: body.source === undefined ? record.source : body.source,
+    licensor: body.licence === undefined ? record.licensor : user.id,
+  };
+  if (record.visibility === "public" && !isShareable(fields.licence)) {
+    return fail(400, "a public text needs a licence that allows sharing it");
+  }
+  await deps.documents.update(record.id, fields);
+  return ok(await current(deps, { ...record, ...fields }, versionsOf(deps.blobs)));
+}
+
+/** Its importer deletes it: its record, then its text, status, analyses and bundles. Its
+ * id is then unknown, like one never imported. */
+export async function remove(deps: Deps, user: User, id: string): Promise<NoContent | Failed<403 | 404>> {
+  const record = await findDocument(deps, id);
+  if (!record) return noSuchDocument();
+  if (record.importer !== user.id) return fail(403, "only the document's importer can delete it");
+  await deps.documents.delete(record.id);
+  await deps.blobs.deletePrefix(docPrefix(record.id));
+  return NO_CONTENT;
 }
 
 export async function get(deps: Deps, id: string): Promise<Ok<DocumentSummary> | Failed<404>> {

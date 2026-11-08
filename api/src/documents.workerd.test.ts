@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hc } from "hono/client";
-import { MAX_TEXT_LENGTH, type DocumentSummary } from "@skolia/shared/api";
+import { MAX_TEXT_LENGTH, type DocumentList, type DocumentSummary } from "@skolia/shared/api";
 import { docId, statusKey, textKey } from "@skolia/shared/keys";
 import type { AppType } from "./app.ts";
-import { ALICE, TEXT, importText, importer, listed, local, putJson, setup, summaryOf, useLocal } from "./testing/app.ts";
+import { ALICE, TEXT, importText, importer, listed, local, putJson, raw, setup, summaryOf, useLocal } from "./testing/app.ts";
 import { ORIGIN } from "./testing/harness.ts";
 
 useLocal();
@@ -69,6 +69,18 @@ test("new texts past the daily cap are refused; texts already here still open", 
   assert.match(((await refused.json()) as { error: string }).error, /tomorrow/);
   assert.equal((await importText(app, "Pierwszy tekst.")).status, 200);
   assert.equal((await local.takeQueued()).length, 2);
+});
+
+test("system users import past the daily cap, and their imports don't count toward it", async () => {
+  const app = setup({ maxImportsPerDay: 1 });
+  const { id } = await local.signUp({ name: "Seed", email: "seed@skolia.io" });
+  await local.env.DB.prepare(`UPDATE "user" SET "type" = 'system' WHERE "id" = ?`).bind(id).run();
+  const system = { headers: await local.signIn(id) };
+  assert.equal((await importText(app, "Pierwszy tekst.", system)).status, 202);
+  assert.equal((await importText(app, "Drugi tekst.", system)).status, 202);
+  assert.equal((await importText(app, "Trzeci tekst.")).status, 202);
+  assert.equal((await importText(app, "Czwarty tekst.", system)).status, 202);
+  assert.equal((await importText(app, "Piąty tekst.")).status, 429);
 });
 
 test("texts over the limit are refused, oversized bodies without being parsed", async () => {
@@ -168,4 +180,52 @@ test("a public import of a private text makes it public under the new licence cl
   await importText(app, TEXT, { visibility: "private", licence: "cc-by-nd" });
   assert.deepEqual(await listed(app), [await docId("pl", TEXT)]);
   assert.equal((await summaryOf(app, summary.id)).licence, "public-domain");
+});
+
+test("the importer changes a document's title, licence, author and source; nobody else can", async () => {
+  const app = setup();
+  const { id } = (await (await importText(app, TEXT, { visibility: "public", licence: "cc0", author: "A", source: "https://example.org/a" })).json()) as DocumentSummary;
+  const changed = await raw(app, "PATCH", `/api/documents/${id}`, importer, { title: " Nowy tytuł ", licence: "cc-by", author: null });
+  assert.equal(changed.status, 200);
+  const summary = (await changed.json()) as DocumentSummary;
+  assert.deepEqual(
+    { title: summary.title, licence: summary.licence, author: summary.author, source: summary.source },
+    { title: "Nowy tytuł", licence: "cc-by", author: null, source: "https://example.org/a" },
+  );
+  assert.equal((await summaryOf(app, id)).title, "Nowy tytuł");
+  assert.equal((await raw(app, "PATCH", `/api/documents/${id}`, importer, { licence: "all-rights-reserved" })).status, 400);
+  assert.equal((await raw(app, "PATCH", `/api/documents/${id}`, importer, { title: "  " })).status, 400);
+  const alice = await local.signIn((await local.signUp(ALICE)).id);
+  assert.equal((await raw(app, "PATCH", `/api/documents/${id}`, alice, { title: "Mój" })).status, 403);
+  assert.equal((await raw(app, "PATCH", `/api/documents/${id}`, undefined, { title: "Mój" })).status, 401);
+  assert.equal((await raw(app, "PATCH", `/api/documents/${"0".repeat(64)}`, importer, { title: "Mój" })).status, 404);
+  assert.equal((await summaryOf(app, id)).title, "Nowy tytuł");
+});
+
+test("the importer deletes a document and everything stored for it; nobody else can", async () => {
+  const app = setup();
+  const { id } = (await (await importText(app)).json()) as DocumentSummary;
+  await local.takeQueued();
+  const alice = await local.signIn((await local.signUp(ALICE)).id);
+  assert.equal((await app.request(`${ORIGIN}/api/documents/${id}`, { method: "DELETE", headers: alice })).status, 403);
+  assert.equal((await app.request(`${ORIGIN}/api/documents/${id}`, { method: "DELETE" })).status, 401);
+  assert.equal((await app.request(`${ORIGIN}/api/documents/${id}`, { method: "DELETE", headers: importer })).status, 204);
+  assert.equal((await app.request(`${ORIGIN}/api/documents/${id}`)).status, 404);
+  assert.equal((await app.request(`${ORIGIN}/api/documents/${id}`, { method: "DELETE", headers: importer })).status, 404);
+  assert.deepEqual((await local.env.BLOBS.list({ prefix: `doc/${id}/` })).objects, []);
+  assert.deepEqual(await listed(app, importer), []);
+  // Importing it again starts over
+  assert.equal((await importText(app)).status, 202);
+  assert.equal((await local.takeQueued()).length, 1);
+});
+
+test("a user's own documents are listed for them, private ones too, and nobody else's", async () => {
+  const app = setup();
+  const { id: mine } = (await (await importText(app, "Mój tekst.")).json()) as DocumentSummary;
+  const alice = await local.signIn((await local.signUp(ALICE)).id);
+  await importText(app, "Tekst Alicji.", { headers: alice, visibility: "public", licence: "cc0" });
+  const response = await app.request(`${ORIGIN}/api/me/documents`, { headers: importer });
+  assert.equal(response.status, 200);
+  assert.deepEqual(((await response.json()) as DocumentList).documents.map((d) => d.id), [mine]);
+  assert.equal((await app.request(`${ORIGIN}/api/me/documents`)).status, 401);
 });

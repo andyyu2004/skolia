@@ -9,8 +9,10 @@ import {
   MAX_NEW_PER_DAY,
   MAX_SOURCE_LENGTH,
   MAX_TEXT_LENGTH,
+  MAX_TITLE_LENGTH,
   RATINGS,
   UPOS,
+  USER_TYPES,
   VISIBILITIES,
   WORD_STATUSES,
   isShareable,
@@ -38,6 +40,7 @@ export const CardId = z.uuid().brand<"CardId">();
 export const ReviewId = z.uuid().brand<"ReviewId">();
 
 export const Visibility = z.enum(VISIBILITIES);
+export const UserType = z.enum(USER_TYPES);
 
 export const LemmaId = z.templateLiteral([Lang, ":", z.string().min(1).max(MAX_LEMMA_LENGTH), ":", z.enum(UPOS)]);
 
@@ -99,6 +102,13 @@ export const ImportRequest = z
     message: "a public text needs a licence that allows sharing it",
     path: ["licence"],
   });
+
+export const DocumentUpdate = z.object({
+  title: z.string().trim().min(1, "title must be non-empty").max(MAX_TITLE_LENGTH).optional(),
+  licence: Licence.optional(),
+  author: z.string().trim().max(MAX_AUTHOR_LENGTH).nullable().optional(),
+  source: Source.nullable().optional(),
+});
 
 export const State = z.enum(["queued", "analysing", "ready", "failed"]);
 

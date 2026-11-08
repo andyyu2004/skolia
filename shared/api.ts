@@ -30,6 +30,10 @@ export { MAX_TEXT_LENGTH } from "./schema.gen.ts";
 
 export type ImportRequest = z.input<typeof schemas.ImportRequest>;
 
+/** A change to a document's title, licence, author or source, by its importer. A field
+ * left out stays as it is; null clears author or source. */
+export type DocumentUpdate = z.input<typeof schemas.DocumentUpdate>;
+
 /** A document's. private: left out of other users' libraries, though anyone with its id
  * can open it. A public import of the same text, with a shareable licence, makes it public. */
 export const VISIBILITIES = ["public", "private"] as const;
@@ -102,6 +106,7 @@ export const LICENCE_INFO: Record<Licence, LicenceInfo> = {
   unknown: { short: "Licence unknown", label: "Unknown", url: null },
 };
 
+export const MAX_TITLE_LENGTH = 200;
 export const MAX_AUTHOR_LENGTH = 200;
 export const MAX_SOURCE_LENGTH = 2000;
 
@@ -268,11 +273,17 @@ export interface Reviewed {
   dueAt: Timestamp;
 }
 
+/** standard: someone who signed in. system: skolia.io's own accounts, the end-to-end
+ * tests' importer and the seed's, whose imports are outside the daily import cap. */
+export const USER_TYPES = ["standard", "system"] as const;
+export type UserType = (typeof USER_TYPES)[number];
+
 export interface User {
   id: UserId;
   name: string;
   email: string;
   image: string | null;
+  type: UserType;
 }
 
 export interface Version {
