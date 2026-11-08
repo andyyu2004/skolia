@@ -217,20 +217,30 @@
 {/snippet}
 
 <main class="container review">
-  <h1>Review</h1>
+  <div class="title-row">
+    <h1>Review</h1>
+    {#if user && counts && counts.length > 0}
+      <select
+        aria-label="Language"
+        value={selected ?? ""}
+        onchange={(event) => (location.hash = `#/review/${event.currentTarget.value}`)}
+      >
+        {#if !selected}
+          <option value="" disabled>Choose a language</option>
+        {:else if !counts.some((c) => c.lang === selected)}
+          <option value={selected}>{LANGUAGE_INFO[selected].flag} {LANGUAGE_INFO[selected].endonym}</option>
+        {/if}
+        {#each counts as c (c.lang)}
+          <option value={c.lang}>{LANGUAGE_INFO[c.lang].flag} {LANGUAGE_INFO[c.lang].endonym} · {c.due} due · {c.new} new</option>
+        {/each}
+      </select>
+    {/if}
+  </div>
   {#if user === null}
     <p class="muted">Sign in to review your words.</p>
     <button type="button" class="primary" onclick={() => void signIn()}>Sign in</button>
   {:else if !counts}
     {#if !error}<p class="muted">Loading…</p>{/if}
-  {:else}
-    <nav class="review-langs" aria-label="Language">
-      {#each counts as c (c.lang)}
-        <a href="#/review/{c.lang}" aria-current={c.lang === selected ? "page" : undefined}
-          >{LANGUAGE_INFO[c.lang].name} <span class="muted">{c.due} due · {c.new} new</span></a
-        >
-      {/each}
-    </nav>
   {/if}
   {#if user && counts && !selected}
     <p>Nothing to review right now. Words you look up in the reader turn into cards here.</p>

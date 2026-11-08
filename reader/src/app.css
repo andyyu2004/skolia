@@ -724,9 +724,15 @@ label.check {
 
 .title-row {
   display: flex;
-  align-items: baseline;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
-  gap: 1rem;
+  gap: 0.5rem 1rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.title-row h1 {
+  margin: 0;
 }
 
 .title-row button {
@@ -1245,26 +1251,6 @@ label.check {
 .flashcard .forms summary {
   cursor: pointer;
   color: var(--muted);
-}
-
-.review-langs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 1.25rem;
-  margin: 0 0 1rem;
-  border-bottom: 1px solid var(--line);
-}
-
-.review-langs a {
-  padding: 0.4rem 0;
-  color: inherit;
-  text-decoration: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-}
-
-.review-langs a[aria-current="page"] {
-  border-bottom-color: var(--accent);
 }
 
 .review .counts,
