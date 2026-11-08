@@ -111,5 +111,7 @@ test("relation names fall back to the base relation, then the raw label", () => 
   assert.equal(relationName("nsubj:pass"), "subject");
   assert.equal(relationName("obl:arg"), "complement");
   assert.equal(relationName("goeswith"), "goeswith");
+  assert.equal(relationName("expl"), "placeholder");
+  assert.equal(relationName("expl:pv"), "reflexive");
   assert.equal(relationName(null), "");
 });
