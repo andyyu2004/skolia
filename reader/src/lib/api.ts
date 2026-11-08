@@ -5,6 +5,7 @@ import { hc } from "hono/client";
 import type { AppType } from "@skolia/api/app";
 import {
   isLang,
+  lemmaParam,
   type ApiError,
   type CardCounts,
   type Due,
@@ -114,7 +115,7 @@ export async function listWords(): Promise<Word[] | null> {
 }
 
 export async function setWord(lemmaId: LemmaId, status: WordStatus): Promise<void> {
-  const response = await api.me.words[":lemmaId"].$put({ param: { lemmaId }, json: { status } });
+  const response = await api.me.words[":lemmaId"].$put({ param: { lemmaId: lemmaParam(lemmaId) }, json: { status } });
   if (!response.ok) throw await failure(response);
 }
 

@@ -190,6 +190,12 @@ export const MAX_LEMMA_LENGTH = 100;
 /** Lexicon entry id, as analysis's blob.lemma_id writes it. */
 export type LemmaId = z.output<typeof schemas.LemmaId>;
 
+/** A lemma id as a path param. Hono's client doesn't encode params, and a lemma can have a
+ * slash (pl:i/lub:CCONJ); the API decodes it. */
+export function lemmaParam(id: LemmaId): LemmaId {
+  return encodeURIComponent(id) as LemmaId;
+}
+
 /** mature: its recognition card is mature, so the reader shows it as known. */
 export type Word = z.output<typeof schemas.Word>;
 
