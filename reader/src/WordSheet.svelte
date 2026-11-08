@@ -5,7 +5,14 @@
   import { LANGUAGES } from "@skolia/shared/lang";
   import type { Piece } from "@skolia/shared/doc";
   import type { LemmaId } from "@skolia/shared/api";
-  import { entryFor, entryIdFor, pronunciationsOf, rankSenses, recordingsOf } from "@skolia/shared/lexicon";
+  import {
+    entryFor,
+    entryIdFor,
+    mainPronunciations,
+    pronunciationsOf,
+    rankSenses,
+    recordingsOf,
+  } from "@skolia/shared/lexicon";
   import type { Recording } from "@skolia/shared/schema";
   import { LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
   import { setStatus, words as known } from "./lib/words.svelte.ts";
@@ -68,12 +75,14 @@
           ref: w,
           entry,
           lemmaId: parsedId.success ? parsedId.data : null,
-          said: pronunciationsOf(bundle, w.token.text, w.token.upos),
+          said: mainPronunciations(pronunciationsOf(bundle, w.token.text, w.token.upos)),
           lemmaSaid:
-            entry && !sameWord(entry.lemma, w.token.text) ? pronunciationsOf(bundle, entry.lemma, entry.upos) : [],
-          heard: recordingsOf(bundle, w.token.text, w.token.upos),
+            entry && !sameWord(entry.lemma, w.token.text)
+              ? mainPronunciations(pronunciationsOf(bundle, entry.lemma, entry.upos))
+              : [],
+          heard: recordingsOf(bundle, w.token.text, w.token.upos).slice(0, 1),
           lemmaHeard:
-            entry && !sameWord(entry.lemma, w.token.text) ? recordingsOf(bundle, entry.lemma, entry.upos) : [],
+            entry && !sameWord(entry.lemma, w.token.text) ? recordingsOf(bundle, entry.lemma, entry.upos).slice(0, 1) : [],
           partOfWord,
           role: role && head ? { role, head } : null,
           caseWhy: language.explainCase(tokens, w.index),

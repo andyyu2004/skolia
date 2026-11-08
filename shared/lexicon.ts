@@ -24,6 +24,18 @@ export function pronunciationsOf(bundle: Bundle, word: string, upos: Upos): Pron
   return bundle.pronunciations?.[`${word}:${upos}`] ?? [];
 }
 
+/** The first transcription for each accent: Wiktionary lists the usual one first, then
+ * variants (family has seven UK ones). */
+export function mainPronunciations(said: Pronunciation[]): Pronunciation[] {
+  const seen = new Set<string>();
+  return said.filter((p) => {
+    const accents = p.accents?.join(",") ?? "";
+    if (seen.has(accents)) return false;
+    seen.add(accents);
+    return true;
+  });
+}
+
 /** Recordings of a token's text or an entry's lemma, keyed like pronunciationsOf. */
 export function recordingsOf(bundle: Bundle, word: string, upos: Upos): Recording[] {
   return bundle.recordings?.[`${word}:${upos}`] ?? [];
