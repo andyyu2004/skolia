@@ -23,12 +23,19 @@ UNKNOWN = "<UNK>"
 
 class StanzaParser:
     """package picks a model set from Stanza's resources.json, e.g. "default",
-    "default_accurate" (transformer-based) or "lfg" (trained on another treebank)."""
+    "default_accurate" (transformer-based) or "lfg" (trained on another treebank).
+    batch_words: how many words the tagger and the parser take at once; None for Stanza's
+    5000, which puts a whole 20,000-character text through a transformer in one batch."""
 
-    def __init__(self, lang: str, package: str) -> None:
+    def __init__(self, lang: str, package: str, batch_words: int | None = None) -> None:
         import stanza
 
         self._package = package
+        batches = (
+            {}
+            if batch_words is None
+            else {"pos_batch_size": batch_words, "depparse_batch_size": batch_words}
+        )
         # Models already in STANZA_RESOURCES_DIR (the image has them) are used as they
         # are: by default Stanza fetches resources.json from GitHub on every start
         self._nlp = stanza.Pipeline(
@@ -37,6 +44,7 @@ class StanzaParser:
             processors=PROCESSORS,
             logging_level="WARN",
             download_method=stanza.DownloadMethod.REUSE_RESOURCES,
+            **batches,
         )
 
     @property

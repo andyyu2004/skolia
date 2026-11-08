@@ -69,7 +69,7 @@ cd analysis
 uv sync                      # runtime + dev dependencies
 ```
 
-Each language is a package under `src/skolia_analysis/lang/` (`lang/pl/`: Morfeusz, NKJP tags, Walenty, case reasons, the Polish lexicon conversion; `lang/en/`: Stanza and the English lexicon conversion). The rest of the code is language-neutral and reaches a language through `plugin.py`. Its tests and scripts sit in `tests/pl/` and `scripts/pl/`.
+Each language is a package under `src/skolia_analysis/lang/` (`lang/pl/`: Morfeusz, NKJP tags, Walenty, case reasons, the Polish lexicon conversion; `lang/en/` and `lang/fr/`: Stanza and the English or French lexicon conversion). The rest of the code is language-neutral and reaches a language through `plugin.py`. Its tests and scripts sit in `tests/pl/` and `scripts/pl/`.
 
 Models download on first use:
 - COMBO (the default): from Hugging Face into `~/.cache/huggingface/hub`
@@ -170,6 +170,7 @@ Or build from a local extract (about 10 s):
 ```fish
 uv run skolia-build-lexicon pl ../data/kaikki/kaikki.org-dictionary-Polish.jsonl ../data/lexicon/pl.sqlite
 uv run skolia-build-lexicon en ../data/kaikki/kaikki.org-dictionary-English.jsonl ../data/lexicon/en.sqlite
+uv run skolia-build-lexicon fr ../data/kaikki/kaikki.org-dictionary-French.jsonl ../data/lexicon/fr.sqlite
 ```
 
 A document's bundle (the lexicon slice the phone downloads) from its analysis:

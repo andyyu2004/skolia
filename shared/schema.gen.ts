@@ -22,7 +22,7 @@ export type ExtPos = Upos;
 
 export type Gender = "Masc" | "Fem" | "Neut";
 
-export type Mood = "Ind" | "Imp" | "Sub";
+export type Mood = "Ind" | "Imp" | "Sub" | "Cnd";
 
 export type NumForm = "Word" | "Digit" | "Roman" | "Combi";
 
@@ -40,7 +40,7 @@ export type Polite = "Depr";
 
 export type PrepCase = "Pre" | "Npr";
 
-export type PronType = "Prs" | "Dem" | "Rel" | "Int" | "Ind" | "Tot" | "Neg" | "Art" | "Emp" | "Rcp";
+export type PronType = "Prs" | "Dem" | "Rel" | "Int" | "Ind" | "Tot" | "Neg" | "Art" | "Emp" | "Rcp" | "Exc";
 
 export type PunctSide = "Ini" | "Fin";
 
@@ -48,7 +48,7 @@ export type PunctType = "Peri" | "Comm" | "Dash" | "Quot" | "Brck" | "Qest" | "C
 
 export type Style = "Arch" | "Coll" | "Expr" | "Slng" | "Vrnc";
 
-export type Tense = "Past" | "Pres" | "Fut";
+export type Tense = "Past" | "Pres" | "Fut" | "Imp";
 
 export type Variant = "Short" | "Long";
 
@@ -67,6 +67,7 @@ export interface Feats {
   ConjType?: ConjType;
   Definite?: Definite;
   Degree?: Degree;
+  Emph?: "Yes" | "No";
   ExtPos?: ExtPos;
   Foreign?: Yes;
   Gender?: Gender;
@@ -78,6 +79,7 @@ export interface Feats {
   "Number[psor]"?: "Sing" | "Plur";
   PartType?: PartType;
   Person?: Person;
+  "Person[psor]"?: "1" | "2" | "3";
   Polarity?: Polarity;
   Polite?: Polite;
   Poss?: Yes;
@@ -95,7 +97,7 @@ export interface Feats {
   Voice?: Voice;
 }
 
-export type Deprel = "acl" | "acl:cmp" | "acl:relcl" | "advcl" | "advcl:cmp" | "advcl:relcl" | "advmod" | "advmod:arg" | "advmod:cmp" | "advmod:emph" | "advmod:neg" | "amod" | "amod:cmp" | "amod:flat" | "appos" | "aux" | "aux:clitic" | "aux:cnd" | "aux:imp" | "aux:pass" | "case" | "cc" | "cc:preconj" | "ccomp" | "ccomp:cleft" | "ccomp:obj" | "compound" | "compound:prt" | "conj" | "cop" | "csubj" | "csubj:outer" | "csubj:pass" | "dep" | "det" | "det:numgov" | "det:nummod" | "det:poss" | "det:predet" | "discourse" | "discourse:intj" | "dislocated" | "expl" | "expl:pv" | "fixed" | "flat" | "flat:foreign" | "goeswith" | "iobj" | "list" | "mark" | "nmod" | "nmod:arg" | "nmod:cmp" | "nmod:desc" | "nmod:flat" | "nmod:poss" | "nmod:pred" | "nmod:unmarked" | "nsubj" | "nsubj:outer" | "nsubj:pass" | "nummod" | "nummod:flat" | "nummod:gov" | "obj" | "obl" | "obl:agent" | "obl:arg" | "obl:cmp" | "obl:orphan" | "obl:unmarked" | "orphan" | "parataxis" | "parataxis:insert" | "parataxis:obj" | "punct" | "reparandum" | "root" | "vocative" | "xcomp" | "xcomp:cleft" | "xcomp:pred" | "xcomp:subj";
+export type Deprel = "acl" | "acl:cmp" | "acl:relcl" | "advcl" | "advcl:cmp" | "advcl:cleft" | "advcl:relcl" | "advmod" | "advmod:arg" | "advmod:cmp" | "advmod:emph" | "advmod:neg" | "amod" | "amod:cmp" | "amod:flat" | "appos" | "aux" | "aux:caus" | "aux:clitic" | "aux:cnd" | "aux:imp" | "aux:pass" | "aux:tense" | "case" | "cc" | "cc:preconj" | "ccomp" | "ccomp:cleft" | "ccomp:obj" | "compound" | "compound:prt" | "conj" | "cop" | "csubj" | "csubj:outer" | "csubj:pass" | "dep" | "dep:comp" | "det" | "det:numgov" | "det:nummod" | "det:poss" | "det:predet" | "discourse" | "discourse:intj" | "dislocated" | "dislocated:mod" | "dislocated:obj" | "dislocated:obl" | "dislocated:subj" | "expl" | "expl:comp" | "expl:pass" | "expl:pv" | "expl:subj" | "fixed" | "flat" | "flat:foreign" | "flat:name" | "goeswith" | "iobj" | "iobj:agent" | "list" | "mark" | "nmod" | "nmod:appos" | "nmod:arg" | "nmod:cmp" | "nmod:desc" | "nmod:flat" | "nmod:poss" | "nmod:pred" | "nmod:unmarked" | "nsubj" | "nsubj:caus" | "nsubj:outer" | "nsubj:pass" | "nummod" | "nummod:flat" | "nummod:gov" | "obj" | "obj:agent" | "obj:lvc" | "obl" | "obl:agent" | "obl:arg" | "obl:cmp" | "obl:mod" | "obl:orphan" | "obl:unmarked" | "orphan" | "parataxis" | "parataxis:insert" | "parataxis:parenth" | "parataxis:obj" | "punct" | "reparandum" | "root" | "vocative" | "xcomp" | "xcomp:cleft" | "xcomp:pred" | "xcomp:subj";
 
 export interface Reading {
   lemma: string;

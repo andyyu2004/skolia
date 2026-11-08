@@ -130,6 +130,7 @@ test("each language is reviewed on its own, with its own daily allowance of new 
   await mark(app, headers, "en:bird:NOUN", "known");
   assert.deepEqual(await counts(app, headers), [
     { lang: "en", due: 0, new: 1 },
+    { lang: "fr", due: 0, new: 0 },
     { lang: "pl", due: 0, new: 1 },
   ]);
   const [polish] = (await due(app, headers, "pl")).cards;
@@ -138,6 +139,7 @@ test("each language is reviewed on its own, with its own daily allowance of new 
   // Again makes the Polish card due again within minutes; English still has its own new card
   assert.deepEqual(await counts(setup({ at: "2026-11-04T00:30:00Z" }), headers), [
     { lang: "en", due: 0, new: 1 },
+    { lang: "fr", due: 0, new: 0 },
     { lang: "pl", due: 1, new: 0 },
   ]);
   assert.deepEqual(

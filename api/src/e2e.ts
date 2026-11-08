@@ -6,7 +6,7 @@
 //   bundle. Uses one of the day's imports per language. Imports as the system user, with
 //   the API key e2e-keys.ts wrote, and privately, so the texts stay out of the library.
 // - auth: who a key signs in, and that a request without one is refused.
-// - lexicon: both languages' entries, with the feature sets their paradigms use, from each
+// - lexicon: each language's entries, with the feature sets their paradigms use, from each
 //   language's lexicon database (load-lexicon has run).
 // - cards: in each language, as the new user e2e-keys.ts made, whose cards start empty:
 //   add a word, review its cards, mark it known.
@@ -24,12 +24,13 @@ const VERSION_TIMEOUT_MS = 2 * 60 * 1000;
 
 const TEXTS: Record<Lang, string> = {
   en: "I'm looking for the dog that ran away last night.",
+  fr: "Je cherche le chien qui s'est enfui hier soir.",
   pl: "Szukam psa, który uciekł wczoraj wieczorem.",
 };
 
 /** A word in each language that every environment's lexicon has, previews' samples too
  * (wordfreq's 3,000 most common words), with a paradigm. */
-const WORDS: Record<Lang, LemmaId> = { en: "en:dog:NOUN", pl: "pl:pies:NOUN" };
+const WORDS: Record<Lang, LemmaId> = { en: "en:dog:NOUN", fr: "fr:chien:NOUN", pl: "pl:pies:NOUN" };
 
 type Api = ReturnType<typeof hc<AppType>>["api"];
 

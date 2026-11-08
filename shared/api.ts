@@ -4,7 +4,7 @@ import type { z } from "zod";
 import type { BundleParadigm, Feats, Pronunciation, Relation, Sense, State, Upos } from "./schema.gen.ts";
 import type * as schemas from "./schemas.ts";
 
-export const LANGS = ["en", "pl"] as const;
+export const LANGS = ["en", "fr", "pl"] as const;
 export type Lang = (typeof LANGS)[number];
 
 export function isLang(value: unknown): value is Lang {
@@ -22,6 +22,7 @@ export interface LanguageInfo {
 
 export const LANGUAGE_INFO: Record<Lang, LanguageInfo> = {
   en: { name: "English", endonym: "English", flag: "🇬🇧" },
+  fr: { name: "French", endonym: "Français", flag: "🇫🇷" },
   pl: { name: "Polish", endonym: "Polski", flag: "🇵🇱" },
 };
 

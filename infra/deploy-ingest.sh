@@ -34,7 +34,7 @@ cd "$root"
 
 # One image per language, each named after it in wrangler.ingest.jsonc's images. CI's
 # matrix in .github/workflows/ci.yml lists them too.
-langs=(pl en)
+langs=(pl en fr)
 repo=registry.cloudflare.com/$CLOUDFLARE_ACCOUNT_ID
 
 tag_of() { "$nix_sh" nix eval --raw "./analysis#ingest-$1.imageTag"; }

@@ -11,7 +11,7 @@ cd "$root"
 
 langs=("$@")
 # The languages in api/wrangler.ingest.jsonc
-[ ${#langs[@]} -gt 0 ] || langs=(pl en)
+[ ${#langs[@]} -gt 0 ] || langs=(pl en fr)
 for lang in "${langs[@]}"; do
   name=skolia-ingest-$lang
   tag=$("$scripts/nix.sh" nix eval --raw "./analysis#ingest-$lang.imageTag")

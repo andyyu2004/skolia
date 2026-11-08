@@ -34,7 +34,8 @@ const RETRY_DELAY_SECONDS = 60;
 const START_TIMEOUT_MS = 2 * 60 * 1000;
 const PROBE_TIMEOUT_MS = 5 * 1000;
 // 1 vCPU, 6 GiB: Polish ingest peaked at 4.3 GiB on a 2,800-word text, English at 4.7 GiB
-// (in Docker); the two languages in one container peaked at 6.7 GiB
+// (in Docker); the two languages in one container peaked at 6.7 GiB. French peaked at 3.5
+// GiB on a 20,000-character text (analysis/EVALUATION.md)
 const INSTANCE = "standard-2";
 // How long past its last idle check a container keeps running if no further check
 // comes, e.g. when an alarm fails

@@ -5,9 +5,72 @@ lexicon uses are declared. Wiktionary content is CC BY-SA 4.0 and GFDL.
 """
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import TypedDict, cast
+
+from ..schema import Number, Person, Upos
+
+# English Wiktionary's tags and parts of speech are the same in every language's extract;
+# each language adds its own to these
+
+# Kaikki part of speech -> the UPOS the analyser gives such a word
+POS: Mapping[str, Upos] = {
+    "noun": "NOUN",
+    "name": "PROPN",
+    "verb": "VERB",
+    "adj": "ADJ",
+    "adv": "ADV",
+    "pron": "PRON",
+    "det": "DET",
+    "article": "DET",
+    "num": "NUM",
+    "prep": "ADP",
+    "postp": "ADP",
+    "conj": "CCONJ",
+    "particle": "PART",
+    "intj": "INTJ",
+}
+
+# Tags on a form-of sense that make it an inflected form ("plural of dog"). The analyser
+# already gives those words the lemma, so these senses add nothing.
+INFLECTION_TAGS = frozenset(
+    {
+        "singular",
+        "plural",
+        "first-person",
+        "second-person",
+        "third-person",
+        "present",
+        "past",
+        "participle",
+        "indicative",
+        "imperative",
+    }
+)
+# Tags that say how a form-of sense is derived, kept as the relation's note
+DERIVATION_TAGS = ("diminutive", "augmentative", "feminine", "masculine")
+
+# Forms that aren't an inflection of today's word: spellings, old forms, the extract's
+# own bookkeeping rows
+SKIPPED_FORM_TAGS = frozenset(
+    {
+        "alternative",
+        "obsolete",
+        "archaic",
+        "dialectal",
+        "nonstandard",
+        "misspelling",
+        "abbreviation",
+        "table-tags",
+        "inflection-template",
+        "class",
+        "romanization",
+    }
+)
+
+PERSON_TAGS: Mapping[str, Person] = {"first-person": "1", "second-person": "2", "third-person": "3"}
+NUMBER_TAGS: Mapping[str, Number] = {"singular": "Sing", "plural": "Plur"}
 
 
 class KaikkiForm(TypedDict, total=False):
