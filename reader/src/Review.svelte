@@ -32,6 +32,7 @@
     counts?.reduce<CardCounts | null>((best, c) => (c.due + c.new > (best ? best.due + best.new : 0) ? c : best), null)?.lang ?? null,
   );
   const selected = $derived(lang ?? busiest);
+  const withCards = $derived((counts ?? []).filter((c) => c.due + c.new > 0));
   const card = $derived(due?.cards[index]);
   const left = $derived(due ? due.cards.length - index : 0);
 
@@ -219,7 +220,7 @@
 <main class="container review">
   <div class="title-row">
     <h1>Review</h1>
-    {#if user && counts && counts.length > 0}
+    {#if user && counts && (withCards.length > 0 || selected)}
       <select
         aria-label="Language"
         value={selected ?? ""}
@@ -227,10 +228,10 @@
       >
         {#if !selected}
           <option value="" disabled>Choose a language</option>
-        {:else if !counts.some((c) => c.lang === selected)}
+        {:else if !withCards.some((c) => c.lang === selected)}
           <option value={selected}>{LANGUAGE_INFO[selected].flag} {LANGUAGE_INFO[selected].endonym}</option>
         {/if}
-        {#each counts as c (c.lang)}
+        {#each withCards as c (c.lang)}
           <option value={c.lang}>{LANGUAGE_INFO[c.lang].flag} {LANGUAGE_INFO[c.lang].endonym} · {c.due} due · {c.new} new</option>
         {/each}
       </select>
