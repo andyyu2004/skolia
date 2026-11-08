@@ -1,8 +1,8 @@
 """Shape of the analysis blob JSON. Labels follow Universal Dependencies (UD).
 
-The label sets are the union of the treebanks the parsers are trained on: UD Polish PDB
-and UD English EWT, so they are exactly what the parsers can output. Extend them when
-adding a language. ud.py checks parser output against these types at runtime.
+The label sets are the union of what the parsers can output: UD Polish PDB, UD English EWT
+and the labels in Stanza's French models (UD French GSD and the other French treebanks).
+Extend them when adding a language. ud.py checks parser output against these types at runtime.
 """
 
 from typing import Literal, NotRequired, TypedDict
@@ -33,6 +33,7 @@ type Deprel = Literal[
     "acl:relcl",  # adnominal clause, relative clause: dom, który kupiłem
     "advcl",  # adverbial clause modifier: gdy przyszedł, ...
     "advcl:cmp",  # adverbial clause modifier, comparative
+    "advcl:cleft",  # adverbial clause modifier, cleft: the clause of c'est ... qui/que
     "advcl:relcl",  # adverbial clause modifier, relative clause: ..., co mnie zdziwiło
     "advmod",  # adverbial modifier: szybko biegać
     "advmod:arg",  # adverbial modifier, argument: one the verb requires, czuć się dobrze
@@ -44,10 +45,12 @@ type Deprel = Literal[
     "amod:flat",  # adjectival modifier, flat: inside a name, Morze Bałtyckie
     "appos",  # appositional modifier: Warszawa, stolica Polski
     "aux",  # auxiliary: będę robić
+    "aux:caus",  # auxiliary, causative: faire in faire construire
     "aux:clitic",  # auxiliary, clitic: the person ending -em in zrobiłem, -eś in byłeś
     "aux:cnd",  # auxiliary, conditional: by in zrobiłby
     "aux:imp",  # auxiliary, imperative: niech
     "aux:pass",  # auxiliary, passive: został zbudowany
+    "aux:tense",  # auxiliary, tense: avoir or être forming a compound tense, a mangé
     "case",  # case marking: a preposition, do domu
     "cc",  # coordinating conjunction: i, ale
     "cc:preconj",  # coordinating conjunction, preconjunct: albo ... albo, zarówno ... jak i
@@ -62,6 +65,7 @@ type Deprel = Literal[
     "csubj:outer",  # clausal subject, outer: the clausal counterpart of nsubj:outer
     "csubj:pass",  # clausal subject, passive: of a passive verb
     "dep",  # unspecified dependency: when nothing else fits
+    "dep:comp",  # unspecified dependency, complement
     "det",  # determiner: ten dom
     "det:numgov",  # determiner, numeral governing?: governs the noun's case, wiele osób
     "det:nummod",  # determiner, numeric modifier: a quantifier that agrees with the noun's case
@@ -70,16 +74,26 @@ type Deprel = Literal[
     "discourse",  # discourse element: outside the sentence's structure
     "discourse:intj",  # discourse element, interjection: och
     "dislocated",  # dislocated element: a fronted or postposed phrase, that guy, I like him
+    "dislocated:mod",  # dislocated element, modifier
+    "dislocated:obj",  # dislocated element, object: ce livre, je l'ai lu
+    "dislocated:obl",  # dislocated element, oblique
+    "dislocated:subj",  # dislocated element, subject: moi, je pense
     "expl",  # expletive: a word with no meaning of its own, it in it is raining, there is
+    "expl:comp",  # expletive, complement: a reflexive object pronoun, se in il se lave
+    "expl:pass",  # expletive, passive: se in a passive, ça se vend bien
     "expl:pv",  # expletive, pronominal verb: się that belongs to the verb, bać się
+    "expl:subj",  # expletive, subject: il in il pleut
     "fixed",  # fixed multiword expression: w związku z
     "flat",  # flat multiword expression: a name, Jan Kowalski
     "flat:foreign",  # flat multiword expression, foreign: a foreign phrase
+    "flat:name",  # flat multiword expression, name: Jean Dupont
     "goeswith",  # goes with: a word wrongly split in two, with the second part, some times
     "iobj",  # indirect object: dać bratu książkę
+    "iobj:agent",  # indirect object, agent: the doer under a causative, faire lire à Paul
     "list",  # list: items without conjunctions
     "mark",  # marker: a subordinating conjunction introducing a clause, że, gdy
     "nmod",  # nominal modifier: a noun modifying another noun
+    "nmod:appos",  # nominal modifier, appositional
     "nmod:arg",  # nominal modifier, argument: a noun a noun requires
     "nmod:cmp",  # nominal modifier, comparative
     "nmod:desc",  # nominal modifier, descriptor: a title before a name, Mr. Magoo
@@ -88,21 +102,26 @@ type Deprel = Literal[
     "nmod:pred",  # nominal modifier, predicative: after bycie, bycie lekarzem
     "nmod:unmarked",  # nominal modifier, unmarked: no preposition, any day this week, $5 a share
     "nsubj",  # nominal subject
+    "nsubj:caus",  # nominal subject, causative: the doer under faire, Paul in faire partir Paul
     "nsubj:outer",  # nominal subject, outer: of a clause predicate, the thing is to keep calm
     "nsubj:pass",  # nominal subject, passive: dom został zbudowany
     "nummod",  # numeric modifier: a numeral that agrees with the noun, dwa psy
     "nummod:flat",  # numeric modifier, flat: a numeral inside a name
     "nummod:gov",  # numeric modifier, governing: governs the noun's case, pięć psów
     "obj",  # object: mam czas
+    "obj:agent",  # object, agent: the doer under a causative, as an object
+    "obj:lvc",  # object, light verb construction: the noun of prendre une décision
     "obl",  # oblique nominal: a noun phrase that isn't a core argument, do domu
     "obl:agent",  # oblique nominal, agent: of a passive verb, przez brata
     "obl:arg",  # oblique nominal, argument: one the verb requires, myśleć o tobie
     "obl:cmp",  # oblique nominal, comparative: wyższy od brata
+    "obl:mod",  # oblique nominal, modifier: one the verb doesn't require, dans la rue
     "obl:orphan",  # oblique nominal, orphan: its noun is left out
     "obl:unmarked",  # oblique nominal, unmarked: no preposition, I left yesterday
     "orphan",  # orphan: dependent of a left-out head, ja piję kawę, a on herbatę
     "parataxis",  # parataxis: a clause loosely placed next to another
     "parataxis:insert",  # parataxis, insertion?: a parenthetical, moim zdaniem
+    "parataxis:parenth",  # parataxis, parenthetical: an aside in brackets or dashes
     "parataxis:obj",  # parataxis, object: direct speech
     "punct",  # punctuation
     "reparandum",  # reparandum: a word the speaker corrected later (spoken language)
@@ -154,11 +173,13 @@ type Tense = Literal[
     "Past",  # past
     "Pres",  # present
     "Fut",  # future
+    "Imp",  # imperfect: je mangeais
 ]
 type Mood = Literal[
     "Ind",  # indicative: robisz
     "Imp",  # imperative: rób
     "Sub",  # subjunctive: if I were you
+    "Cnd",  # conditional: je mangerais
 ]
 type VerbForm = Literal[
     "Fin",  # finite: robię
@@ -192,6 +213,7 @@ type PronType = Literal[
     "Art",  # article: the, a
     "Emp",  # emphatic: the reflexive used for emphasis, I did it myself
     "Rcp",  # reciprocal: each other
+    "Exc",  # exclamative: quel in quel dommage !
 ]
 type Variant = Literal[
     "Short",  # short form: w, go, mi
@@ -276,6 +298,7 @@ Feats = TypedDict(
         "ConjType": ConjType,
         "Definite": Definite,
         "Degree": Degree,
+        "Emph": Literal["Yes", "No"],
         "ExtPos": ExtPos,
         "Foreign": Yes,
         "Gender": Gender,
@@ -287,6 +310,7 @@ Feats = TypedDict(
         "Number[psor]": Literal["Sing", "Plur"],
         "PartType": PartType,
         "Person": Person,
+        "Person[psor]": Literal["1", "2", "3"],
         "Polarity": Polarity,
         "Polite": Polite,
         "Poss": Yes,
@@ -308,7 +332,8 @@ Feats = TypedDict(
 """UD morphological features. Every key is optional; a word only has the ones that apply.
 
 Functional TypedDict syntax because "Number[psor]" (possessor's number: mój vs nasz) is not
-a Python identifier.
+a Python identifier. Person[psor] is the possessor's person (mon, ton, son); Emph marks an
+emphatic form (French moi-même, Emph=Yes).
 """
 
 
