@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { API_KEY_HEADER, NO_AUTH, createAuth } from "./auth.ts";
-import { SYSTEM_USER, smokeKeySql } from "./smoke-key.ts";
+import { SYSTEM_USER, e2eKeysSql } from "./e2e-keys.ts";
 import { ALICE, TEXT, importText, importer, local, setup, useLocal } from "./testing/app.ts";
 import { ORIGIN, authConfig } from "./testing/harness.ts";
 
@@ -62,23 +62,23 @@ test("without its configuration sign-in answers 503 and nobody is signed in", as
   assert.equal((await app.request(`${ORIGIN}/api/me`)).status, 401);
 });
 
-test("the smoke test's keys, as smoke-key.ts writes them, sign in the system user and a new user; earlier ones don't", async () => {
+test("the end-to-end tests' keys, as e2e-keys.ts writes them, sign in the system user and a new user; earlier ones don't", async () => {
   const app = setup();
   const keys = { system: "ab".repeat(32), user: "12".repeat(32) };
   const earlier = { system: "cd".repeat(32), user: "34".repeat(32) };
-  const run = (k: typeof keys, at: string) => local.env.DB.batch(smokeKeySql(k, at).map((q) => local.env.DB.prepare(q)));
+  const run = (k: typeof keys, at: string) => local.env.DB.batch(e2eKeysSql(k, at).map((q) => local.env.DB.prepare(q)));
   await run(earlier, "2026-11-04T00:00:00.000Z");
   const earlierUser = await whoIs(app, earlier.user);
   await run(keys, "2026-11-05T00:00:00.000Z");
   assert.equal(await whoIs(app, keys.system), SYSTEM_USER);
   const user = await whoIs(app, keys.user);
-  assert.match(user ?? "", /^smoke-/);
+  assert.match(user ?? "", /^e2e-/);
   assert.notEqual(user, earlierUser);
   assert.equal((await importText(app, TEXT, { headers: { [API_KEY_HEADER]: keys.system }, visibility: "private" })).status, 202);
   // The keys and user they replaced
   assert.equal(await whoIs(app, earlier.system), null);
   assert.equal(await whoIs(app, earlier.user), null);
-  assert.equal((await local.env.DB.prepare(`SELECT count(*) AS n FROM "user" WHERE "id" LIKE 'smoke-%'`).first<{ n: number }>())?.n, 1);
+  assert.equal((await local.env.DB.prepare(`SELECT count(*) AS n FROM "user" WHERE "id" LIKE 'e2e-%'`).first<{ n: number }>())?.n, 1);
   assert.equal((await importText(app, "Inny tekst.", { headers: { [API_KEY_HEADER]: "ef".repeat(32) } })).status, 401);
 });
 

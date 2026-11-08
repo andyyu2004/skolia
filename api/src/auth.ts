@@ -14,7 +14,7 @@ export interface AuthConfig {
 }
 
 /** The header an API key is sent in. Keys are made only by writing them to D1
- * (smoke-key.ts), for the system user. */
+ * (e2e-keys.ts), for the system user. */
 export const API_KEY_HEADER = "x-api-key";
 
 /** The API key plugin's routes, for making and managing keys as a signed-in user. Nobody

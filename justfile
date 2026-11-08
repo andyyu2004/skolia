@@ -82,10 +82,6 @@ env-local:
 dev-reader:
     pnpm --filter @skolia/reader dev --port 5173 --strictPort
 
-# The smoke test's API journeys (api/src/smoke.ts) against wrangler dev with fresh local state
-e2e: build images cards-local
-    api/scripts/e2e.sh {{ langs }}
-
 # Build each language's ingest image with Nix and load it into Docker for wrangler dev
 images:
     analysis/scripts/load_images.sh
@@ -141,25 +137,31 @@ deploy-web env:
 deploy-ingest env:
     infra/deploy-ingest.sh {{ env }}
 
-# Check the environment serves this checkout's version, then the API's journeys (api/src/smoke.ts): import
-# a new text and wait until it's ready, auth, the lexicon, cards. Writes new API keys for the system user
-# and a new smoke user to the environment's D1 first (api/src/smoke-key.ts).
-smoke env:
+# local (the default): against wrangler dev with fresh local state and the lexicon samples
+# (api/scripts/e2e.sh; needs Docker). Otherwise the deployed environment, after checking it serves this
+# checkout's version, with new API keys for the system user and a new e2e user written to its D1 first
+# (api/src/e2e-keys.ts).
+# The end-to-end tests (api/src/e2e.ts): import a text and wait until it's ready, auth, the lexicon, cards
+e2e env="local":
     #!/usr/bin/env bash
     set -euo pipefail
+    if [ {{ env }} = local ]; then
+      just build images cards-local
+      exec api/scripts/e2e.sh {{ langs }}
+    fi
     case {{ env }} in
       production) url=https://skolia.io ;;
       staging) url=https://staging.skolia.io ;;
       *) url=$(infra/preview.py url {{ env }}) || exit ;;
     esac
-    SMOKE_API_KEY=$(openssl rand -hex 32) SMOKE_USER_KEY=$(openssl rand -hex 32)
-    export SMOKE_API_KEY SMOKE_USER_KEY
+    E2E_API_KEY=$(openssl rand -hex 32) E2E_USER_KEY=$(openssl rand -hex 32)
+    export E2E_API_KEY E2E_USER_KEY
     dir=$(mktemp -d)
     trap 'rm -rf "$dir"' EXIT
-    sql=$dir/smoke-key.sql
-    node api/src/smoke-key.ts > "$sql"
+    sql=$dir/e2e-keys.sql
+    node api/src/e2e-keys.ts > "$sql"
     infra/wrangler.sh {{ env }} d1 execute DB --remote --yes --file "$sql" >/dev/null
-    node api/src/smoke.ts "$url" "$(git describe --tags --always --dirty)"
+    node api/src/e2e.ts "$url" "$(git describe --tags --always --dirty)"
 
 # Delete a preview (pr-<N>): its Workers, container applications, storage, queue and Terraform state
 teardown env:

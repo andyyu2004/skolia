@@ -4,13 +4,13 @@
 // - documents: in each language, imports a text no one has imported (so its ingest
 //   container really runs), waits until it's ready, then fetches its text, analysis and
 //   bundle. Uses one of the day's imports per language. Imports as the system user, with
-//   the API key smoke-key.ts wrote, and privately, so the texts stay out of the library.
+//   the API key e2e-keys.ts wrote, and privately, so the texts stay out of the library.
 // - auth: who a key signs in, and that a request without one is refused.
 // - lexicon: both languages' entries, with the feature sets their paradigms use, from each
 //   language's lexicon database (load-lexicon has run).
-// - cards: in each language, as the new user smoke-key.ts made, whose cards start empty:
+// - cards: in each language, as the new user e2e-keys.ts made, whose cards start empty:
 //   add a word, review its cards, mark it known.
-// usage: SMOKE_API_KEY=<key> SMOKE_USER_KEY=<key> node src/smoke.ts https://staging.skolia.io $(git describe --tags --always --dirty)
+// usage: E2E_API_KEY=<key> E2E_USER_KEY=<key> node src/e2e.ts https://staging.skolia.io $(git describe --tags --always --dirty)
 import assert from "node:assert/strict";
 import { hc } from "hono/client";
 import { LANGS, lemmaParam, type CardCounts, type Due, type ImportRequest, type Lang, type LemmaId, type Version, type WordStatus } from "@skolia/shared/api";
@@ -72,7 +72,7 @@ async function documents(base: string, key: string, lang: Lang): Promise<void> {
   const api = client(base, key);
   const anonymous = client(base);
   const at = new Date().toISOString();
-  const request: ImportRequest = { title: `smoke test ${at}`, text: `${TEXTS[lang]} Test ${at}.`, lang, visibility: "private" };
+  const request: ImportRequest = { title: `end-to-end test ${at}`, text: `${TEXTS[lang]} Test ${at}.`, lang, visibility: "private" };
   const { id } = await body(`${lang} import`, api.documents.$post({ json: request }), 202);
   console.log(`${lang}: imported ${id}`);
   const library = await body("library", anonymous.documents.$get());
@@ -104,7 +104,7 @@ async function auth(base: string, systemKey: string, userKey: string): Promise<v
   await expectStatus("/api/me without a key", client(base).me.$get(), 401);
   await expectStatus("/api/me with an unknown key", client(base, "00".repeat(32)).me.$get(), 401);
   assert.equal((await body("the system user", client(base, systemKey).me.$get())).id, "system");
-  assert.match((await body("the smoke user", client(base, userKey).me.$get())).id, /^smoke-/);
+  assert.match((await body("the e2e user", client(base, userKey).me.$get())).id, /^e2e-/);
   console.log("auth: ok");
 }
 
@@ -179,10 +179,10 @@ async function cards(base: string, key: string, lang: Lang): Promise<void> {
 }
 
 const [, , url, expected] = process.argv;
-const systemKey = process.env["SMOKE_API_KEY"];
-const userKey = process.env["SMOKE_USER_KEY"];
+const systemKey = process.env["E2E_API_KEY"];
+const userKey = process.env["E2E_USER_KEY"];
 if (!url || !expected || !systemKey || !userKey) {
-  console.error("usage: SMOKE_API_KEY=<key> SMOKE_USER_KEY=<key> node src/smoke.ts <base url> <version>");
+  console.error("usage: E2E_API_KEY=<key> E2E_USER_KEY=<key> node src/e2e.ts <base url> <version>");
   process.exit(2);
 }
 const base = url.replace(/\/$/, "");
@@ -197,4 +197,4 @@ await Promise.all([
     for (const lang of LANGS) await cards(base, userKey, lang);
   })(),
 ]);
-console.log("smoke test passed");
+console.log("end-to-end tests passed");

@@ -1,4 +1,4 @@
-// Checking the typed client's (hono/client) responses, for the tests and the smoke test.
+// Checking the typed client's (hono/client) responses, for the tests and the end-to-end tests (e2e.ts).
 import type { ClientResponse } from "hono/client";
 
 type Sent = ClientResponse<unknown, number, string>;

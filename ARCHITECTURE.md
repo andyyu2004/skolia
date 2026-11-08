@@ -93,7 +93,7 @@ flowchart TB
     DI["deploy-infra: terraform, D1 migrations"]
     LL["load-lexicon"]
     DGI["deploy-ingest"]
-    DW["deploy-web, smoke"]
+    DW["deploy-web, e2e"]
   end
   CX[("Cachix")]
   REG[("Cloudflare registry")]
@@ -136,7 +136,7 @@ flowchart TB
 - D1 is bound by name. If Terraform hasn't made a database, `wrangler deploy` creates one outside Terraform, so `deploy-infra` goes first.
 - The ingest image has `lexicon-{lang}` but not the cards lexicon. The cards lexicon is built from the lexicon, with Morfeusz's paradigms for Polish.
 - `load-lexicon` only substitutes from Cachix and never fetches the inputs, so it needs the lexicon there; `build-ingest-image` pushes it only when an image is rebuilt.
-- `deploy-web` waits for `load-lexicon` and `deploy-ingest`: the smoke test's journeys read the lexicon.
+- `deploy-web` waits for `load-lexicon` and `deploy-ingest`: the end-to-end tests read the lexicon.
 - `schema.gen.ts` is generated from analysis; the blob keys in `shared/keys.ts` are kept in step by hand.
 - A preview loads each language's entries for wordfreq's 3,000 most common words only, and accepts 20 imports a day.
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local end to end: wrangler dev with both Workers, the ingest containers and empty local
 # D1, R2 and queue, each language's lexicon sample (as a preview has) loaded, then the
-# smoke test's journeys against it. Needs Docker, the reader build, the ingest images
+# end-to-end tests (src/e2e.ts) against it. Needs Docker, the reader build, the ingest images
 # (just images) and data/lexicon/{lang}.cards.sqlite (just cards-local). Port 8787 must be
 # free: api/.env points the containers at it.
 # usage: e2e.sh <lang>...
@@ -44,10 +44,10 @@ until curl -fs -o /dev/null "http://localhost:$port/api/documents"; do
   sleep 2
 done
 
-SMOKE_API_KEY=$(openssl rand -hex 32) SMOKE_USER_KEY=$(openssl rand -hex 32)
-export SMOKE_API_KEY SMOKE_USER_KEY
-node src/smoke-key.ts > "$state/smoke-key.sql"
-d1 execute DB --file "$state/smoke-key.sql"
+E2E_API_KEY=$(openssl rand -hex 32) E2E_USER_KEY=$(openssl rand -hex 32)
+export E2E_API_KEY E2E_USER_KEY
+node src/e2e-keys.ts > "$state/e2e-keys.sql"
+d1 execute DB --file "$state/e2e-keys.sql"
 
 # wrangler dev serves version "dev" (define in wrangler.jsonc)
-node src/smoke.ts "http://localhost:$port" dev || { echo "smoke test failed; see api/$log" >&2; exit 1; }
+node src/e2e.ts "http://localhost:$port" dev || { echo "end-to-end tests failed; see api/$log" >&2; exit 1; }
