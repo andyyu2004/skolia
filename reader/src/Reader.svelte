@@ -136,9 +136,11 @@
         </span>
         {#if summary.source}<span><a href={summary.source} rel="noreferrer">source</a></span>{/if}
         {#if summary.visibility === "private"}<span>private</span>{/if}
-        {#if notice.kind === "processing" || notice.kind === "updating"}
+        {#if notice.kind === "waiting" || notice.kind === "updating"}
           {@const place = queueText(summary)}
-          <em class="processing">{notice.kind === "processing" ? "Processing" : "Updating"}{place ? `: ${place}` : "…"}</em>
+          <em class="processing">{notice.kind === "waiting" ? "Waiting" : "Updating"}{place ? `: ${place}` : "…"}</em>
+        {:else if notice.kind === "analysing"}
+          <em class="processing">Analysing…</em>
         {/if}
       </p>
       {#if editing}
