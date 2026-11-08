@@ -596,8 +596,8 @@ textarea {
 
   .sheet {
     position: sticky;
-    top: var(--nav-height);
     inset: auto;
+    top: var(--nav-height);
     height: calc(100vh - var(--nav-height));
     max-height: none;
     border-top: 0;
