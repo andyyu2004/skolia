@@ -450,6 +450,12 @@ export interface Pronunciation {
   accents?: Accent[];
 }
 
+export interface Recording {
+  audio: string;
+  mp3_url: string;
+  tags?: string[];
+}
+
 export interface Bundle {
   schema: number;
   lang: string;
@@ -460,6 +466,7 @@ export interface Bundle {
   match: Record<string, Match>;
   feats: Feats[];
   pronunciations?: Record<string, Pronunciation[]>;
+  recordings?: Record<string, Recording[]>;
 }
 
 export interface IngestJob {

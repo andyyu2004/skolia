@@ -13,6 +13,7 @@ from .schema import (
     Match,
     Paradigm,
     Pronunciation,
+    Recording,
     pronunciation_key,
 )
 from .store import Lexicon, Row
@@ -94,13 +95,20 @@ def make(
         "match": {},
         "feats": [],
         "pronunciations": {},
+        "recordings": {},
     }
     feats = FeatsTable(bundle["feats"])
+    seen: set[str] = set()
 
     def add_pronunciation(word: str, upos: Upos) -> None:
         key = pronunciation_key(word, upos)
-        if key not in bundle["pronunciations"] and (found := pronounce(lexicon, word, upos)):
+        if key in seen:
+            return
+        seen.add(key)
+        if found := pronounce(lexicon, word, upos):
             bundle["pronunciations"][key] = found
+        if heard := record(lexicon, word, upos):
+            bundle["recordings"][key] = heard
 
     for sentence in blob["sentences"]:
         for token in sentence["tokens"]:
@@ -122,20 +130,36 @@ def make(
 
 
 def pronounce(lexicon: Lexicon, word: str, upos: Upos) -> list[Pronunciation]:
-    """Falls back like resolve: the word lowercased (a sentence's first word), then the
-    closest other part of speech (be as AUX is Wiktionary's verb)."""
+    found = _find(lexicon.pronunciations, word, upos)
+    return lexicon.pronunciations(found[0])[found[1]] if found else []
+
+
+def record(lexicon: Lexicon, word: str, upos: Upos) -> list[Recording]:
+    """The recordings filed with the pronunciation pronounce picks: the noun lead, /lɛd/,
+    has none of its own, and the verb's, /liːd/, would be wrong. Only a word without a
+    pronunciation falls back by its recordings."""
+    found = _find(lexicon.pronunciations, word, upos) or _find(lexicon.recordings, word, upos)
+    return lexicon.recordings(found[0]).get(found[1], []) if found else []
+
+
+def _find[T](
+    by_upos_of: Callable[[str], dict[Upos, list[T]]], word: str, upos: Upos
+) -> tuple[str, Upos] | None:
+    """The spelling and part of speech to look up. Falls back like resolve: the word
+    lowercased (a sentence's first word), then the closest other part of speech (be as
+    AUX is Wiktionary's verb)."""
     for spelling in dict.fromkeys([word, word.lower()]):
-        by_upos = lexicon.pronunciations(spelling)
+        by_upos = by_upos_of(spelling)
         if upos in by_upos:
-            return by_upos[upos]
+            return spelling, upos
         for other in CLOSEST_UPOS.get(upos, ()):
             if other in by_upos:
-                return by_upos[other]
+                return spelling, other
     for spelling in dict.fromkeys([word, word.lower()]):
-        by_upos = lexicon.pronunciations(spelling)
+        by_upos = by_upos_of(spelling)
         if by_upos:
-            return next(iter(by_upos.values()))
-    return []
+            return spelling, next(iter(by_upos))
+    return None
 
 
 class FeatsTable:

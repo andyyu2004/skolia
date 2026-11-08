@@ -1078,6 +1078,15 @@ label.check {
   font-size: 0.8em;
 }
 
+.word h2 .speaker {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 0.6em;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
 .dot {
   color: var(--muted);
 }

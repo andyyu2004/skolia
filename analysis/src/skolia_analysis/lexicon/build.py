@@ -9,10 +9,11 @@ from ..blob import lemma_id
 from ..schema import Upos
 from . import kaikki, store
 from .pronunciation import merge as merge_pronunciations
-from .schema import Paradigm, Pronunciation, Relation, Sense
+from .pronunciation import merge_recordings
+from .schema import Paradigm, Pronunciation, Recording, Relation, Sense
 from .source import Converted, LexiconSource
 
-LEXICON_VERSION = "3"
+LEXICON_VERSION = "4"
 
 
 @dataclass
@@ -30,6 +31,8 @@ class Stats:
     skipped: int = 0
     pronounced: int = 0
     """Words with a pronunciation, by part of speech."""
+    recorded: int = 0
+    """Words with a recording, by part of speech."""
 
 
 def merge(converted: Iterable[Converted]) -> dict[tuple[str, Upos], Merged]:
@@ -79,6 +82,7 @@ def _drop_uninformative_when(senses: list[Sense]) -> None:
 
 
 type Pronunciations = dict[tuple[str, Upos], list[Pronunciation]]
+type Recordings = dict[tuple[str, Upos], list[Recording]]
 
 
 def rows(
@@ -87,18 +91,23 @@ def rows(
     path: Path,
     stats: Stats,
     pronunciations: Pronunciations | None = None,
+    recordings: Recordings | None = None,
 ) -> Iterator[store.Row]:
-    """Fills pronunciations, if given, on the way: inflected forms have them too."""
+    """Fills pronunciations and recordings, if given, on the way: inflected forms have
+    them too."""
 
     def converted() -> Iterator[Converted]:
         for entry in kaikki.read(path):
             stats.entries += 1
-            if pronunciations is not None and (said := source.pronounce(entry)) is not None:
+            if (said := source.pronounce(entry)) is not None:
                 for upos in said.upos:
                     key = (said.word, upos)
-                    pronunciations[key] = merge_pronunciations(
-                        pronunciations.get(key, []), said.pronunciations
-                    )
+                    if pronunciations is not None and said.pronunciations:
+                        pronunciations[key] = merge_pronunciations(
+                            pronunciations.get(key, []), said.pronunciations
+                        )
+                    if recordings is not None and said.recordings:
+                        recordings[key] = merge_recordings(recordings.get(key, []), said.recordings)
             result = source.convert(entry)
             if result is None:
                 stats.skipped += 1
@@ -128,16 +137,20 @@ def build(lang: str, source: LexiconSource, kaikki_path: Path, out: Path) -> tup
         lexicon_version += f"+{source.version}"
     meta = {"lang": lang, "version": lexicon_version, "attribution": source.attribution}
     pronunciations: Pronunciations = {}
+    recordings: Recordings = {}
     count = store.write(
         out,
-        rows(lang, source, kaikki_path, stats, pronunciations),
+        rows(lang, source, kaikki_path, stats, pronunciations, recordings),
         meta,
         lambda: (
-            store.PronunciationRow(word, upos, said)
-            for (word, upos), said in sorted(pronunciations.items())
+            store.PronunciationRow(
+                word, upos, pronunciations.get((word, upos), []), recordings.get((word, upos), [])
+            )
+            for word, upos in sorted(pronunciations.keys() | recordings.keys())
         ),
     )
     stats.pronounced = len(pronunciations)
+    stats.recorded = len(recordings)
     return count, stats
 
 

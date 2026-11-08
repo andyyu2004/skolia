@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import NamedTuple, cast
 
 from ..schema import Upos
-from .schema import Paradigm, Pronunciation, Relation, Sense
+from .schema import Paradigm, Pronunciation, Recording, Relation, Sense
 
 SCHEMA = """
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -31,6 +31,7 @@ CREATE TABLE pronunciation (
     word TEXT NOT NULL,
     upos TEXT NOT NULL,
     pronunciations TEXT NOT NULL,
+    recordings TEXT NOT NULL,
     PRIMARY KEY (word, upos)
 );
 """
@@ -50,6 +51,7 @@ class PronunciationRow(NamedTuple):
     """As written, an inflected form or a lemma: psa, pies."""
     upos: Upos
     pronunciations: list[Pronunciation]
+    recordings: list[Recording]
 
 
 def write(
@@ -80,9 +82,14 @@ def write(
             )
             count += 1
         db.executemany(
-            "INSERT INTO pronunciation VALUES (?, ?, ?)",
+            "INSERT INTO pronunciation VALUES (?, ?, ?, ?)",
             (
-                (p.word, p.upos, json.dumps(p.pronunciations, ensure_ascii=False))
+                (
+                    p.word,
+                    p.upos,
+                    json.dumps(p.pronunciations, ensure_ascii=False),
+                    json.dumps(p.recordings, ensure_ascii=False),
+                )
                 for p in pronunciations()
             ),
         )
@@ -121,7 +128,13 @@ class Lexicon:
         found = self._db.execute(
             "SELECT upos, pronunciations FROM pronunciation WHERE word = ?", (word,)
         )
-        return {cast(Upos, upos): json.loads(p) for upos, p in found}
+        return {cast(Upos, upos): json.loads(p) for upos, p in found if p != "[]"}
+
+    def recordings(self, word: str) -> dict[Upos, list[Recording]]:
+        found = self._db.execute(
+            "SELECT upos, recordings FROM pronunciation WHERE word = ?", (word,)
+        )
+        return {cast(Upos, upos): json.loads(r) for upos, r in found if r != "[]"}
 
     def rows(self) -> Iterator[Row]:
         """Every entry, by lemma_id."""

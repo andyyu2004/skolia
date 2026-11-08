@@ -28,9 +28,23 @@ build:
     pnpm --filter @skolia/reader build
     pnpm --dir api exec wrangler deploy --dry-run --outdir dist --env=''
 
-# wrangler dev (both Workers, the ingest container, local D1/R2/queue) and the reader's Vite server
+# wrangler dev (both Workers, the ingest container, local D1/R2/queue) and the reader's Vite server,
+# with the curated texts in texts/ seeded once the API is up
 [parallel]
-dev: dev-api dev-reader
+dev: dev-api dev-reader dev-seed
+
+# Waits up to 30 minutes for wrangler dev (dev-api builds the ingest images first), then just seed local
+dev-seed:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for _ in $(seq 900); do
+      if curl -fs -o /dev/null http://localhost:8787/api/documents; then
+        exec just seed local
+      fi
+      sleep 2
+    done
+    echo "wrangler dev didn't come up on :8787; not seeding" >&2
+    exit 1
 
 # migrations apply has no flag to skip its confirmation; without a TTY on stdin it doesn't ask
 
@@ -174,6 +188,7 @@ seed env *flags:
 url env:
     #!/usr/bin/env bash
     case {{ env }} in
+      local) echo http://localhost:8787 ;;
       production) echo https://skolia.io ;;
       staging) echo https://staging.skolia.io ;;
       *) infra/preview.py url {{ env }} ;;
@@ -187,7 +202,11 @@ d1-sql env script:
     dir=$(mktemp -d)
     trap 'rm -rf "$dir"' EXIT
     node {{ script }} > "$dir/keys.sql"
-    infra/wrangler.sh {{ env }} d1 execute DB --remote --yes --file "$dir/keys.sql" >/dev/null
+    if [ {{ env }} = local ]; then
+      pnpm --dir api exec wrangler d1 execute DB --local --env='' --file "$dir/keys.sql" >/dev/null
+    else
+      infra/wrangler.sh {{ env }} d1 execute DB --remote --yes --file "$dir/keys.sql" >/dev/null
+    fi
 
 # Delete a preview (pr-<N>): its Workers, container applications, storage, queue and Terraform state
 teardown env:

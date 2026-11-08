@@ -5,7 +5,15 @@
   import { LANGUAGES } from "@skolia/shared/lang";
   import type { Piece } from "@skolia/shared/doc";
   import type { LemmaId } from "@skolia/shared/api";
-  import { entryFor, entryIdFor, pronunciationsOf, rankSenses } from "@skolia/shared/lexicon";
+  import {
+    entryFor,
+    entryIdFor,
+    mainPronunciations,
+    pronunciationsOf,
+    rankSenses,
+    recordingsOf,
+  } from "@skolia/shared/lexicon";
+  import type { Recording } from "@skolia/shared/schema";
   import { LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
   import { setStatus, words as known } from "./lib/words.svelte.ts";
   import { paradigmTables } from "@skolia/shared/paradigm";
@@ -63,13 +71,17 @@
         const tokens = sentenceTokens(w.sentence);
         const uses = entry && partOfWord === null ? language.uses(entry, tokens, w.index) : [];
         const parsedId = LemmaIdSchema.safeParse(entryIdFor(bundle, w.token));
+        const said = mainPronunciations(pronunciationsOf(bundle, w.token.text, w.token.upos));
         return {
           ref: w,
           entry,
           lemmaId: parsedId.success ? parsedId.data : null,
-          said: pronunciationsOf(bundle, w.token.text, w.token.upos),
+          said,
           lemmaSaid:
-            entry && !sameWord(entry.lemma, w.token.text) ? pronunciationsOf(bundle, entry.lemma, entry.upos) : [],
+            said.length === 0 && entry && !sameWord(entry.lemma, w.token.text)
+              ? mainPronunciations(pronunciationsOf(bundle, entry.lemma, entry.upos))
+              : [],
+          heard: recordingsOf(bundle, w.token.text, w.token.upos).slice(0, 1),
           partOfWord,
           role: role && head ? { role, head } : null,
           caseWhy: language.explainCase(tokens, w.index),
@@ -83,6 +95,14 @@
         };
       }),
   );
+
+  let playing: HTMLAudioElement | null = null;
+
+  function play(recording: Recording): void {
+    playing?.pause();
+    playing = new Audio(recording.mp3_url);
+    void playing.play();
+  }
 
   /** Cześć at the start of a sentence is still the lemma cześć */
   function sameWord(a: string, b: string): boolean {
@@ -140,6 +160,7 @@
     <section class="word">
       <h2>
         <span {lang}>{token.text}</span>
+        {@render speakers(word.heard, token.text)}
         {#if token.lemma && !sameWord(token.lemma, token.text)}
           <span class="lemma">(<span {lang}>{word.entry?.lemma ?? token.lemma}</span>)</span>
         {/if}
@@ -147,6 +168,17 @@
       {#if word.lemmaId && statusError?.lemmaId === word.lemmaId}
         <p class="error" role="alert">{statusError.message}</p>
       {/if}
+      {#snippet speakers(recordings: Recording[], word: string)}
+        {#each recordings as r (r.audio)}
+          <button
+            type="button"
+            class="speaker"
+            aria-label={`Play ${word}${r.tags ? ` (${r.tags.join(", ")})` : ""}`}
+            title={r.tags?.join(", ")}
+            onclick={() => play(r)}>🔊</button
+          >
+        {/each}
+      {/snippet}
       {#if word.said.length > 0 || word.lemmaSaid.length > 0}
         <p class="pronunciation">
           {#each word.said as p (p.ipa)}

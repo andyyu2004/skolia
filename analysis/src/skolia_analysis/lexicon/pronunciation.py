@@ -1,9 +1,10 @@
-"""Pronunciations from Wiktionary's sounds: phonemic IPA, each transcription once."""
+"""Pronunciations from Wiktionary's sounds: phonemic IPA, each transcription once; and
+recordings, each file once."""
 
 from collections.abc import Callable, Iterable
 
 from .kaikki import KaikkiSound
-from .schema import Accent, Pronunciation
+from .schema import Accent, Pronunciation, Recording
 
 type Accents = Callable[[KaikkiSound], list[Accent] | None]
 """The accents a sound is for: empty for all of them, None to leave the sound out."""
@@ -39,6 +40,25 @@ def merge(ours: list[Pronunciation], theirs: list[Pronunciation]) -> list[Pronun
         else:
             same["accents"] = mine + [a for a in other if a not in mine]
     return merged
+
+
+def recordings(sounds: Iterable[KaikkiSound]) -> list[Recording]:
+    found: list[Recording] = []
+    for sound in sounds:
+        audio, mp3_url = sound.get("audio"), sound.get("mp3_url")
+        if not (audio and mp3_url):
+            continue
+        recording: Recording = {"audio": audio, "mp3_url": mp3_url}
+        if tags := sound.get("tags"):
+            recording["tags"] = tags
+        found = merge_recordings(found, [recording])
+    return found
+
+
+def merge_recordings(ours: list[Recording], theirs: list[Recording]) -> list[Recording]:
+    """Each file once: Wiktionary pages often share one between parts of speech."""
+    seen = {r["audio"] for r in ours}
+    return ours + [r for r in theirs if r["audio"] not in seen]
 
 
 def _pronunciation(ipa: str, accents: list[Accent]) -> Pronunciation:

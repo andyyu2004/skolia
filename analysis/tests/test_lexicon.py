@@ -4,7 +4,8 @@ from pathlib import Path
 
 from skolia_analysis.lang.pl.walenty.parse import parse_schema
 from skolia_analysis.lexicon import build, bundle, cards, pronunciation, store
-from skolia_analysis.lexicon.schema import Form, Paradigm, Pronunciation, Sense
+from skolia_analysis.lexicon.kaikki import KaikkiSound
+from skolia_analysis.lexicon.schema import Form, Paradigm, Pronunciation, Recording, Sense
 from skolia_analysis.lexicon.source import Converted
 from skolia_analysis.schema import Blob, Feats, Token, Upos
 
@@ -119,11 +120,14 @@ def test_bundle_shares_feature_sets_and_groups_forms(tmp_path: Path) -> None:
 
 def test_bundle_pronounces_tokens_and_lemmas(tmp_path: Path) -> None:
     path = tmp_path / "en.sqlite"
+    lead: Recording = {"audio": "En-lead.ogg", "mp3_url": "https://x/En-lead.ogg.mp3"}
+    read: Recording = {"audio": "En-read.ogg", "mp3_url": "https://x/En-read.ogg.mp3"}
     said = [
-        store.PronunciationRow("lead", "NOUN", [{"ipa": "/lɛd/"}]),
-        store.PronunciationRow("lead", "VERB", [{"ipa": "/liːd/"}]),
-        store.PronunciationRow("led", "VERB", [{"ipa": "/lɛd/"}]),
-        store.PronunciationRow("be", "VERB", [{"ipa": "/biː/"}]),
+        store.PronunciationRow("lead", "NOUN", [{"ipa": "/lɛd/"}], []),
+        store.PronunciationRow("lead", "VERB", [{"ipa": "/liːd/"}], [lead]),
+        store.PronunciationRow("led", "VERB", [{"ipa": "/lɛd/"}], []),
+        store.PronunciationRow("be", "VERB", [{"ipa": "/biː/"}], []),
+        store.PronunciationRow("read", "VERB", [], [read]),
     ]
     store.write(path, [], {"version": "test/1"}, lambda: said)
     lexicon = store.Lexicon(path)
@@ -131,6 +135,9 @@ def test_bundle_pronounces_tokens_and_lemmas(tmp_path: Path) -> None:
     assert bundle.pronounce(lexicon, "lead", "VERB") == [{"ipa": "/liːd/"}]
     assert bundle.pronounce(lexicon, "be", "AUX") == [{"ipa": "/biː/"}]
     assert bundle.pronounce(lexicon, "xyzzy", "NOUN") == []
+    assert bundle.pronounce(lexicon, "read", "VERB") == []
+    assert bundle.record(lexicon, "read", "VERB") == [read]
+    assert bundle.record(lexicon, "lead", "NOUN") == []
 
     token: Token = {
         "start": 0,
@@ -151,10 +158,24 @@ def test_bundle_pronounces_tokens_and_lemmas(tmp_path: Path) -> None:
         "hash": "",
         "sentences": [{"start": 0, "end": 3, "tokens": [token], "expressions": []}],
     }
-    assert bundle.make(blob, lexicon).get("pronunciations") == {
+    made = bundle.make(blob, lexicon)
+    assert made.get("pronunciations") == {
         "led:VERB": [{"ipa": "/lɛd/"}],
         "lead:VERB": [{"ipa": "/liːd/"}],
     }
+    assert made.get("recordings") == {"lead:VERB": [lead]}
+
+
+def test_recordings_are_the_sounds_with_audio_each_file_once() -> None:
+    sounds: list[KaikkiSound] = [
+        {"ipa": "/fʁaɪ̯/"},
+        {"audio": "De-frei.ogg", "mp3_url": "https://x/De-frei.ogg.mp3", "tags": ["Berlin"]},
+        {"audio": "De-frei.ogg", "mp3_url": "https://x/De-frei.ogg.mp3"},
+        {"audio": "De-frei2.ogg"},
+    ]
+    assert pronunciation.recordings(sounds) == [
+        {"audio": "De-frei.ogg", "mp3_url": "https://x/De-frei.ogg.mp3", "tags": ["Berlin"]}
+    ]
 
 
 def test_pronunciations_merge_accents() -> None:
@@ -171,7 +192,7 @@ def test_cards_lexicon_has_pronunciations_compact_paradigms_and_feature_rows(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "pl.sqlite"
-    said = [store.PronunciationRow("pies", "NOUN", [{"ipa": "/pjɛs/"}])]
+    said = [store.PronunciationRow("pies", "NOUN", [{"ipa": "/pjɛs/"}], [])]
     store.write(
         path,
         [store.Row("pl:pies:NOUN", "pies", "NOUN", [DOG], [], [])],

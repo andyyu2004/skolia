@@ -113,6 +113,10 @@ class KaikkiSound(TypedDict, total=False):
     """Accent or period: Received-Pronunciation, General-American, Middle Polish, ..."""
     note: str
     """Free text, e.g. a region ("Kuyavia"), "normal speech" or "prescriptive"."""
+    audio: str
+    """Wikimedia Commons file name of a recording: De-frei.ogg. Never on a sound with ipa."""
+    mp3_url: str
+    """Commons' mp3 of the recording, which every browser plays."""
 
 
 class KaikkiEntry(TypedDict, total=False):
