@@ -160,6 +160,7 @@
     <section class="word">
       <h2>
         <span {lang}>{token.text}</span>
+        {@render speakers(word.heard, token.text)}
         {#if token.lemma && !sameWord(token.lemma, token.text)}
           <span class="lemma">(<span {lang}>{word.entry?.lemma ?? token.lemma}</span>)</span>
         {/if}
@@ -178,12 +179,11 @@
           >
         {/each}
       {/snippet}
-      {#if word.said.length > 0 || word.lemmaSaid.length > 0 || word.heard.length > 0}
+      {#if word.said.length > 0 || word.lemmaSaid.length > 0}
         <p class="pronunciation">
           {#each word.said as p (p.ipa)}
             <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
           {/each}
-          {@render speakers(word.heard, token.text)}
           {#if word.lemmaSaid.length > 0 && word.entry}
             <span class="lemma-said"
               ><span {lang}>{word.entry.lemma}</span>

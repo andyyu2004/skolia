@@ -1078,11 +1078,12 @@ label.check {
   font-size: 0.8em;
 }
 
-.pronunciation .speaker {
+.word h2 .speaker {
   border: none;
   background: none;
   padding: 0;
-  font-size: 0.9em;
+  font-size: 0.6em;
+  vertical-align: middle;
   cursor: pointer;
 }
 
