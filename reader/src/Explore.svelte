@@ -1,18 +1,24 @@
 <script lang="ts">
-  import type { DocumentSummary, Lang } from "@skolia/shared/api";
+  import type { DocumentSummary, Lang, User } from "@skolia/shared/api";
   import { LANGS, LANGUAGE_INFO, LICENCE_INFO } from "@skolia/shared/api";
   import { listDocuments } from "./lib/api.ts";
   import { badge } from "./lib/reading.ts";
+
+  let { user }: { user: User | null | undefined } = $props();
 
   let documents = $state<DocumentSummary[] | null>(null);
   let error = $state<string | null>(null);
   let query = $state("");
   let lang = $state<Lang | "all">("all");
+  let whose = $state<"all" | "mine">("all");
 
   const shown = $derived.by(() => {
     const q = query.trim().toLocaleLowerCase();
     return (documents ?? []).filter(
-      (d) => (lang === "all" || d.lang === lang) && (q === "" || d.title.toLocaleLowerCase().includes(q)),
+      (d) =>
+        (lang === "all" || d.lang === lang) &&
+        (whose === "all" || !user || d.mine) &&
+        (q === "" || d.title.toLocaleLowerCase().includes(q)),
     );
   });
 
@@ -36,6 +42,12 @@
         <option value={code} lang={code}>{LANGUAGE_INFO[code].flag} {LANGUAGE_INFO[code].endonym}</option>
       {/each}
     </select>
+    {#if user}
+      <select bind:value={whose} aria-label="Whose texts">
+        <option value="all">All texts</option>
+        <option value="mine">Your texts</option>
+      </select>
+    {/if}
     <input type="search" bind:value={query} placeholder="Search titles" aria-label="Search titles" />
   </div>
 
@@ -44,7 +56,15 @@
   {:else if documents === null}
     <p class="muted">Loading…</p>
   {:else if shown.length === 0}
-    <p class="muted">{documents.length === 0 ? "Nothing imported yet." : "No texts match."}</p>
+    <p class="muted">
+      {#if documents.length === 0}
+        Nothing imported yet.
+      {:else if whose === "mine" && !documents.some((d) => d.mine)}
+        You haven't imported anything yet. <a href="#/upload">Upload a text</a>.
+      {:else}
+        No texts match.
+      {/if}
+    </p>
   {:else}
     <ul class="cards">
       {#each shown as doc (doc.id)}

@@ -62,7 +62,7 @@
 {:else if route.page === "settings"}
   <Settings {user} />
 {:else}
-  <Explore />
+  <Explore {user} />
 {/if}
 
 {#if versionLink}
