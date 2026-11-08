@@ -88,5 +88,6 @@ def main() -> None:
     pipelines = {code: pipeline(code, data) for code in codes}
     ingester = Ingester(blobs, pipelines)
     ingester.publish_versions()
+    queue.loaded()
     log.info("waiting for jobs")
     ingester.run(queue)

@@ -1,21 +1,30 @@
 // Documents: importing a text, listing and opening them, and their text, analysis and
 // bundle, queueing a document again when ingest makes other versions or its job is lost.
 import * as z from "zod";
-import { timestamp, type DocumentId, type DocumentList, type DocumentSummary, type Lang, type User } from "@skolia/shared/api";
-import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
+import {
+  MAX_TITLE_LENGTH,
+  isShareable,
+  timestamp,
+  type DocumentId,
+  type DocumentList,
+  type DocumentSummary,
+  type Lang,
+  type QueuePlace,
+  type User,
+} from "@skolia/shared/api";
+import { PART_ENCODING, docId, docPrefix, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { Status, Versions } from "@skolia/shared/schema";
 import * as schemas from "@skolia/shared/schemas";
-import type { BlobStore, Deps, DocumentRecord, Sharing, StoredDocument } from "../ports.ts";
-import { fail, ok, type BlobResult, type Failed, type Json, type Ok } from "./result.ts";
+import type { BlobStore, Deps, DocumentRecord, IngestJobs, Sharing, StoredDocument } from "../ports.ts";
+import { NO_CONTENT, fail, ok, type BlobResult, type Failed, type Json, type NoContent, type Ok } from "./result.ts";
 
 const NAME = /^[a-z0-9-]{1,64}$/;
-const MAX_TITLE_LENGTH = 200;
 const JSON_TYPE = "application/json";
 
 export async function list(deps: Deps, viewer: User | null): Promise<Ok<DocumentList>> {
   const records = await deps.documents.list(viewer?.id ?? null);
   const versions = versionsOf(deps.blobs);
-  return ok({ documents: await Promise.all(records.map((r) => current(deps, r, versions))) });
+  return ok({ documents: await Promise.all(records.map((r) => current(deps, r, versions, viewer))) });
 }
 
 /** 202 if the text is queued, 200 if it's already here and not failed (a failed import is
@@ -39,12 +48,12 @@ export async function importText(
     existing = { ...existing, ...sharing, visibility: "public" };
   }
   if (existing) {
-    const summary = await current(deps, existing, versionsOf(deps.blobs));
+    const summary = await current(deps, existing, versionsOf(deps.blobs), user);
     if (summary.state !== "failed") return ok(summary);
   } else {
     const today = new Date(deps.now());
     today.setUTCHours(0, 0, 0, 0);
-    if ((await deps.documents.countImportedSince(timestamp(today))) >= deps.maxImportsPerDay) {
+    if (user.type !== "system" && (await deps.documents.countImportedSince(timestamp(today))) >= deps.maxImportsPerDay) {
       return fail(429, "Today's imports are used up. Try again tomorrow.");
     }
     await deps.blobs.put(textKey(id), request.text, "text/plain; charset=utf-8");
@@ -62,13 +71,70 @@ export async function importText(
   const record = existing ?? (await deps.documents.get(id));
   if (!record) throw new Error(`document ${id} vanished after insert`);
   const queued = await requeue(deps, record, await readStatus(deps.blobs, id), deps.now());
-  return { status: 202, body: summarize(record, queued) };
+  return { status: 202, body: summarize(record, queued, user) };
 }
 
-export async function get(deps: Deps, id: string): Promise<Ok<DocumentSummary> | Failed<404>> {
+/** The documents the user imported, public or private. */
+export async function mine(deps: Deps, user: User): Promise<Ok<DocumentList>> {
+  const records = await deps.documents.importedBy(user.id);
+  const versions = versionsOf(deps.blobs);
+  return ok({ documents: await Promise.all(records.map((r) => current(deps, r, versions, user))) });
+}
+
+/** Its importer changes its title, licence, author, source or visibility. Changing the
+ * licence, or making it public, makes them its licensor. */
+export async function update(
+  deps: Deps,
+  user: User,
+  id: string,
+  body: z.output<typeof schemas.DocumentUpdate>,
+): Promise<Ok<DocumentSummary> | Failed<400 | 403 | 404>> {
   const record = await findDocument(deps, id);
   if (!record) return noSuchDocument();
-  return ok(await current(deps, record, versionsOf(deps.blobs)));
+  if (record.importer !== user.id) return fail(403, "only the document's importer can change it");
+  const visibility = body.visibility ?? record.visibility;
+  const claimed = body.licence !== undefined || (visibility === "public" && record.visibility === "private");
+  const fields = {
+    title: body.title ?? record.title,
+    licence: body.licence ?? record.licence,
+    author: body.author === undefined ? record.author : body.author || null,
+    source: body.source === undefined ? record.source : body.source,
+    visibility,
+    licensor: claimed ? user.id : record.licensor,
+  };
+  if (visibility === "public" && !isShareable(fields.licence)) {
+    return fail(400, "a public text needs a licence that allows sharing it");
+  }
+  await deps.documents.update(record.id, fields);
+  return ok(await current(deps, { ...record, ...fields }, versionsOf(deps.blobs), user));
+}
+
+/** Its importer deletes it: its record, then its text, status, analyses and bundles. Its
+ * id is then unknown, like one never imported. */
+export async function remove(deps: Deps, user: User, id: string): Promise<NoContent | Failed<403 | 404>> {
+  const record = await findDocument(deps, id);
+  if (!record) return noSuchDocument();
+  if (record.importer !== user.id) return fail(403, "only the document's importer can delete it");
+  await deps.documents.delete(record.id);
+  await deps.blobs.deletePrefix(docPrefix(record.id));
+  return NO_CONTENT;
+}
+
+export async function get(deps: Deps, id: string, viewer: User | null): Promise<Ok<DocumentSummary> | Failed<404>> {
+  const record = await findDocument(deps, id);
+  if (!record) return noSuchDocument();
+  const summary = await current(deps, record, versionsOf(deps.blobs), viewer);
+  if (summary.mine && (summary.state === "queued" || summary.state === "analysing")) {
+    summary.queue = placeIn(await deps.queue.jobs(record.lang), record.id);
+  }
+  return ok(summary);
+}
+
+/** No container running means one is about to start for this document. */
+export function placeIn(jobs: IngestJobs | null, id: DocumentId): QueuePlace {
+  if (jobs === null) return { starting: true, ahead: null };
+  const index = [...jobs.running, ...jobs.waiting].indexOf(id);
+  return { starting: jobs.loading, ahead: index < 0 ? null : index };
 }
 
 /** The id is the text's hash, so the text at this URL never changes. */
@@ -102,13 +168,13 @@ async function findDocument(deps: Deps, id: string): Promise<StoredDocument | nu
 
 /** The summary, after queueing the document again if ingest now produces other
  * versions, or if its job seems lost. */
-async function current(deps: Deps, record: StoredDocument, versions: VersionsOf): Promise<DocumentSummary> {
+async function current(deps: Deps, record: StoredDocument, versions: VersionsOf, viewer: User | null): Promise<DocumentSummary> {
   const status = await readStatus(deps.blobs, record.id);
   const now = deps.now();
   if (status !== null && (isStuck(status, now) || isOutdated(status, await versions(record.lang)))) {
-    return summarize(record, await requeue(deps, record, status, now));
+    return summarize(record, await requeue(deps, record, status, now), viewer);
   }
-  return summarize(record, status);
+  return summarize(record, status, viewer);
 }
 
 /** Queue the document, keeping the last analysis readable until the new one is ready. */
@@ -178,8 +244,8 @@ export function parseVersions(raw: string): Versions | null {
   return parseJson(schemas.Versions, raw);
 }
 
-function summarize({ importer: _, licensor: __, ...record }: StoredDocument, status: Status | null): DocumentSummary {
-  const summary: DocumentSummary = { ...record, state: status?.state ?? "failed" };
+function summarize({ importer, licensor: _, ...record }: StoredDocument, status: Status | null, viewer: User | null): DocumentSummary {
+  const summary: DocumentSummary = { ...record, mine: importer === viewer?.id, state: status?.state ?? "failed" };
   const analysis = nameOf(status?.analysis);
   const bundle = nameOf(status?.bundle);
   if (analysis !== undefined && bundle !== undefined) summary.reading = { analysis, bundle };

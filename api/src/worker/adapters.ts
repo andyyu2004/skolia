@@ -22,6 +22,7 @@ import type {
   DocumentRecord,
   DocumentStore,
   DueCards,
+  IngestJobs,
   JobQueue,
   Lexicon,
   ReviewOutcome,
@@ -195,8 +196,34 @@ export class D1Documents implements DocumentStore {
       .run();
   }
 
+  async importedBy(importer: UserId): Promise<StoredDocument[]> {
+    const { results } = await this.db
+      .prepare(`${SELECT_DOCUMENT} WHERE document.importer = ? ORDER BY document.imported DESC`)
+      .bind(importer)
+      .all();
+    return results.map((row) => DocumentRow.parse(row));
+  }
+
+  async update(
+    id: DocumentId,
+    { title, licence, author, source, visibility, licensor }: Pick<DocumentRecord, "title" | "licence" | "author" | "source" | "visibility" | "licensor">,
+  ): Promise<void> {
+    await this.db
+      .prepare("UPDATE document SET title = ?, licence = ?, author = ?, source = ?, visibility = ?, licensor = ? WHERE id = ?")
+      .bind(title, licence, author, source, visibility, licensor, id)
+      .run();
+  }
+
+  async delete(id: DocumentId): Promise<void> {
+    await this.db.prepare("DELETE FROM document WHERE id = ?").bind(id).run();
+  }
+
   async countImportedSince(since: Timestamp): Promise<number> {
-    const row = await this.db.prepare("SELECT COUNT(*) AS n FROM document WHERE imported >= ?").bind(since).first();
+    const row = await this.db
+      .prepare(`SELECT COUNT(*) AS n FROM document JOIN "user" ON "user"."id" = document.importer
+                WHERE document.imported >= ? AND "user"."type" != 'system'`)
+      .bind(since)
+      .first();
     return z.object({ n: z.number() }).parse(row).n;
   }
 }
@@ -220,18 +247,43 @@ export class R2Blobs implements BlobStore {
   async put(key: string, body: Uint8Array<ArrayBuffer> | string, contentType: string): Promise<void> {
     await this.bucket.put(key, body, { httpMetadata: { contentType } });
   }
+
+  async deletePrefix(prefix: string): Promise<void> {
+    let cursor: string | undefined;
+    do {
+      const listed = await this.bucket.list(cursor === undefined ? { prefix } : { prefix, cursor });
+      if (listed.objects.length > 0) await this.bucket.delete(listed.objects.map((o) => o.key));
+      cursor = listed.truncated ? listed.cursor : undefined;
+    } while (cursor !== undefined);
+  }
 }
+
+/** Asks a language's ingest container for its jobs: the ingest Worker's Ingester
+ * (worker/ingest.ts), or a fake in the tests. */
+export type JobsOf = (lang: Lang) => Promise<IngestJobs | null>;
 
 export class CloudflareQueue implements JobQueue {
   private readonly queue: Queue<IngestJob>;
+  private readonly jobsOf: JobsOf;
 
-  constructor(queue: Queue<IngestJob>) {
+  constructor(queue: Queue<IngestJob>, jobsOf: JobsOf) {
     this.queue = queue;
+    this.jobsOf = jobsOf;
   }
 
   async send(job: IngestJob): Promise<void> {
     // JSON, not the default Workers-only "v8" format, so a message can be read outside a
     // Worker (the dashboard, wrangler)
     await this.queue.send(job, { contentType: "json" });
+  }
+
+  async jobs(lang: Lang): Promise<IngestJobs | null> {
+    try {
+      return await this.jobsOf(lang);
+    } catch (error: unknown) {
+      // The ingest Worker not deployed or not answering: a summary without its place
+      console.error("asking ingest for its jobs failed:", error);
+      return null;
+    }
   }
 }

@@ -51,10 +51,11 @@ flowchart LR
   API -->|"job"| Q
   API -->|"RPC: words, cards, reviews, settings"| UDO
   API -->|"entries for due cards"| LX
+  API -->|"RPC: a document's place in the queue"| IDO
   Q --> CON
   CON --> IDO
-  IDO -->|"POST /jobs, GET /busy"| CPL
-  IDO -->|"POST /jobs, GET /busy"| CEN
+  IDO -->|"POST /jobs, GET /busy, GET /jobs"| CPL
+  IDO -->|"POST /jobs, GET /busy, GET /jobs"| CEN
   CPL -->|"S3 API"| R2
   CEN -->|"S3 API"| R2
 ```
@@ -62,7 +63,7 @@ flowchart LR
 - **Open a document:** D1 has its metadata and R2's `status.json` the names of its current analysis and bundle, which the reader then fetches from R2 through the API, as stored. Browsers cache them by HTTP (`immutable`); there's no IndexedDB yet.
 - **Tap a word:** local, from the bundle already loaded (`shared/lexicon`, `shared/paradigm`). Setting a word's status goes to the User DO.
 - **Review:** the User DO gives the due cards and the API adds their entries from its language's lexicon D1. The DO never reads the lexicon, and the reader's word sheet never reads the lexicon D1s, so the two can show different lexicon versions until a document is re-bundled.
-- **Import:** the API puts the text in R2, the metadata in D1, a queued `status.json` and the job on the queue. The consumer hands it to the Ingester named after its language's image, so a deploy that changes an image starts a new container.
+- **Import:** the API puts the text in R2, the metadata in D1, a queued `status.json` and the job on the queue. The consumer hands it to the Ingester named after its language's image, so a deploy that changes an image starts a new container. While it waits, the importer's summary says where it is: the API asks the language's Ingester (a Durable Object binding to the ingest Worker), which asks a running container for its jobs (`GET /jobs`) and never starts one.
 - The ingest Worker has no R2 or D1 binding: containers reach R2 over its S3 API, with a token Terraform makes.
 - Lexicon lookups only see the rows of each language's version in `loaded`.
 
@@ -215,7 +216,7 @@ versions/{lang}.json                                    -- what ingest produces 
 ```
 
 - Analyses and bundles are JSON compressed with Brotli (quality 11), stored with `Content-Encoding: br` and sent as stored to clients that accept it (the API decompresses for those that don't). On *Kamizelka*, Brotli was 41% (analysis) and 59% (bundle) the size of gzip, and smaller than zstd at level 22; MessagePack was no smaller than JSON once compressed.
-- Texts are limited to 20,000 characters per import (about 3,000 words, roughly a minute of analysis), checked by the API and again by ingest. The API also accepts at most `MAX_IMPORTS_PER_DAY` new texts per UTC day across all users (`api/wrangler.jsonc`, 50; a text already imported doesn't count), so container time is bounded whoever is importing.
+- Texts are limited to 20,000 characters per import (about 3,000 words, roughly a minute of analysis), checked by the API and again by ingest. The API also accepts at most `MAX_IMPORTS_PER_DAY` new texts per UTC day across all standard users (`api/wrangler.jsonc`, 50; a text already imported doesn't count), so container time is bounded whoever is importing. System users (`user.type`, skolia.io's own accounts, the end-to-end tests' importer and the seed's) aren't capped and don't count toward it.
 - Everything about a document is under one prefix, so it can be inspected or deleted in one place. `{analyzer}` and `{lexicon}` are short hashes of the version strings. Stale analyses and bundles are the ones `status.json` doesn't point at; clean them up by that rule, not by age (an old document's current analysis is old too).
 - Documents are deduped by a hash of language and text (`sha256("{lang}\n{text}")`): if many users import the same text, it's analyzed once. A user only sees texts they imported themselves or texts in the shared library.
 - An analysis or bundle is named by everything it depends on: the blob shape (`SCHEMA`, `BUNDLE_SCHEMA`), the analyser (plugin version, models, Morfeusz, snap policy, Walenty) and, for the bundle, the bundle-making code (`BUNDLER_VERSION`) and the lexicon. Bump `PLUGIN_VERSION` whenever the analysis output changes, `BUNDLER_VERSION` whenever the bundle for the same analysis and lexicon does (lookup fallbacks, how paradigms are made), and the shape numbers whenever the JSON shape does. The generated `schema.gen.ts` carries the shape numbers, and the reader refuses a shape it doesn't know.

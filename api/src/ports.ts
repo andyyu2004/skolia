@@ -54,7 +54,11 @@ export interface DocumentStore {
   add(record: DocumentRecord): Promise<void>;
   /** Make it public under this licence claim. */
   share(id: DocumentId, sharing: Sharing): Promise<void>;
-  /** How many documents were imported at or after this time. */
+  /** The documents this user imported, public or private. */
+  importedBy(importer: UserId): Promise<StoredDocument[]>;
+  update(id: DocumentId, fields: Pick<DocumentRecord, "title" | "licence" | "author" | "source" | "visibility" | "licensor">): Promise<void>;
+  delete(id: DocumentId): Promise<void>;
+  /** How many documents were imported at or after this time, by users who aren't system users. */
   countImportedSince(since: Timestamp): Promise<number>;
 }
 
@@ -66,10 +70,23 @@ export interface StoredBlob {
 export interface BlobStore {
   get(key: string): Promise<StoredBlob | null>;
   put(key: string, body: Uint8Array<ArrayBuffer> | string, contentType: string): Promise<void>;
+  /** Every blob whose key starts with this. */
+  deletePrefix(prefix: string): Promise<void>;
+}
+
+/** A language's ingest container's jobs (analysis/src/skolia_analysis/ingest/http.py
+ * JobsState): whether its pipelines are still loading, and the documents running and
+ * waiting, in the order they'll run. */
+export interface IngestJobs {
+  loading: boolean;
+  running: string[];
+  waiting: string[];
 }
 
 export interface JobQueue {
   send(job: IngestJob): Promise<void>;
+  /** Null when no container is running for the language, or it can't be asked. */
+  jobs(lang: Lang): Promise<IngestJobs | null>;
 }
 
 export interface DueCards {

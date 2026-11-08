@@ -4,7 +4,8 @@
   import type { Token } from "@skolia/shared/schema";
   import { getDocument, getText, loadReading, type Reading } from "./lib/api.ts";
   import { layout, tokenKey, type Layout } from "@skolia/shared/doc";
-  import { afterPoll, notice as noticeFor, retryAfter } from "./lib/reading.ts";
+  import { afterPoll, notice as noticeFor, queueText, retryAfter } from "./lib/reading.ts";
+  import EditDocument from "./EditDocument.svelte";
   import WordSheet from "./WordSheet.svelte";
 
   let { id }: { id: string } = $props();
@@ -15,6 +16,7 @@
   let plain = $state<string | null>(null);
   let error = $state<string | null>(null);
   let selected = $state<number | null>(null);
+  let editing = $state(false);
 
   const notice = $derived(noticeFor(summary, reading !== null, error));
 
@@ -127,9 +129,23 @@
         {#if summary.source}<span><a href={summary.source} rel="noreferrer">source</a></span>{/if}
         {#if summary.visibility === "private"}<span>private</span>{/if}
         {#if notice.kind === "processing" || notice.kind === "updating"}
-          <em class="processing">{notice.kind === "processing" ? "Processing…" : "Updating…"}</em>
+          {@const place = queueText(summary)}
+          <em class="processing">{notice.kind === "processing" ? "Processing" : "Updating"}{place ? `: ${place}` : "…"}</em>
+        {/if}
+        {#if summary.mine && !editing}
+          <button type="button" class="link" onclick={() => (editing = true)}>Edit</button>
         {/if}
       </p>
+      {#if editing}
+        <EditDocument
+          {summary}
+          onsaved={(saved) => {
+            summary = saved;
+            editing = false;
+          }}
+          oncancel={() => (editing = false)}
+        />
+      {/if}
     {/if}
 
     {#if notice.kind === "unreachable"}

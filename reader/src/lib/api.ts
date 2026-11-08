@@ -10,6 +10,7 @@ import {
   type CardCounts,
   type Due,
   type DocumentSummary,
+  type DocumentUpdate,
   type ImportRequest,
   type Lang,
   type LemmaId,
@@ -87,6 +88,17 @@ export async function importDocument(body: ImportRequest): Promise<DocumentSumma
   const response = await api.documents.$post({ json: body });
   if (!response.ok) throw await failure(response);
   return response.json();
+}
+
+export async function updateDocument(id: string, update: DocumentUpdate): Promise<DocumentSummary> {
+  const response = await api.documents[":id"].$patch({ param: { id }, json: update });
+  if (!response.ok) throw await failure(response);
+  return response.json();
+}
+
+export async function deleteDocument(id: string): Promise<void> {
+  const response = await api.documents[":id"].$delete({ param: { id } });
+  if (!response.ok) throw await failure(response);
 }
 
 /** The reading by name, or "unsupported" when its schema is newer than this reader
