@@ -71,6 +71,17 @@ class Pronunciation(TypedDict):
     """Absent when Wiktionary gives it for every accent (all of Polish's)."""
 
 
+class Recording(TypedDict):
+    """A Wiktionary sound with a recording, as Kaikki gives it."""
+
+    audio: str
+    """Wikimedia Commons file name: De-frei.ogg. Its page,
+    commons.wikimedia.org/wiki/File:<audio>, credits the speaker and gives the licence."""
+    mp3_url: str
+    tags: NotRequired[list[str]]
+    """Where the speaker is from, as Wiktionary tags it: Germany, Berlin."""
+
+
 class Entry(TypedDict):
     lemma: str
     upos: Upos
@@ -96,7 +107,7 @@ reader has to read every schema still stored. Add a field as NotRequired and bum
 BUNDLER_VERSION instead (pronunciations). Bump this only when the shape changes, and
 keep reading the older schema in the reader until a batch re-ingest retires it."""
 
-BUNDLER_VERSION = "3"
+BUNDLER_VERSION = "4"
 """The bundle-making code's version (lexicon/bundle.py and the plugins' bundlers). Bump it
 when a change gives different bundles for the same analysis and lexicon (the lookup
 fallbacks, how paradigms are made). It's in every bundle's name, so a bump re-bundles each
@@ -124,6 +135,11 @@ class Bundle(TypedDict):
     By pronunciation_key(word, upos), for each token's text and each entry's lemma that
     Wiktionary has one for. Words spelled alike can differ by part of speech (lead, the
     metal, is /lɛd/; the verb is /liːd/)."""
+    recordings: NotRequired[dict[str, list[Recording]]]
+    """Absent from bundles made before bundler version 4.
+
+    By pronunciation_key, like pronunciations. Apart from them because Wiktionary doesn't
+    say which transcription a recording is of."""
 
 
 def pronunciation_key(word: str, upos: Upos) -> str:

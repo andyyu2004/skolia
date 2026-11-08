@@ -5,7 +5,8 @@
   import { LANGUAGES } from "@skolia/shared/lang";
   import type { Piece } from "@skolia/shared/doc";
   import type { LemmaId } from "@skolia/shared/api";
-  import { entryFor, entryIdFor, pronunciationsOf, rankSenses } from "@skolia/shared/lexicon";
+  import { entryFor, entryIdFor, pronunciationsOf, rankSenses, recordingsOf } from "@skolia/shared/lexicon";
+  import type { Recording } from "@skolia/shared/schema";
   import { LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
   import { setStatus, words as known } from "./lib/words.svelte.ts";
   import { paradigmTables } from "@skolia/shared/paradigm";
@@ -70,6 +71,9 @@
           said: pronunciationsOf(bundle, w.token.text, w.token.upos),
           lemmaSaid:
             entry && !sameWord(entry.lemma, w.token.text) ? pronunciationsOf(bundle, entry.lemma, entry.upos) : [],
+          heard: recordingsOf(bundle, w.token.text, w.token.upos),
+          lemmaHeard:
+            entry && !sameWord(entry.lemma, w.token.text) ? recordingsOf(bundle, entry.lemma, entry.upos) : [],
           partOfWord,
           role: role && head ? { role, head } : null,
           caseWhy: language.explainCase(tokens, w.index),
@@ -83,6 +87,14 @@
         };
       }),
   );
+
+  let playing: HTMLAudioElement | null = null;
+
+  function play(recording: Recording): void {
+    playing?.pause();
+    playing = new Audio(recording.mp3_url);
+    void playing.play();
+  }
 
   /** Cześć at the start of a sentence is still the lemma cześć */
   function sameWord(a: string, b: string): boolean {
@@ -147,17 +159,30 @@
       {#if word.lemmaId && statusError?.lemmaId === word.lemmaId}
         <p class="error" role="alert">{statusError.message}</p>
       {/if}
-      {#if word.said.length > 0 || word.lemmaSaid.length > 0}
+      {#snippet speakers(recordings: Recording[], word: string)}
+        {#each recordings as r (r.audio)}
+          <button
+            type="button"
+            class="speaker"
+            aria-label={`Play ${word}${r.tags ? ` (${r.tags.join(", ")})` : ""}`}
+            title={r.tags?.join(", ")}
+            onclick={() => play(r)}>🔊</button
+          >
+        {/each}
+      {/snippet}
+      {#if word.said.length > 0 || word.lemmaSaid.length > 0 || word.heard.length > 0 || word.lemmaHeard.length > 0}
         <p class="pronunciation">
           {#each word.said as p (p.ipa)}
             <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
           {/each}
-          {#if word.lemmaSaid.length > 0 && word.entry}
+          {@render speakers(word.heard, token.text)}
+          {#if (word.lemmaSaid.length > 0 || word.lemmaHeard.length > 0) && word.entry}
             <span class="lemma-said"
               ><span {lang}>{word.entry.lemma}</span>
               {#each word.lemmaSaid as p (p.ipa)}
                 <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
-              {/each}</span
+              {/each}
+              {@render speakers(word.lemmaHeard, word.entry.lemma)}</span
             >
           {/if}
         </p>

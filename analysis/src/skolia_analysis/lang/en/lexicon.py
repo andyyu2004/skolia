@@ -12,7 +12,7 @@ from collections.abc import Iterable, Iterator, Mapping
 from ...lexicon import kaikki
 from ...lexicon import senses as kaikki_senses
 from ...lexicon.kaikki import KaikkiEntry, KaikkiForm, KaikkiSound
-from ...lexicon.pronunciation import pronunciations
+from ...lexicon.pronunciation import pronunciations, recordings
 from ...lexicon.schema import Accent, Form, Paradigm
 from ...lexicon.source import Converted, Pronounced
 from ...schema import Feats, Mood, Number, Person, Tense, Upos
@@ -108,8 +108,9 @@ class Source:
             word, upos = ENCLITICS[word]
         if upos is None or not word or " " in word:
             return None
-        found = pronunciations(entry.get("sounds", []), _accents)
-        return Pronounced(word, (upos,), found) if found else None
+        sounds = entry.get("sounds", [])
+        found, heard = pronunciations(sounds, _accents), recordings(sounds)
+        return Pronounced(word, (upos,), found, heard) if found or heard else None
 
     def hand_entries(self) -> Iterable[Converted]:
         return ()

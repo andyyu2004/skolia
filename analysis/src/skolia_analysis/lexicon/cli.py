@@ -25,7 +25,8 @@ def build_main() -> None:
     print(
         f"{count} lemma entries from {stats.entries} Kaikki entries "
         f"({stats.skipped} skipped: inflected forms, phrases, affixes); "
-        f"{stats.pronounced} (word, part of speech) pairs with a pronunciation",
+        f"{stats.pronounced} (word, part of speech) pairs with a pronunciation, "
+        f"{stats.recorded} with a recording",
         file=sys.stderr,
     )
 

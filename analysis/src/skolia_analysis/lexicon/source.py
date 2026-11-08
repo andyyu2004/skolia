@@ -6,7 +6,7 @@ from typing import Protocol
 
 from ..schema import Upos
 from .kaikki import KaikkiEntry
-from .schema import Paradigm, Pronunciation, Relation, Sense
+from .schema import Paradigm, Pronunciation, Recording, Relation, Sense
 
 
 @dataclass
@@ -29,6 +29,7 @@ class Pronounced:
     word: str
     upos: tuple[Upos, ...]
     pronunciations: list[Pronunciation]
+    recordings: list[Recording] = field(default_factory=lambda: list[Recording]())
 
 
 class LexiconSource(Protocol):
@@ -48,8 +49,8 @@ class LexiconSource(Protocol):
         ...
 
     def pronounce(self, entry: KaikkiEntry) -> Pronounced | None:
-        """None for entries without a pronunciation the reader shows, or that no token
-        would match: phrases, affixes."""
+        """None for entries without a pronunciation the reader shows or a recording, or
+        that no token would match: phrases, affixes."""
         ...
 
     def hand_entries(self) -> Iterable[Converted]:

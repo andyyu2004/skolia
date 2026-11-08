@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from ...lexicon import kaikki
 from ...lexicon import senses as kaikki_senses
 from ...lexicon.kaikki import KaikkiEntry, KaikkiSound
-from ...lexicon.pronunciation import pronunciations
+from ...lexicon.pronunciation import pronunciations, recordings
 from ...lexicon.schema import Accent, Form, Paradigm, Relation
 from ...lexicon.source import Converted, Pronounced
 from ...schema import Feats, Upos
@@ -163,7 +163,8 @@ class Source:
             return None
         sounds = entry.get("sounds", [])
         found = pronunciations(sounds, _standard) or pronunciations(sounds, _prescriptive)
-        return Pronounced(word, KAIKKI_POS[pos], found) if found else None
+        heard = recordings(sounds)
+        return Pronounced(word, KAIKKI_POS[pos], found, heard) if found or heard else None
 
     def _upos(self, word: str, pos: str) -> tuple[Upos, ...]:
         """The analyser's UPOS for this headword: Morfeusz readings with this lemma whose

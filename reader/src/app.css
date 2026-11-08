@@ -1078,6 +1078,14 @@ label.check {
   font-size: 0.8em;
 }
 
+.pronunciation .speaker {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
 .dot {
   color: var(--muted);
 }
