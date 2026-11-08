@@ -211,8 +211,8 @@ export class CloudflareQueue implements JobQueue {
   }
 
   async send(job: IngestJob): Promise<void> {
-    // Ingest reads the queue over the HTTP pull API, which can't decode the default
-    // Workers-only "v8" format
+    // JSON, not the default Workers-only "v8" format, so a message can be read outside a
+    // Worker (the dashboard, wrangler)
     await this.queue.send(job, { contentType: "json" });
   }
 }

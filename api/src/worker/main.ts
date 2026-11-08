@@ -18,7 +18,7 @@ interface Env {
   USER: DurableObjectNamespace<User>;
   BLOBS: R2Bucket;
   INGEST: Queue<IngestJob>;
-  /** Set by Terraform (var.max_imports_per_day) */
+  /** wrangler vars (api/wrangler.jsonc); a preview's from infra/preview.py */
   MAX_IMPORTS_PER_DAY?: string;
   BASE_URL?: string;
   BETTER_AUTH_SECRET?: string;

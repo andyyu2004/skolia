@@ -1,6 +1,6 @@
 # infra
 
-Terraform for what wrangler doesn't deploy: R2 bucket, D1 database, queue, an R2 token for the ingest containers, and billing usage alerts. Both Workers are deployed with wrangler: `skolia` (reader + API, on workers.dev and skolia.io) from `api/wrangler.jsonc`, and `skolia-ingest` with its containers from `api/wrangler.ingest.jsonc`. Wrangler applies their Durable Object migrations; the provider resends the first migration on every update, which Cloudflare refuses ([cloudflare/terraform-provider-cloudflare#5701](https://github.com/cloudflare/terraform-provider-cloudflare/issues/5701)).
+Terraform for what wrangler doesn't deploy: R2 bucket, D1 databases (the app's and the lexicon), queue, an R2 token for the ingest containers, and billing usage alerts. Both Workers are deployed with wrangler: `skolia` (reader + API, on workers.dev and skolia.io) from `api/wrangler.jsonc`, and `skolia-ingest` with its containers from `api/wrangler.ingest.jsonc`. Wrangler applies their Durable Object migrations; the provider resends the first migration on every update, which Cloudflare refuses ([cloudflare/terraform-provider-cloudflare#5701](https://github.com/cloudflare/terraform-provider-cloudflare/issues/5701)).
 
 Account `1d3ca537bca3f2918d2778118d23f0a8`. Secrets in `pass` under `cloudflare/andyyu2004@gmail.com/1d3ca537bca3f2918d2778118d23f0a8/`. Terraform comes from `flake.nix` (`nix develop`).
 
@@ -70,7 +70,7 @@ By hand, with the credentials above, the same tasks CI runs:
 
 ```fish
 just plan staging
-just deploy staging              # all of the below, in order
+just deploy staging              # deploy-infra, deploy-ingest and deploy-web, in order; not load-lexicon
 just deploy-infra staging        # terraform apply, D1 migrations
 just deploy-ingest staging       # build, push and deploy the containers
 just load-lexicon staging        # the flashcards' lexicon into D1, if its version is new; a preview gets wordfreq's 3,000 most common English words
