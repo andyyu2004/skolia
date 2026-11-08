@@ -1,8 +1,8 @@
 name: Deploy
 
 # One environment: Terraform and migrations; then the ingest Worker with the images
-# ci.yml's build-ingest-image pushed; then the skolia Worker (reader and API) and a
-# smoke test. The ingest Worker consumes the queue the skolia Worker feeds, so it goes
+# ci.yml's build-ingest-image pushed; then the skolia Worker (reader and API) and the
+# end-to-end tests. The ingest Worker consumes the queue the skolia Worker feeds, so it goes
 # first. Called by ci.yml, after the images are built. wrangler leaves an unchanged image
 # as it is. The lexicon loads beside them, after the migrations; it's skipped when D1
 # already has its version. Previews (pr-<N>) share one GitHub environment, preview.
@@ -74,8 +74,9 @@ jobs:
       - uses: ./.github/actions/setup
       - run: infra/deploy-ingest.sh ${{ inputs.env }} deploy
 
+  # After the lexicon is loaded: the end-to-end tests' card and lexicon journeys read it
   deploy-web:
-    needs: deploy-ingest
+    needs: [deploy-ingest, load-lexicon]
     runs-on: ubuntu-24.04
     environment: ${{ startsWith(inputs.env, 'pr-') && 'preview' || inputs.env }}
     concurrency:
@@ -90,11 +91,11 @@ jobs:
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
     steps:
-      # The tags, for git describe (justfile deploy-web and smoke)
+      # The tags, for git describe (justfile deploy-web and e2e)
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
       - run: just deploy-web ${{ inputs.env }}
-      - name: Smoke test
-        run: just smoke ${{ inputs.env }}
+      - name: End-to-end tests
+        run: just e2e ${{ inputs.env }}

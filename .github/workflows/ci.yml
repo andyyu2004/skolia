@@ -2,10 +2,10 @@ name: CI
 
 # Every push and pull request, and each merge group in main's merge queue: checks and
 # tests (the check job, which the queue requires). Pull requests: a plan per environment,
-# and a preview environment, pr-<number>, deployed and smoke-tested on each push and torn
-# down when the pull request closes (sweep.yml catches any left); the smoke job gates
+# and a preview environment, pr-<number>, deployed and end-to-end tested on each push and torn
+# down when the pull request closes (sweep.yml catches any left); the e2e job gates
 # merging on it.
-# main: deploy staging and smoke-test it. A v* tag on a commit in main: staging, then production. The ingest
+# main: deploy staging and end-to-end test it. A v* tag on a commit in main: staging, then production. The ingest
 # images are built once, before any deploy. The steps are just recipes (justfile) and
 # infra/deploy-ingest.sh, so a deploy by hand runs the same commands.
 
@@ -103,17 +103,17 @@ jobs:
     secrets: inherit
 
   # Required by main's ruleset, with check. On a pull request it passes only if the
-  # preview deployed and its smoke test passed. A merge group can't have a preview, and its
+  # preview deployed and its end-to-end tests passed. A merge group can't have a preview, and its
   # pull request's passed to get there, so there it passes. A fork's pull request gets no
   # preview and skips this, which counts as passing.
-  smoke:
+  e2e:
     if: always() && (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository))
     needs: deploy-preview
     runs-on: ubuntu-24.04
     steps:
       - if: github.event_name == 'pull_request' && needs.deploy-preview.result != 'success'
         run: |
-          echo "the preview's deploy or smoke test didn't pass: ${{ needs.deploy-preview.result }}" >&2
+          echo "the preview's deploy or end-to-end tests didn't pass: ${{ needs.deploy-preview.result }}" >&2
           exit 1
 
   teardown-preview:

@@ -22,7 +22,7 @@ Account `1d3ca537bca3f2918d2778118d23f0a8`. Secrets in `pass` under `cloudflare/
    | `skolia-staging` | `https://staging.skolia.io/api/auth/callback/google` |
    | `skolia-prod` | `https://skolia.io/api/auth/callback/google` |
 
-   The staging and production clients' id and secret are the `staging` and `production` GitHub environments' secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (see Deploy), which `just deploy-web` sets on the Worker with Terraform's `BETTER_AUTH_SECRET` (`random_password.better_auth_secret`). Without them nobody signs in with Google, so nobody can import; the smoke test still can, with an API key (`just smoke`). Wrangler keeps secrets a deploy doesn't pass, so removing one from GitHub doesn't remove it from the Worker.
+   The staging and production clients' id and secret are the `staging` and `production` GitHub environments' secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (see Deploy), which `just deploy-web` sets on the Worker with Terraform's `BETTER_AUTH_SECRET` (`random_password.better_auth_secret`). Without them nobody signs in with Google, so nobody can import; the end-to-end tests still can, with an API key (`just e2e`). Wrangler keeps secrets a deploy doesn't pass, so removing one from GitHub doesn't remove it from the Worker.
 
 ## Environments
 
@@ -40,7 +40,7 @@ A new environment: add it to the checks in `tf.sh`, `wrangler.sh` and `deploy-in
 
 ### Previews
 
-Each pull request from a branch of this repository gets a preview, `pr-N`, deployed and smoke-tested on every push (`ci.yml`, job `deploy-preview`). Merging needs it to pass (`ci.yml`, job `smoke`); a fork's pull request gets none and isn't held up. It is on workers.dev only, with no Google client, so only the smoke test's API key signs in, and it accepts 20 imports a day. Its wrangler configs are made by `infra/preview.py config pr-N` from the `env.staging` blocks, with `-pr-N` names and its workers.dev URL; `deploy-infra` makes them after Terraform, and `wrangler.sh` when they're missing. They're gitignored.
+Each pull request from a branch of this repository gets a preview, `pr-N`, deployed and end-to-end tested on every push (`ci.yml`, job `deploy-preview`). Merging needs it to pass (`ci.yml`, job `e2e`); a fork's pull request gets none and isn't held up. It is on workers.dev only, with no Google client, so only the end-to-end tests' API keys sign in, and it accepts 20 imports a day. Its wrangler configs are made by `infra/preview.py config pr-N` from the `env.staging` blocks, with `-pr-N` names and its workers.dev URL; `deploy-infra` makes them after Terraform, and `wrangler.sh` when they're missing. They're gitignored.
 
 Closing the pull request tears the preview down (`just teardown pr-N`, `infra/teardown.sh`): the queue's consumer, the ingest Worker, its container applications (which `wrangler delete` leaves), the skolia Worker, the bucket's objects, `terraform destroy`, then the state object. Each step skips what's already gone, so it can be run again. Every night `sweep.yml` runs `infra/sweep.sh`, which finds previews by their resources' and state's names, tears down those whose pull request isn't open, and fails if any are left; `infra/sweep.sh -n` lists them without tearing them down.
 
@@ -57,14 +57,14 @@ set -x AWS_SECRET_ACCESS_KEY (pass show $p/skolia-tfstate-secret-access-key)
 
 ## Deploy
 
-A push to main deploys staging and smoke-tests it: in each language it imports a new text and waits until it's ready. Production deploys are smoke-tested the same way. The smoke test imports as the system user, with an API key it writes to D1 first, and privately, so its two texts per deploy stay out of the library but count against the day's import cap. Pushing a `v*` tag on a commit in main deploys staging, then production once staging passes (`git tag v0.1.0 && git push origin v0.1.0`; `.github/workflows/ci.yml`, `deploy.yml`). The ingest Worker is deployed before the skolia Worker, since it consumes the queue the skolia Worker feeds: an API that sends a new kind of job never goes live before the ingest that handles it. Rolling back goes the other way: the skolia Worker first. Every deploy runs `deploy-ingest`: each language's image (`skolia-ingest-{lang}`) is tagged with its Nix hash, so it's built and pushed only when that tag isn't in the registry yet, and wrangler leaves an unchanged image deployed as it is. Pull requests get a `terraform plan` for staging and production (Terraform's resources only, not the Workers). GitHub needs:
+A push to main deploys staging and runs the end-to-end tests against it (`api/src/e2e.ts`), through the API: in each language it imports a new text and waits until it's ready, and meanwhile checks auth, both languages' lexicon entries, and a new user's cards (add a word, review it, mark it known). Production deploys are tested the same way. It writes two API keys to D1 first (`api/src/e2e-keys.ts`): the system user's, which imports privately, so its two texts per deploy stay out of the library but count against the day's import cap; and a new user's, `e2e-<time>`, whose cards start empty (the last run's user is deleted). `deploy-web` waits for `load-lexicon`, since the journeys read the lexicon. Pushing a `v*` tag on a commit in main deploys staging, then production once staging passes (`git tag v0.1.0 && git push origin v0.1.0`; `.github/workflows/ci.yml`, `deploy.yml`). The ingest Worker is deployed before the skolia Worker, since it consumes the queue the skolia Worker feeds: an API that sends a new kind of job never goes live before the ingest that handles it. Rolling back goes the other way: the skolia Worker first. Every deploy runs `deploy-ingest`: each language's image (`skolia-ingest-{lang}`) is tagged with its Nix hash, so it's built and pushed only when that tag isn't in the registry yet, and wrangler leaves an unchanged image deployed as it is. Pull requests get a `terraform plan` for staging and production (Terraform's resources only, not the Workers). GitHub needs:
 
 - variable `CLOUDFLARE_ACCOUNT_ID`
 - secrets `CLOUDFLARE_API_TOKEN` (the Terraform token above), `TFSTATE_ACCESS_KEY_ID`, `TFSTATE_SECRET_ACCESS_KEY`, `ALERT_EMAIL`, `CACHIX_AUTH_TOKEN`
 - in the `staging` and `production` environments, secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (the OAuth clients above)
 - environments `staging`, `production` and `preview` (every pull request's)
 
-These, and `main`'s ruleset (pull requests only, through a merge queue that requires CI's `check` and `smoke` jobs), are managed in Terraform in the dotfiles (`~/.dotfiles/terraform/github`), from `pass`.
+These, and `main`'s ruleset (pull requests only, through a merge queue that requires CI's `check` and `e2e` jobs), are managed in Terraform in the dotfiles (`~/.dotfiles/terraform/github`), from `pass`.
 
 By hand, with the credentials above, the same tasks CI runs:
 
@@ -73,9 +73,9 @@ just plan staging
 just deploy staging              # deploy-infra, deploy-ingest and deploy-web, in order; not load-lexicon
 just deploy-infra staging        # terraform apply, D1 migrations
 just deploy-ingest staging       # build, push and deploy the containers
-just load-lexicon staging        # the flashcards' lexicon into D1, if its version is new; a preview gets wordfreq's 3,000 most common English words
+just load-lexicon staging        # the flashcards' lexicon into D1, if its version is new; a preview gets each language's entries for wordfreq's 3,000 most common words
 just deploy-web staging          # the skolia Worker (reader and API)
-just smoke staging
+just e2e staging
 just teardown pr-12              # previews only
 ```
 

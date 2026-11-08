@@ -25,7 +25,7 @@ type Json = str | int | float | bool | None | list[Json] | dict[str, Json]
 type JsonObject = dict[str, Json]
 
 API = Path(__file__).resolve().parent.parent / "api"
-# The smoke test takes one per language, so ten deploys a day
+# The end-to-end tests take one per language, so ten deploys a day
 MAX_IMPORTS_PER_DAY = "20"
 
 

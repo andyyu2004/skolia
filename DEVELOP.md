@@ -23,7 +23,7 @@ Once: install Nix, direnv (with nix-direnv), the JavaScript packages and Docker,
 direnv allow                 # once: .envrc loads the dev shell
 pnpm install                 # from the repo root: api, reader and shared
 just dev                     # http://localhost:5173 (Vite), or :8787 for the built reader
-just e2e                     # fresh local state: import a text, wait until it's ready
+just e2e                     # fresh local state, lexicon samples: the end-to-end tests (just e2e staging: against staging)
 ```
 
 - `just e2e` needs port 8787 free, so stop `just dev` first. Its log is `api/.wrangler/e2e.log`.
