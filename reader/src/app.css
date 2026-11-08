@@ -638,50 +638,6 @@ textarea {
   margin: 0.2rem 0;
 }
 
-.word-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.25rem 1rem;
-}
-
-.word-status {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
-}
-
-.segmented {
-  display: inline-flex;
-}
-
-.segmented button {
-  padding: 0.2rem 0.6rem;
-  border: 1px solid var(--line);
-  background: transparent;
-  cursor: pointer;
-}
-
-.segmented button + button {
-  margin-left: -1px;
-}
-
-.segmented button:first-child {
-  border-radius: 6px 0 0 6px;
-}
-
-.segmented button:last-child {
-  border-radius: 0 6px 6px 0;
-}
-
-.segmented button[aria-pressed="true"] {
-  position: relative;
-  background: var(--current);
-  border-color: var(--accent);
-}
-
 .lemma-said {
   display: contents;
   color: var(--muted);
@@ -919,6 +875,16 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 10px;
   text-align: center;
+  position: relative;
+}
+
+.flashcard button.known {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
+  color: var(--muted);
 }
 
 .flashcard .prompt {

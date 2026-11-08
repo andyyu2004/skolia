@@ -4,7 +4,7 @@
   import type { Bundle, Token } from "@skolia/shared/schema";
   import { LANGUAGES } from "@skolia/shared/lang";
   import type { Piece } from "@skolia/shared/doc";
-  import type { LemmaId, WordStatus } from "@skolia/shared/api";
+  import type { LemmaId } from "@skolia/shared/api";
   import { entryFor, entryIdFor, pronunciationsOf, rankSenses } from "@skolia/shared/lexicon";
   import { LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
   import { setStatus, words as known } from "./lib/words.svelte.ts";
@@ -92,19 +92,14 @@
   /** Not added on a tap: names, numbers and symbols aren't vocabulary. */
   const UNLEARNABLE: ReadonlySet<string> = new Set(["PROPN", "NUM", "SYM", "PUNCT", "X"]);
 
-  const STATUS_LABELS: [WordStatus, string][] = [
-    ["active", "Learn"],
-    ["known", "Known"],
-    ["ignored", "Ignore"],
-  ];
-  /** The word whose status is being saved, and the last failure, by lemma id. */
-  let saving = $state<LemmaId | null>(null);
+  /** The last failure to add a word, by lemma id. */
   let statusError = $state<{ lemmaId: LemmaId; message: string } | null>(null);
 
   /** Tried in this sheet: a failed save shows its error rather than being retried. */
   const tried = new Set<LemmaId>();
 
-  /** A word you tap and have never marked is one to learn; Known or Ignore opts out. */
+  /** A word you tap and have never marked goes into your cards; Known while reviewing
+   * takes it out. */
   $effect(() => {
     if (!known.byId) return;
     const fresh = words.flatMap((w) =>
@@ -119,21 +114,16 @@
     for (const lemmaId of fresh) tried.add(lemmaId);
     untrack(() => {
       void (async () => {
-        for (const lemmaId of fresh) await mark(lemmaId, "active");
+        for (const lemmaId of fresh) await learn(lemmaId);
       })();
     });
   });
 
-  async function mark(lemmaId: LemmaId, status: WordStatus): Promise<void> {
-    if (saving !== null) return;
-    saving = lemmaId;
-    statusError = null;
+  async function learn(lemmaId: LemmaId): Promise<void> {
     try {
-      await setStatus(lemmaId, status);
+      await setStatus(lemmaId, "active");
     } catch (e: unknown) {
-      statusError = { lemmaId, message: e instanceof Error ? e.message : String(e) };
-    } finally {
-      saving = null;
+      statusError = { lemmaId, message: `Couldn't add it to your cards: ${e instanceof Error ? e.message : String(e)}` };
     }
   }
 </script>
@@ -148,33 +138,12 @@
   {#each words as word (word.ref.index)}
     {@const token = word.ref.token}
     <section class="word">
-      <div class="word-head">
-        <h2>
-          <span {lang}>{token.text}</span>
-          {#if token.lemma && !sameWord(token.lemma, token.text)}
-            <span class="lemma">(<span {lang}>{word.entry?.lemma ?? token.lemma}</span>)</span>
-          {/if}
-        </h2>
-        {#if known.byId && word.lemmaId && word.partOfWord === null}
-          {@const lemmaId = word.lemmaId}
-          {@const current = known.byId[lemmaId]}
-          <div class="word-status">
-            <div class="segmented" role="group" aria-label="Your word">
-              {#each STATUS_LABELS as [status, label] (status)}
-                <button
-                  type="button"
-                  aria-pressed={current?.status === status}
-                  disabled={saving !== null}
-                  onclick={() => mark(lemmaId, status)}>{label}</button
-                >
-              {/each}
-            </div>
-            {#if current?.status === "active"}
-              <span class="muted">{current.mature ? "known from your cards" : "learning"}</span>
-            {/if}
-          </div>
+      <h2>
+        <span {lang}>{token.text}</span>
+        {#if token.lemma && !sameWord(token.lemma, token.text)}
+          <span class="lemma">(<span {lang}>{word.entry?.lemma ?? token.lemma}</span>)</span>
         {/if}
-      </div>
+      </h2>
       {#if word.lemmaId && statusError?.lemmaId === word.lemmaId}
         <p class="error" role="alert">{statusError.message}</p>
       {/if}

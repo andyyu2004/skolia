@@ -7,6 +7,7 @@
   import ParadigmTable from "./ParadigmTable.svelte";
   import { cardCounts, dueCards, review, signIn } from "./lib/api.ts";
   import { clue, keyTarget, shortcut } from "./lib/review.ts";
+  import { setStatus } from "./lib/words.svelte.ts";
 
   /** lang is the URL's (#/review/pl); without one, the language with the most to review. */
   let { user, lang }: { user: User | null | undefined; lang: Lang | null } = $props();
@@ -91,6 +92,25 @@
     try {
       await review(card.id, rating);
       index += 1;
+      revealed = false;
+    } catch (e: unknown) {
+      error = message(e);
+    } finally {
+      busy = false;
+    }
+    await tick();
+    showButton?.focus();
+  }
+
+  /** Known takes the word out of reviews, both its cards, and skips them in this session. */
+  async function markKnown(): Promise<void> {
+    if (!card || !due || busy) return;
+    const { lemmaId } = card;
+    busy = true;
+    error = null;
+    try {
+      await setStatus(lemmaId, "known");
+      due.cards = [...due.cards.slice(0, index), ...due.cards.slice(index).filter((c) => c.lemmaId !== lemmaId)];
       revealed = false;
     } catch (e: unknown) {
       error = message(e);
@@ -213,7 +233,7 @@
     </nav>
   {/if}
   {#if user && counts && !selected}
-    <p>Nothing to review right now. Words you choose to learn in the reader turn into cards here.</p>
+    <p>Nothing to review right now. Words you look up in the reader turn into cards here.</p>
     <button type="button" class="quiet" onclick={refresh}>Check again</button>
   {:else if user && selected && !due}
     {#if !error}<p class="muted">Loading…</p>{/if}
@@ -221,6 +241,9 @@
     <p class="counts muted">{left} to go · {due.newLeft} new left today · <a href="#/settings">Settings</a></p>
     {#if card}
       <section class="flashcard" aria-live="polite" aria-atomic="true">
+        <button type="button" class="known quiet" disabled={busy} title="You know this word: stop reviewing it" onclick={markKnown}
+          >Known</button
+        >
         {#if card.kind === "recognition"}
           {@render lemma(card)}
         {:else}
@@ -254,7 +277,7 @@
         <p class="muted hint">Space or Enter shows the answer.</p>
       {/if}
     {:else}
-      <p>Nothing to review right now. Words you choose to learn in the reader turn into cards here.</p>
+      <p>Nothing to review right now. Words you look up in the reader turn into cards here.</p>
       <button type="button" class="quiet" disabled={busy} onclick={refresh}>Check again</button>
     {/if}
   {/if}
