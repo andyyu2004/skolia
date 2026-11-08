@@ -68,6 +68,8 @@ function milliseconds(duration: string): number {
  */
 export class Ingester extends DurableObject<Env> {
   private readonly sleepAfterMs = milliseconds(this.env.SLEEP_AFTER ?? "1m");
+  /** Settles when the container this object started exits */
+  private exited: Promise<void> | undefined;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -132,12 +134,11 @@ export class Ingester extends DurableObject<Env> {
         },
       });
       console.log("starting ingest:", image);
-      this.ctx.waitUntil(
-        container.monitor().then(
-          () => console.log("ingest exited:", image),
-          (error: unknown) => console.error("ingest failed:", image, error),
-        ),
+      this.exited = container.monitor().then(
+        () => console.log("ingest exited:", image),
+        (error: unknown) => console.error("ingest failed:", image, error),
       );
+      this.ctx.waitUntil(this.exited);
       await container.setInactivityTimeout(this.inactivityTimeoutMs());
     }
     await this.ready(container);
@@ -159,9 +160,12 @@ export class Ingester extends DurableObject<Env> {
         return;
       }
       console.log("ingest is idle; stopping it");
+      // A restarted Durable Object hasn't watched the container yet
+      const exited = this.exited ?? container.monitor().catch(() => undefined);
       // SIGTERM rather than destroy(), whose SIGKILL makes the exit look like a crash
       container.signal(SIGTERM);
-      if (!(await this.stopped(container))) {
+      const timeout = scheduler.wait(STOP_TIMEOUT_MS).then(() => "timeout" as const);
+      if ((await Promise.race([exited, timeout])) === "timeout") {
         console.error(`ingest didn't stop within ${STOP_TIMEOUT_MS} ms; killing it`);
         await container.destroy();
       }
@@ -176,17 +180,6 @@ export class Ingester extends DurableObject<Env> {
 
   private inactivityTimeoutMs(): number {
     return this.sleepAfterMs + INACTIVITY_MARGIN_MS;
-  }
-
-  /** Whether the container exits within STOP_TIMEOUT_MS. Polled: containers that
-   * exited 1 to 6 s after SIGTERM had monitor() settle only at the 10 s timeout. */
-  private async stopped(container: Container): Promise<boolean> {
-    const deadline = Date.now() + STOP_TIMEOUT_MS;
-    while (container.running) {
-      if (Date.now() > deadline) return false;
-      await scheduler.wait(250);
-    }
-    return true;
   }
 
   /** start() returns before the container listens */
