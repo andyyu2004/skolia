@@ -20,6 +20,7 @@
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
   import ParadigmTable from "./ParadigmTable.svelte";
   import SentenceTree from "./SentenceTree.svelte";
+  import { sheet } from "./lib/sheet.svelte.ts";
 
   type WordPiece = Extract<Piece, { kind: "word" }>;
 
@@ -30,7 +31,6 @@
     headText,
     sentenceTokens,
     onselectToken,
-    structure = $bindable(),
     onclose,
   }: {
     /** The document's language, also for the lang attribute of its text */
@@ -40,8 +40,6 @@
     headText: (sentence: number, index: number) => string | null;
     sentenceTokens: (sentence: number) => Token[];
     onselectToken: (sentence: number, index: number) => void;
-    /** Whether the sentence's structure is unfolded; kept by the reader across words. */
-    structure: boolean;
     onclose: () => void;
   } = $props();
 
@@ -161,20 +159,37 @@
   <div class="sheet-bar">
     <button type="button" class="handle" aria-label={expanded ? "Shrink" : "Expand"} onclick={() => (expanded = !expanded)}
     ></button>
+    <button
+      type="button"
+      class="view-toggle"
+      aria-pressed={sheet.view === "sentence"}
+      onclick={() => (sheet.view = sheet.view === "sentence" ? "word" : "sentence")}
+    >
+      <svg viewBox="0 0 16 16" aria-hidden="true"
+        ><path d="M3 11V7h10v4M8 3v4" /><circle cx="3" cy="12.5" r="1.5" /><circle cx="13" cy="12.5" r="1.5" /><circle
+          cx="8"
+          cy="2.5"
+          r="1.5"
+        /></svg
+      >
+      Sentence
+    </button>
     <button type="button" class="close" aria-label="Close" onclick={onclose}>×</button>
   </div>
 
-  <details class="structure" bind:open={structure}>
-    <summary>Sentence structure</summary>
-    {#if structure}
-      <SentenceTree
-        {lang}
-        tokens={sentenceTokens(sentence)}
-        selected={selectedTokens}
-        onselect={(index) => onselectToken(sentence, index)}
-      />
-    {/if}
-  </details>
+  {#if sheet.view === "sentence"}
+    <div class="layout-switch" role="group" aria-label="Draw the sentence as">
+      <button type="button" aria-pressed={sheet.layout === "arcs"} onclick={() => (sheet.layout = "arcs")}>Arcs</button>
+      <button type="button" aria-pressed={sheet.layout === "tree"} onclick={() => (sheet.layout = "tree")}>Tree</button>
+    </div>
+    <SentenceTree
+      {lang}
+      layout={sheet.layout}
+      tokens={sentenceTokens(sentence)}
+      selected={selectedTokens}
+      onselect={(index) => onselectToken(sentence, index)}
+    />
+  {/if}
 
   {#each words as word (word.ref.index)}
     {@const token = word.ref.token}
@@ -200,7 +215,7 @@
           >
         {/each}
       {/snippet}
-      {#if word.said.length > 0 || word.lemmaSaid.length > 0}
+      {#if sheet.view === "word" && (word.said.length > 0 || word.lemmaSaid.length > 0)}
         <p class="pronunciation">
           {#each word.said as p (p.ipa)}
             <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
@@ -233,7 +248,7 @@
         </p>
       {/if}
 
-      {#if word.partOfWord === null}
+      {#if sheet.view === "word" && word.partOfWord === null}
         {#if word.senses.length > 0}
           <ol class="senses">
             {#each allSenses ? word.senses : word.senses.slice(0, SHOWN_SENSES) as { sense, fits }, i (i)}
@@ -314,7 +329,7 @@
         {/if}
 
         {#each word.tables as table (table.title)}
-          <ParadigmTable {lang} {table} />
+          <ParadigmTable {lang} {table} bind:open={sheet.formsOpen} />
         {/each}
       {/if}
     </section>

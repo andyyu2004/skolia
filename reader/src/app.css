@@ -1171,13 +1171,34 @@ label.check {
   font-weight: 600;
 }
 
-.structure summary {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+.view-toggle {
+  position: absolute;
+  left: 0;
+  top: 0.3rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: transparent;
   color: var(--muted);
-  margin: 0 0 0.3rem;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.6rem;
   cursor: pointer;
+}
+
+.view-toggle svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+.view-toggle[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
 }
 
 .tree {
@@ -1277,6 +1298,53 @@ label.check {
   fill: var(--trigger);
 }
 
+.tree .dot {
+  fill: var(--muted);
+}
+
+.tree .word.linked .dot {
+  fill: var(--head);
+}
+
+.tree .word.selected .dot {
+  fill: var(--accent);
+}
+
+/* Lines to children cross the labels under a word, so the labels get a halo */
+.tree svg.hanging .word text {
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.tree svg.hanging .word.selected text {
+  stroke: var(--select);
+}
+
+.layout-switch {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  overflow: hidden;
+  margin: 0 0 0.4rem;
+}
+
+.layout-switch button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  padding: 0.15rem 0.7rem;
+  cursor: pointer;
+}
+
+.layout-switch button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+
 .tree line.trigger {
   stroke: var(--trigger);
   stroke-width: 2;
@@ -1313,12 +1381,17 @@ label.check {
   font-size: 0.95rem;
 }
 
-.paradigm h3 {
+.paradigm h3,
+.paradigm summary {
   font-size: 0.8rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
   margin: 1rem 0 0.3rem;
+}
+
+.paradigm summary {
+  cursor: pointer;
 }
 
 .paradigm .scroll {

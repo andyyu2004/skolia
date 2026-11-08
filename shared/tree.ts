@@ -10,6 +10,10 @@ export interface TreeWord {
   root: boolean;
   /** "genitive", for words with a case */
   caseName: string | null;
+  /** Steps from the root, for the top-down layout. */
+  depth: number;
+  /** The relation to its head, as a noun ("subject"); empty for the root. */
+  relation: string;
 }
 
 /** Where an arc's end sits among the arcs meeting the same word, left to right. */
@@ -54,7 +58,14 @@ export function sentenceTree(tokens: Token[]): Tree {
     if (token.upos === "PUNCT") return;
     position.set(index, words.length);
     const value = token.feats.Case;
-    words.push({ index, token, root: token.head === null, caseName: value ? CASE_NAME[value] : null });
+    words.push({
+      index,
+      token,
+      root: token.head === null,
+      caseName: value ? CASE_NAME[value] : null,
+      depth: depthOf(tokens, index),
+      relation: token.head === null ? "" : relationName(token.deprel),
+    });
   });
 
   function span(from: number, to: number, label: string, raw: string): Span | null {
@@ -83,6 +94,17 @@ export function sentenceTree(tokens: Token[]): Tree {
     cases: caseArcs,
     caseLevels: Math.max(0, ...caseArcs.map((a) => a.level)),
   };
+}
+
+/** Steps up to the root. A head chain that loops is cut where it repeats. */
+function depthOf(tokens: Token[], index: number): number {
+  const seen = new Set<number>([index]);
+  let head = tokens[index]?.head ?? null;
+  while (head !== null && !seen.has(head)) {
+    seen.add(head);
+    head = tokens[head]?.head ?? null;
+  }
+  return seen.size - 1;
 }
 
 function stack(spans: Span[]): Arc[] {

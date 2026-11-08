@@ -3,14 +3,18 @@
   import type { Token } from "@skolia/shared/schema";
   import { caseChain, sentenceTree, type Arc, type Slot } from "@skolia/shared/tree";
   import { UPOS_LABEL } from "@skolia/shared/ud";
+  import type { SentenceLayout } from "./lib/sheet.svelte.ts";
 
   let {
     lang,
+    layout: shape,
     tokens,
     selected,
     onselect,
   }: {
     lang: Lang;
+    /** Arcs above the words in reading order, or a tree hanging from the main word. */
+    layout: SentenceLayout;
     tokens: Token[];
     /** Token indices of the selected word: one, or several for a fused word. */
     selected: ReadonlySet<number>;
@@ -24,8 +28,12 @@
   const PAD = 8;
   /** Most room between two arc ends meeting at a word */
   const SPREAD = 7;
+  /** Tree layout: a word's dot, and the drop from one depth to the next */
+  const DOT = 4;
+  const LINE = 13;
 
   const tree = $derived(sentenceTree(tokens));
+  const anyCase = $derived(tree.words.some((w) => w.caseName !== null));
 
   let measure: CanvasRenderingContext2D | null = null;
   function width(text: string, size: number, family: string): number {
@@ -35,7 +43,8 @@
     return measure.measureText(text).width;
   }
 
-  const layout = $derived.by(() => {
+  /** Columns in reading order, wide enough for each word's labels and its arcs' labels. */
+  const columns = $derived.by(() => {
     const style = getComputedStyle(document.documentElement);
     const reading = style.getPropertyValue("--reading") || "serif";
     const ui = style.getPropertyValue("--ui") || "sans-serif";
@@ -43,77 +52,113 @@
 
     const sized = tree.words.map((w) => {
       const pos = UPOS_LABEL[w.token.upos];
-      const wide = Math.max(width(w.token.text, WORD_SIZE, reading), label(pos), w.caseName ? label(w.caseName) : 0);
-      return { ...w, pos, width: wide };
+      // Arcs carry the relation, so the words show their part of speech; the tree the other way round
+      const second = shape === "arcs" ? pos : w.root ? "main word" : w.relation;
+      const wide = Math.max(width(w.token.text, WORD_SIZE, reading), label(second), w.caseName ? label(w.caseName) : 0);
+      return { ...w, pos, second, width: wide };
     });
-    // An arc between neighbours needs room for its label
     const need = sized.map(() => 0);
-    for (const arc of [...tree.arcs, ...tree.cases]) {
-      if (arc.right - arc.left === 1) need[arc.left] = Math.max(need[arc.left] ?? 0, label(arc.label) + 14);
+    if (shape === "arcs") {
+      for (const arc of [...tree.arcs, ...tree.cases]) {
+        if (arc.right - arc.left === 1) need[arc.left] = Math.max(need[arc.left] ?? 0, label(arc.label) + 14);
+      }
     }
     let x = PAD;
-    const centre = new Map<number, number>();
-    const halfWidth = new Map<number, number>();
     const words = sized.map((w, i) => {
-      if (i > 0) {
-        const before = sized[i - 1];
-        x += Math.max((before?.width ?? 0) / 2 + GAP + w.width / 2, need[i - 1] ?? 0);
-      } else x += w.width / 2;
-      centre.set(w.index, x);
-      halfWidth.set(w.index, w.width / 2);
+      const before = sized[i - 1];
+      x += before ? Math.max(before.width / 2 + GAP + w.width / 2, need[i - 1] ?? 0) : w.width / 2;
       return { ...w, cx: x };
     });
-    const right = x + (sized.at(-1)?.width ?? 0) / 2 + PAD;
-
-    function end(index: number, slot: Slot): number {
-      const half = halfWidth.get(index) ?? 0;
-      const step = slot.count > 1 ? Math.min(SPREAD, (2 * half - 6) / (slot.count - 1)) : 0;
-      return (centre.get(index) ?? 0) + (slot.rank - (slot.count - 1) / 2) * step;
-    }
-
-    /** `down` is +1 for arcs below the words, which curve the other way. */
-    function draw(arc: Arc, base: number, down: 1 | -1) {
-      const from = end(arc.from, arc.fromSlot);
-      const to = end(arc.to, arc.toSlot);
-      const turn = base + down * arc.level * LEVEL;
-      const r = Math.min(7, Math.abs(to - from) / 2);
-      const dir = to > from ? 1 : -1;
-      const path = `M ${from} ${base} V ${turn - down * r} Q ${from} ${turn} ${from + dir * r} ${turn} H ${to - dir * r} Q ${to} ${turn} ${to} ${turn - down * r} V ${base}`;
-      const arrow = `M ${to - 3.5} ${base - down * 6} L ${to} ${base} L ${to + 3.5} ${base - down * 6}`;
-      return { arc, path, arrow, mid: (from + to) / 2, turn };
-    }
-
-    const top = tree.levels * LEVEL + PAD + 4;
-    const anyCase = tree.words.some((w) => w.caseName !== null);
-    const rowHeight = anyCase ? 50 : 38;
-    const bottom = top + rowHeight + 4;
-    return {
-      words,
-      arcs: tree.arcs.map((a) => draw(a, top, -1)),
-      below: (arc: Arc) => draw(arc, bottom, 1),
-      top,
-      rowHeight,
-      bottom,
-      width: right,
-    };
+    return { words, width: x + (sized.at(-1)?.width ?? 0) / 2 + PAD };
   });
+  const centre = $derived(new Map(columns.words.map((w) => [w.index, w])));
 
-  /** Only the selected word's case arcs: drawn for every word they mostly repeat the arcs above. */
-  const cases = $derived(caseChain(tree.cases, selected).map((a) => layout.below(a)));
-  const height = $derived(layout.bottom + Math.max(0, ...cases.map((c) => c.arc.level)) * LEVEL + PAD);
+  /** Height of a word's labels: its form, part of speech or relation, and case */
+  const labels = $derived(anyCase ? 50 : 38);
+  /** Tree layout: room above the main word for a case curve to bow into */
+  const BOW = 20;
+  const top = $derived(shape === "arcs" ? tree.levels * LEVEL + PAD + 4 : PAD + DOT + BOW);
+  const row = $derived(labels + 40);
+  const depth = $derived(Math.max(0, ...tree.words.map((w) => w.depth)));
+  /** Where each word's labels start */
+  function labelTop(d: number): number {
+    return shape === "arcs" ? top : top + d * row + DOT + 2;
+  }
+  function dotY(d: number): number {
+    return top + d * row;
+  }
+  /** Tree layout: lines down to a word's children start under its labels, not across them. */
+  function underLabels(d: number): number {
+    return labelTop(d) + labels + 4;
+  }
+
+  function end(index: number, slot: Slot): number {
+    const word = centre.get(index);
+    if (!word) return 0;
+    const step = slot.count > 1 ? Math.min(SPREAD, (word.width - 6) / (slot.count - 1)) : 0;
+    return word.cx + (slot.rank - (slot.count - 1) / 2) * step;
+  }
+
+  /** An arc above (`down` -1) or below (+1) the row of words. */
+  function bracket(arc: Arc, base: number, down: 1 | -1) {
+    const from = end(arc.from, arc.fromSlot);
+    const to = end(arc.to, arc.toSlot);
+    const turn = base + down * arc.level * LEVEL;
+    const r = Math.min(7, Math.abs(to - from) / 2);
+    const dir = to > from ? 1 : -1;
+    const path = `M ${from} ${base} V ${turn - down * r} Q ${from} ${turn} ${from + dir * r} ${turn} H ${to - dir * r} Q ${to} ${turn} ${to} ${turn - down * r} V ${base}`;
+    const arrow = `M ${to - 3.5} ${base - down * 6} L ${to} ${base} L ${to + 3.5} ${base - down * 6}`;
+    return { arc, path, arrow, x: (from + to) / 2, y: turn + 3.5 };
+  }
+
+  /** A case reason in the tree: a dashed curve from the word causing the case to the word
+   * with it, leaving and entering each word on the side facing the other, bowed off the
+   * straight line so it doesn't run along the tree's own line. */
+  function bow(arc: Arc) {
+    const a = centre.get(arc.from);
+    const b = centre.get(arc.to);
+    const ad = a?.depth ?? 0;
+    const bd = b?.depth ?? 0;
+    const ax = a?.cx ?? 0;
+    const bx = b?.cx ?? 0;
+    const ay = ad < bd ? underLabels(ad) : dotY(ad);
+    const by = bd < ad ? underLabels(bd) : dotY(bd);
+    const mx = (ax + bx) / 2;
+    const my = (ay + by) / 2;
+    const length = Math.hypot(bx - ax, by - ay) || 1;
+    // Perpendicular to the straight line, towards the top of the drawing when level
+    const side = bx >= ax ? 1 : -1;
+    const cx = mx + (side * (by - ay) * BOW) / length;
+    const cy = my - (side * (bx - ax) * BOW) / length;
+    const path = `M ${ax} ${ay} Q ${cx} ${cy} ${bx} ${by}`;
+    // The arrowhead points along the curve's last stretch, into the word with the case
+    const angle = Math.atan2(by - cy, bx - cx);
+    const tip = (t: number): string => `${bx - 7 * Math.cos(angle + t)} ${by - 7 * Math.sin(angle + t)}`;
+    const arrow = `M ${tip(0.45)} L ${bx} ${by} L ${tip(-0.45)}`;
+    return { arc, path, arrow, x: (ax + 2 * cx + bx) / 4, y: (ay + 2 * cy + by) / 4 + 3.5 };
+  }
+
+  const arcsBottom = $derived(top + labels + 4);
+  /** Only the selected word's case arcs: drawn for every word they mostly repeat the dependencies. */
+  const cases = $derived(
+    caseChain(tree.cases, selected).map((a) => (shape === "arcs" ? bracket(a, arcsBottom, 1) : bow(a))),
+  );
+  const height = $derived(
+    shape === "arcs"
+      ? arcsBottom + Math.max(0, ...cases.map((c) => c.arc.level)) * LEVEL + PAD
+      : dotY(depth) + DOT + 2 + labels + PAD,
+  );
 
   /** The words the selection is linked to: its head and its dependents. */
   const linked = $derived(
-    new Set(
-      tree.arcs.flatMap((a) => (selected.has(a.to) ? [a.from] : selected.has(a.from) ? [a.to] : [])),
-    ),
+    new Set(tree.arcs.flatMap((a) => (selected.has(a.to) ? [a.from] : selected.has(a.from) ? [a.to] : []))),
   );
   /** The word causing the selected word's case, as the text marks it. */
   const trigger = $derived(tree.cases.find((a) => selected.has(a.to))?.from ?? null);
 
   let scroller = $state<HTMLDivElement | null>(null);
   $effect(() => {
-    const word = layout.words.find((w) => selected.has(w.index));
+    const word = columns.words.find((w) => selected.has(w.index));
     if (scroller && word) scroller.scrollLeft = word.cx - scroller.clientWidth / 2;
   });
 
@@ -126,30 +171,45 @@
 
 <div class="tree" bind:this={scroller}>
   <svg
-    width={layout.width}
+    width={columns.width}
     {height}
-    viewBox="0 0 {layout.width} {height}"
+    viewBox="0 0 {columns.width} {height}"
+    class:hanging={shape === "tree"}
     role="group"
     aria-label="Sentence structure"
   >
-    {#each layout.arcs as { arc, path, arrow, mid, turn } (arc.to)}
-      <g class="arc" class:near={selected.has(arc.from) || selected.has(arc.to)}>
-        <title>{arc.raw}</title>
-        <path d={path} />
-        <path d={arrow} />
-        <text x={mid} y={turn + 3.5} font-size={LABEL_SIZE}>{arc.label}</text>
-      </g>
-    {/each}
-    {#each cases as { arc, path, arrow, mid, turn } (arc.to)}
+    {#if shape === "arcs"}
+      {#each tree.arcs.map((a) => bracket(a, top, -1)) as { arc, path, arrow, x, y } (arc.to)}
+        <g class="arc" class:near={selected.has(arc.from) || selected.has(arc.to)}>
+          <title>{arc.raw}</title>
+          <path d={path} />
+          <path d={arrow} />
+          <text {x} {y} font-size={LABEL_SIZE}>{arc.label}</text>
+        </g>
+      {/each}
+    {:else}
+      {#each tree.arcs as arc (arc.to)}
+        {@const a = centre.get(arc.from)}
+        {@const b = centre.get(arc.to)}
+        {#if a && b}
+          <g class="arc" class:near={selected.has(arc.from) || selected.has(arc.to)}>
+            <title>{arc.raw}</title>
+            <path d="M {a.cx} {underLabels(a.depth)} L {b.cx} {dotY(b.depth)}" />
+          </g>
+        {/if}
+      {/each}
+    {/if}
+    {#each cases as { arc, path, arrow, x, y } (arc.to)}
       <g class="arc case">
         <title>{arc.raw}</title>
         <path d={path} />
         <path class="arrow" d={arrow} />
-        <text x={mid} y={turn + 3.5} font-size={LABEL_SIZE}>{arc.label}</text>
+        <text {x} {y} font-size={LABEL_SIZE}>{arc.label}</text>
       </g>
     {/each}
-    {#each layout.words as word (word.index)}
+    {#each columns.words as word (word.index)}
       {@const isSelected = selected.has(word.index)}
+      {@const y = labelTop(word.depth)}
       <g
         class="word"
         class:selected={isSelected}
@@ -157,18 +217,24 @@
         class:root={word.root}
         role="button"
         tabindex="0"
-        aria-label="{word.token.text}, {word.pos}{word.caseName ? `, ${word.caseName}` : ''}"
+        aria-label="{word.token.text}, {word.pos}{word.relation ? `, ${word.relation}` : ''}{word.caseName
+          ? `, ${word.caseName}`
+          : ''}"
         onclick={() => onselect(word.index)}
         onkeydown={(event) => onkeydown(event, word.index)}
       >
-        <rect x={word.cx - word.width / 2 - 4} y={layout.top + 2} width={word.width + 8} height={layout.rowHeight} rx="5" />
-        <text class="form" {lang} x={word.cx} y={layout.top + 19} font-size={WORD_SIZE}>{word.token.text}</text>
-        {#if word.index === trigger}
-          <line class="trigger" x1={word.cx - word.width / 2} x2={word.cx + word.width / 2} y1={layout.top + 23} y2={layout.top + 23} />
+        <title>{word.pos}{word.relation ? `, ${word.relation}` : ""}</title>
+        <rect x={word.cx - word.width / 2 - 4} y={y + 2} width={word.width + 8} height={labels} rx="5" />
+        {#if shape === "tree"}
+          <circle class="dot" cx={word.cx} cy={dotY(word.depth)} r={DOT} />
         {/if}
-        <text class="pos" x={word.cx} y={layout.top + 35} font-size={LABEL_SIZE}>{word.pos}</text>
+        <text class="form" {lang} x={word.cx} y={y + 19} font-size={WORD_SIZE}>{word.token.text}</text>
+        {#if word.index === trigger}
+          <line class="trigger" x1={word.cx - word.width / 2} x2={word.cx + word.width / 2} y1={y + 23} y2={y + 23} />
+        {/if}
+        <text class="pos" x={word.cx} y={y + 35} font-size={LABEL_SIZE}>{word.second}</text>
         {#if word.caseName}
-          <text class="case-name" class:why={isSelected && cases.length > 0} x={word.cx} y={layout.top + 48} font-size={LABEL_SIZE}
+          <text class="case-name" class:why={isSelected && cases.length > 0} x={word.cx} y={y + 48} font-size={LABEL_SIZE}
             >{word.caseName}</text
           >
         {/if}

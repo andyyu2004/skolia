@@ -52,6 +52,19 @@ test("leaves out punctuation and marks the root and cases", () => {
   );
 });
 
+test("depth counts the steps to the root", () => {
+  const tree = sentenceTree(SENTENCE);
+  assert.deepEqual(
+    tree.words.map((w) => [w.token.text, w.depth, w.relation]),
+    [
+      ["Kot", 1, "subject"],
+      ["je", 0, ""],
+      ["małą", 2, "adjective"],
+      ["rybę", 1, "object"],
+    ],
+  );
+});
+
 test("an arc is one level above the arcs it spans", () => {
   const tree = sentenceTree(SENTENCE);
   const level = (raw: string): number | undefined => tree.arcs.find((a) => a.raw === raw)?.level;
