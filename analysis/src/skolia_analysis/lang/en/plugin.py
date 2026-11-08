@@ -74,3 +74,8 @@ def lexicon_source() -> Source:
 def bundler(lexicon: Lexicon, data: Path | None) -> Bundler:
     """The paradigms are the lexicon's, from Wiktionary."""
     return lambda blob: bundle.make(blob, lexicon)
+
+
+def paradigms() -> None:
+    """The lexicon stores them."""
+    return None

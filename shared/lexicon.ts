@@ -5,10 +5,17 @@ import type { Bundle, Entry, Feats, Pronunciation, Sense, Token, Upos } from "@s
  * BundleParadigm docstring in analysis/src/skolia_analysis/lexicon/schema.py). */
 const CONTEXTUAL: ReadonlySet<string> = new Set(["PronType", "ExtPos"]);
 
-export function entryFor(bundle: Bundle, token: Token): Entry | undefined {
+/** The id of the token's entry, after the bundle's fallbacks (Old in "Old Town" is
+ * en:old:ADJ): the id words and cards are kept under. */
+export function entryIdFor(bundle: Bundle, token: Token): string | undefined {
   if (token.lemma_id === null) return undefined;
   const id = bundle.lookup[token.lemma_id] ?? token.lemma_id;
-  return bundle.entries[id];
+  return id in bundle.entries ? id : undefined;
+}
+
+export function entryFor(bundle: Bundle, token: Token): Entry | undefined {
+  const id = entryIdFor(bundle, token);
+  return id === undefined ? undefined : bundle.entries[id];
 }
 
 /** How a token's text or an entry's lemma is said, keyed as pronunciation_key in

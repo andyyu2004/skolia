@@ -153,7 +153,7 @@ class FeatsTable:
         return self._index[key]
 
 
-def _compact(paradigm: Paradigm, feats: FeatsTable) -> BundleParadigm:
+def compact(paradigm: Paradigm, feats: FeatsTable) -> BundleParadigm:
     by_form: dict[str, list[int]] = {}
     for form in paradigm["forms"]:
         indices = by_form.setdefault(form["form"], [])
@@ -180,6 +180,6 @@ def _entry(
         "upos": upos,
         "senses": row.senses if row else [],
         "relations": row.relations if row else [],
-        "paradigms": [_compact(p, feats) for p in _paradigms(row, paradigms, lemma, upos)],
+        "paradigms": [compact(p, feats) for p in _paradigms(row, paradigms, lemma, upos)],
         "frames": frames(lemma, upos),
     }

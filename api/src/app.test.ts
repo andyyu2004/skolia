@@ -1,16 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  STUCK_AFTER_MS,
-  acceptsEncoding,
-  countWords,
-  isOutdated,
-  isStuck,
-  nameOf,
-  parseImportCap,
-  parseStatus,
-  parseVersions,
-} from "./app.ts";
+import { acceptsEncoding, parseImportCap } from "./app.ts";
+import { STUCK_AFTER_MS, countWords, isOutdated, isStuck, nameOf, parseStatus, parseVersions } from "./controllers/documents.ts";
 
 const NOW = "2026-11-04T00:00:00Z";
 

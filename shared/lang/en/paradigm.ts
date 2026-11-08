@@ -1,8 +1,9 @@
 // English paradigm tables: a noun's number, an adjective's comparison, a verb's present
 // and past by person, its infinitive and participles.
-import type { Entry, Feats, Token } from "@skolia/shared/schema";
+import type { Entry, Feats } from "@skolia/shared/schema";
 import {
   compact,
+  type Shown,
   degreeLabels,
   numberColumn,
   numberLabels,
@@ -19,7 +20,7 @@ function degreeColumn(f: Feats): string | undefined {
   return f.Degree;
 }
 
-export function layout(builder: Builder, forms: Form[], entry: Entry, _token: Token): Table[] {
+export function layout(builder: Builder, forms: Form[], entry: Pick<Entry, "upos">, _shown: Shown): Table[] {
   switch (entry.upos) {
     case "NOUN":
     case "PROPN":

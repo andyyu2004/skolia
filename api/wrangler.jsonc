@@ -27,6 +27,16 @@
       "binding": "DB",
       "database_name": "skolia",
       "migrations_dir": "migrations"
+    },
+    {
+      "binding": "LEXICON_EN",
+      "database_name": "skolia-lexicon-en",
+      "migrations_dir": "lexicon-migrations"
+    },
+    {
+      "binding": "LEXICON_PL",
+      "database_name": "skolia-lexicon-pl",
+      "migrations_dir": "lexicon-migrations"
     }
   ],
   "r2_buckets": [
@@ -63,6 +73,16 @@
           "binding": "DB",
           "database_name": "skolia-staging",
           "migrations_dir": "migrations"
+        },
+        {
+          "binding": "LEXICON_EN",
+          "database_name": "skolia-lexicon-en-staging",
+          "migrations_dir": "lexicon-migrations"
+        },
+        {
+          "binding": "LEXICON_PL",
+          "database_name": "skolia-lexicon-pl-staging",
+          "migrations_dir": "lexicon-migrations"
         }
       ],
       "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "skolia-staging" }],

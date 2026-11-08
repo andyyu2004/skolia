@@ -3,7 +3,7 @@ import { test } from "node:test";
 import type { Blob, Bundle, Entry, Feats, Schema, Token } from "@skolia/shared/schema";
 import { layout } from "../../doc.ts";
 import { pronunciationsOf, rankSenses } from "../../lexicon.ts";
-import { paradigmTables } from "../../paradigm.ts";
+import { lemmaTables, paradigmTables } from "../../paradigm.ts";
 import { explainCase } from "./cases.ts";
 import { argumentsOf, describePhrase, frames } from "./frames.ts";
 import { polish } from "./index.ts";
@@ -119,6 +119,17 @@ test("the declension marks the token's own form and case", () => {
   );
   // psa is also the accusative, but the token is genitive
   assert.deepEqual(current, ["gen."]);
+});
+
+test("a card's declension marks the lemma, from feature sets looked up by id", () => {
+  const sets: Record<string, Feats> = { "0": NOM_SG, "1": GEN_SG, "2": ACC_SG, "3": NOM_PL };
+  const [table] = lemmaTables((id) => sets[String(id)], PIES, polish.paradigm, polish.mergeLabels);
+  assert.ok(table);
+  assert.deepEqual(table.columns, ["sg", "pl"]);
+  const current = table.rows.flatMap((row) =>
+    row.cells.flatMap((cell) => cell.filter((f) => f.current).map((f) => `${row.label} ${f.text}`)),
+  );
+  assert.deepEqual(current, ["nom. pies"]);
 });
 
 test("case explanations: governor, two-case prepositions, agreement chains", () => {

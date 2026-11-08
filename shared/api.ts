@@ -1,7 +1,7 @@
 // Requests and responses of skolia-api. The analysis and bundle shapes come from the
 // Python schemas (schema.gen.ts); these are the API's own.
 import type { z } from "zod";
-import type { State, Upos } from "./schema.gen.ts";
+import type { BundleParadigm, Feats, Pronunciation, Relation, Sense, State, Upos } from "./schema.gen.ts";
 import type * as schemas from "./schemas.ts";
 
 export const LANGS = ["en", "pl"] as const;
@@ -105,14 +105,22 @@ export const LICENCE_INFO: Record<Licence, LicenceInfo> = {
 export const MAX_AUTHOR_LENGTH = 200;
 export const MAX_SOURCE_LENGTH = 2000;
 
+export type Timestamp = z.output<typeof schemas.Timestamp>;
+export type UserId = z.output<typeof schemas.UserId>;
+export type DocumentId = z.output<typeof schemas.DocumentId>;
+export type CardId = z.output<typeof schemas.CardId>;
+export type ReviewId = z.output<typeof schemas.ReviewId>;
+
+export function timestamp(date: Date): Timestamp {
+  return date.toISOString() as Timestamp;
+}
+
 export interface DocumentSummary {
-  /** sha256 hex of the language and text (docId in keys.ts): the same text imported
-   * twice in one language is one document. */
-  id: string;
+  /** The same text imported twice in one language is one document. */
+  id: DocumentId;
   title: string;
   lang: Lang;
-  /** ISO 8601 time of import. */
-  imported: string;
+  imported: Timestamp;
   words: number;
   visibility: Visibility;
   licence: Licence;
@@ -139,8 +147,28 @@ export interface DocumentList {
   documents: DocumentSummary[];
 }
 
-export const LEMMA_STATUSES = ["new", "learning", "known", "ignored"] as const;
-export type LemmaStatus = (typeof LEMMA_STATUSES)[number];
+/** A word the user is learning (active), or has marked as known or ignored (names,
+ * typos), which takes its cards out of reviews. A word with no status is new. */
+export const WORD_STATUSES = ["active", "known", "ignored"] as const;
+export type WordStatus = (typeof WORD_STATUSES)[number];
+
+/** recognition: the lemma on the front, its glosses on the back. production: the other
+ * way round. */
+export const CARD_KINDS = ["recognition", "production"] as const;
+export type CardKind = (typeof CARD_KINDS)[number];
+
+/** ts-fsrs's grades: Again, Hard, Good, Easy. */
+export const RATINGS = [1, 2, 3, 4] as const;
+export type Rating = (typeof RATINGS)[number];
+
+/** Anki's: a card is mature once its interval is this many days or more. */
+export const MATURE_DAYS = 21;
+
+export const DEFAULT_NEW_PER_DAY = 20;
+export const MAX_NEW_PER_DAY = 1000;
+
+/** Most ids one lexicon lookup takes. */
+export const MAX_LOOKUP = 100;
 
 export const UPOS = [
   "ADJ",
@@ -170,10 +198,78 @@ export const MAX_LEMMA_LENGTH = 100;
 /** Lexicon entry id, as analysis's blob.lemma_id writes it. */
 export type LemmaId = z.output<typeof schemas.LemmaId>;
 
-export type KnownLemma = z.output<typeof schemas.KnownLemma>;
+/** A lemma id as a path param. Hono's client doesn't encode params, and a lemma can have a
+ * slash (pl:i/lub:CCONJ); the API decodes it. */
+export function lemmaParam(id: LemmaId): LemmaId {
+  return encodeURIComponent(id) as LemmaId;
+}
+
+export function langOf(id: LemmaId): Lang {
+  return id.slice(0, id.indexOf(":")) as Lang;
+}
+
+/** mature: its recognition card is mature, so the reader shows it as known. */
+export type Word = z.output<typeof schemas.Word>;
+
+export type Settings = z.output<typeof schemas.Settings>;
+
+export type ReviewRequest = z.output<typeof schemas.ReviewRequest>;
+/** What the reader sends: the same, before the API's validation brands its ids. */
+export type ReviewRequestInput = z.input<typeof schemas.ReviewRequest>;
+
+/** A lexicon entry: what a card shows. Its paradigms' forms point into feature sets,
+ * ["psa", [50, 51]], which the response carries (FeatureSets). */
+export interface LexiconEntry {
+  lemmaId: LemmaId;
+  lemma: string;
+  upos: Upos;
+  senses: Sense[];
+  relations: Relation[];
+  /** How the lemma is said */
+  pronunciations: Pronunciation[];
+  paradigms: BundleParadigm[];
+}
+
+/** The feature sets a response's paradigms use, by id: { "50": { Case: "Gen", ... } }. An
+ * id means something only within its language's loaded lexicon. */
+export type FeatureSets = Record<string, Feats>;
+
+/** Entries by lemma id, and the feature sets their paradigms use, by language. */
+export interface Lookup {
+  entries: LexiconEntry[];
+  featureSets: Partial<Record<Lang, FeatureSets>>;
+}
+
+/** A card to review. entry is null if the lexicon doesn't have the lemma. */
+export interface DueCard extends ScheduledCard {
+  entry: LexiconEntry | null;
+}
+
+export type ScheduledCard = z.output<typeof schemas.ScheduledCard>;
+
+/** Cards due now, then new cards up to what's left of today's allowance. */
+export interface Due {
+  cards: DueCard[];
+  newLeft: number;
+  /** The feature sets the cards' paradigms use, in the cards' language */
+  featureSets: FeatureSets;
+}
+
+/** A language's cards due now, and new cards it would show today. */
+export interface CardCounts {
+  lang: Lang;
+  due: number;
+  new: number;
+}
+
+/** A card after a review: when it's due next. */
+export interface Reviewed {
+  cardId: CardId;
+  dueAt: Timestamp;
+}
 
 export interface User {
-  id: string;
+  id: UserId;
   name: string;
   email: string;
   image: string | null;

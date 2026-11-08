@@ -1,8 +1,9 @@
 // Polish paradigm tables: declension by case and gender, and the verb's tenses, moods,
 // participles and verbal noun.
-import type { Entry, Feats, Token } from "@skolia/shared/schema";
+import type { Entry, Feats } from "@skolia/shared/schema";
 import {
   compact,
+  type Shown,
   degreeLabels,
   numberColumn,
   numberLabels,
@@ -89,7 +90,7 @@ function genderLabels(): Labels {
   return GENDER_ORDER.map((g) => [g, g] as const);
 }
 
-export function layout(builder: Builder, forms: Form[], entry: Entry, token: Token): Table[] {
+export function layout(builder: Builder, forms: Form[], entry: Pick<Entry, "upos">, token: Shown): Table[] {
   // Show the token's own degree and polarity (stary/starszy, robiony/nierobiony)
   const sameGrade = (f: Form): boolean =>
     (f.feats.Degree === undefined || f.feats.Degree === (token.feats.Degree ?? "Pos")) &&
@@ -120,7 +121,7 @@ export function layout(builder: Builder, forms: Form[], entry: Entry, token: Tok
   }
 }
 
-function verbTables(builder: Builder, forms: Form[], token: Token): Table[] {
+function verbTables(builder: Builder, forms: Form[], token: Shown): Table[] {
   const t = token.feats;
   const positive = forms.filter((f) => f.feats.Polarity !== "Neg" || t.Polarity === "Neg");
   const finite = positive.filter((f) => f.feats.VerbForm === "Fin");

@@ -8,6 +8,14 @@ resource "cloudflare_d1_database" "skolia" {
   name       = "skolia${local.suffix}"
 }
 
+# Each language's lexicon for flashcards, skolia-lexicon-pl[-env] (infra/load-lexicon.py
+# loads it)
+resource "cloudflare_d1_database" "lexicon" {
+  for_each   = toset(local.langs)
+  account_id = var.account_id
+  name       = "skolia-lexicon-${each.key}${local.suffix}"
+}
+
 # The consumer is the ingest Worker (skolia-ingest[-env]); wrangler attaches it.
 resource "cloudflare_queue" "ingest" {
   account_id = var.account_id

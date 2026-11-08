@@ -1,9 +1,13 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import type { Lang } from "@skolia/shared/api";
   import type { Bundle, Token } from "@skolia/shared/schema";
   import { LANGUAGES } from "@skolia/shared/lang";
   import type { Piece } from "@skolia/shared/doc";
-  import { entryFor, pronunciationsOf, rankSenses } from "@skolia/shared/lexicon";
+  import type { LemmaId } from "@skolia/shared/api";
+  import { entryFor, entryIdFor, pronunciationsOf, rankSenses } from "@skolia/shared/lexicon";
+  import { LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
+  import { setStatus, words as known } from "./lib/words.svelte.ts";
   import { paradigmTables } from "@skolia/shared/paradigm";
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
   import ParadigmTable from "./ParadigmTable.svelte";
@@ -58,12 +62,14 @@
         const head = w.token.head === null ? null : headText(w.sentence, w.token.head);
         const tokens = sentenceTokens(w.sentence);
         const uses = entry && partOfWord === null ? language.uses(entry, tokens, w.index) : [];
+        const parsedId = LemmaIdSchema.safeParse(entryIdFor(bundle, w.token));
         return {
           ref: w,
           entry,
+          lemmaId: parsedId.success ? parsedId.data : null,
           said: pronunciationsOf(bundle, w.token.text, w.token.upos),
           lemmaSaid:
-            entry && entry.lemma !== w.token.text ? pronunciationsOf(bundle, entry.lemma, entry.upos) : [],
+            entry && !sameWord(entry.lemma, w.token.text) ? pronunciationsOf(bundle, entry.lemma, entry.upos) : [],
           partOfWord,
           role: role && head ? { role, head } : null,
           caseWhy: language.explainCase(tokens, w.index),
@@ -77,6 +83,49 @@
         };
       }),
   );
+
+  /** Cześć at the start of a sentence is still the lemma cześć */
+  function sameWord(a: string, b: string): boolean {
+    return a.toLocaleLowerCase() === b.toLocaleLowerCase();
+  }
+
+  /** Not added on a tap: names, numbers and symbols aren't vocabulary. */
+  const UNLEARNABLE: ReadonlySet<string> = new Set(["PROPN", "NUM", "SYM", "PUNCT", "X"]);
+
+  /** The last failure to add a word, by lemma id. */
+  let statusError = $state<{ lemmaId: LemmaId; message: string } | null>(null);
+
+  /** Tried in this sheet: a failed save shows its error rather than being retried. */
+  const tried = new Set<LemmaId>();
+
+  /** A word you tap and have never marked goes into your cards; Known while reviewing
+   * takes it out. */
+  $effect(() => {
+    if (!known.byId) return;
+    const fresh = words.flatMap((w) =>
+      w.lemmaId &&
+      w.partOfWord === null &&
+      !UNLEARNABLE.has(w.ref.token.upos) &&
+      known.byId?.[w.lemmaId] === undefined &&
+      !tried.has(w.lemmaId)
+        ? [w.lemmaId]
+        : [],
+    );
+    for (const lemmaId of fresh) tried.add(lemmaId);
+    untrack(() => {
+      void (async () => {
+        for (const lemmaId of fresh) await learn(lemmaId);
+      })();
+    });
+  });
+
+  async function learn(lemmaId: LemmaId): Promise<void> {
+    try {
+      await setStatus(lemmaId, "active");
+    } catch (e: unknown) {
+      statusError = { lemmaId, message: `Couldn't add it to your cards: ${e instanceof Error ? e.message : String(e)}` };
+    }
+  }
 </script>
 
 <aside class="sheet" class:expanded aria-label="Word details">
@@ -91,17 +140,20 @@
     <section class="word">
       <h2>
         <span {lang}>{token.text}</span>
-        {#if token.lemma && token.lemma !== token.text}
+        {#if token.lemma && !sameWord(token.lemma, token.text)}
           <span class="lemma">(<span {lang}>{word.entry?.lemma ?? token.lemma}</span>)</span>
         {/if}
       </h2>
+      {#if word.lemmaId && statusError?.lemmaId === word.lemmaId}
+        <p class="error" role="alert">{statusError.message}</p>
+      {/if}
       {#if word.said.length > 0 || word.lemmaSaid.length > 0}
         <p class="pronunciation">
           {#each word.said as p (p.ipa)}
             <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
           {/each}
           {#if word.lemmaSaid.length > 0 && word.entry}
-            <span class="muted"
+            <span class="lemma-said"
               ><span {lang}>{word.entry.lemma}</span>
               {#each word.lemmaSaid as p (p.ipa)}
                 <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>

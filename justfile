@@ -4,6 +4,9 @@
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
+# Each has its own lexicon database, LEXICON_{LANG} (shared/api.ts LANGS)
+langs := "en pl"
+
 _default:
     @just --list
 
@@ -33,7 +36,25 @@ dev: dev-api dev-reader
 [working-directory('api')]
 dev-api: images env-local
     pnpm exec wrangler d1 migrations apply DB --local --env=''
+    for lang in {{ langs }}; do pnpm exec wrangler d1 migrations apply "LEXICON_$(tr a-z A-Z <<<"$lang")" --local --env=''; done
+    just lexicon-local
     pnpm exec wrangler dev -c wrangler.jsonc -c wrangler.ingest.jsonc --port 8787
+
+# Load data/lexicon/{lang}.sqlite (DEVELOP.md says how to build them) into wrangler dev's lexicon
+# databases for cards, through {lang}.cards.sqlite, rebuilt when the lexicon is newer; a language
+# without one is left empty, and an unchanged one is skipped
+lexicon-local:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for lang in {{ langs }}; do
+      lexicon=data/lexicon/$lang.sqlite cards=data/lexicon/$lang.cards.sqlite
+      if [ -f "$lexicon" ]; then
+        [ "$cards" -nt "$lexicon" ] || (cd analysis && uv run skolia-build-cards "$lang" "../$lexicon" "../$cards")
+        infra/load-lexicon.py local "$cards"
+      else
+        echo "lexicon-local: no data/lexicon/$lang.sqlite; cards in $lang will have no meanings" >&2
+      fi
+    done
 
 # api/.env.local, the dev Google OAuth client, from secrets/dev.env if it's missing. sops finds the
 # age key through .envrc.
@@ -68,6 +89,19 @@ plan env:
 # Apply D1 migrations
 migrate env:
     infra/wrangler.sh {{ env }} d1 migrations apply DB --remote
+    for lang in {{ langs }}; do infra/wrangler.sh {{ env }} d1 migrations apply "LEXICON_$(tr a-z A-Z <<<"$lang")" --remote; done
+
+# The Nix store path must be readable here: Linux, or SKOLIA_NIX=host (analysis/scripts/nix.sh).
+# Load each language's lexicon into its database (staging, production, pr-N or local), from its Nix build for cards.
+# A preview gets English only, for wordfreq's 3,000 most common words (infra/load-lexicon.py --sample).
+load-lexicon env:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case {{ env }} in pr-*) langs=(en) sample=(--sample 3000) ;; *) langs=({{ langs }}) sample=() ;; esac
+    for lang in "${langs[@]}"; do
+      out=$(analysis/scripts/nix.sh nix build --no-link --print-out-paths "./analysis#cards-lexicon-$lang")
+      infra/load-lexicon.py {{ env }} "$out/$lang.cards.sqlite" "${sample[@]}"
+    done
 
 # Terraform: storage, queue, ingest's R2 token, billing alerts
 apply env:

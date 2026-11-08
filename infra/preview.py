@@ -7,8 +7,8 @@
   preview.py config pr-12   writes api/wrangler.pr-12.json and api/wrangler.ingest.pr-12.json
   preview.py url pr-12      prints its workers.dev URL
 Each config is the committed config's env.staging block at the top level, with -pr-12
-for -staging in the names, and no routes: a preview is on workers.dev only. Needs
-CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN.
+for -staging in the names, and no routes: a preview is on
+workers.dev only. Needs CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN.
 """
 
 import json

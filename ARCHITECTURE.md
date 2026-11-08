@@ -13,25 +13,139 @@ An assisted-reading app built around morphology. Tap a word or select a span. Yo
 
 ## Components
 
-```
-Phone or desktop (responsive PWA) ──► skolia (Worker: reader assets + API) ──► D1 (users, cards, quotas, doc metadata)
-  │                                      │                                └─► R2 (source texts, analyses, bundles, status)
-  │                                      │
-  │                                      └─► Queue ──► skolia-ingest (Worker) ──► Durable Object ──► container per language (Python) ──► R2
-  │
-  └─ IndexedDB: cached document bundles
+```mermaid
+flowchart LR
+  subgraph Browser
+    RD["reader (Svelte)"]
+  end
+  G["Google OAuth"]
+  subgraph Cloudflare
+    subgraph WEB["skolia Worker"]
+      API["Hono app (api/src/app.ts)"]
+      BA["Better Auth"]
+    end
+    UDO["User DO, one per user: word, card, review, settings"]
+    DB[("D1 skolia: document, auth tables")]
+    LX[("D1 skolia-lexicon-{lang}, one per language: entry, featureset, loaded")]
+    R2[("R2 skolia: doc/{id}/..., versions/{lang}.json")]
+    Q[["Queue skolia-ingest"]]
+    subgraph INGW["skolia-ingest Worker"]
+      CON["queue consumer"]
+      IDO["Ingester DO, one per image"]
+    end
+    subgraph CTR["containers (Python)"]
+      CPL["ingest-pl: COMBO, Morfeusz, pl.sqlite"]
+      CEN["ingest-en: Stanza, en.sqlite"]
+    end
+  end
+
+  RD -->|"documents, text, analysis, bundle"| API
+  RD -->|"set a word's status"| API
+  RD -->|"cards due, reviews"| API
+  RD -->|"import"| API
+  API --> BA
+  BA -->|"users, sessions, API keys"| DB
+  BA -->|"sign-in"| G
+  API -->|"document metadata, daily cap"| DB
+  API -->|"text, status, analysis, bundle"| R2
+  API -->|"job"| Q
+  API -->|"RPC: words, cards, reviews, settings"| UDO
+  API -->|"entries for due cards"| LX
+  Q --> CON
+  CON --> IDO
+  IDO -->|"POST /jobs, GET /busy"| CPL
+  IDO -->|"POST /jobs, GET /busy"| CEN
+  CPL -->|"S3 API"| R2
+  CEN -->|"S3 API"| R2
 ```
 
-Locally, `wrangler dev` runs both Workers and the ingest containers, with local D1, R2 and Queue. The API reaches them through small interfaces (`api/src/ports.ts`, faked in the tests); ingest reaches R2 over its S3 API, which wrangler dev also serves for the local bucket. Ingest writes `doc/{doc}/status.json` as it goes (queued, analysing, ready, failed), and the API reads it to tell the reader.
+- **Open a document:** D1 has its metadata and R2's `status.json` the names of its current analysis and bundle, which the reader then fetches from R2 through the API, as stored. Browsers cache them by HTTP (`immutable`); there's no IndexedDB yet.
+- **Tap a word:** local, from the bundle already loaded (`shared/lexicon`, `shared/paradigm`). Setting a word's status goes to the User DO.
+- **Review:** the User DO gives the due cards and the API adds their entries from its language's lexicon D1. The DO never reads the lexicon, and the reader's word sheet never reads the lexicon D1s, so the two can show different lexicon versions until a document is re-bundled.
+- **Import:** the API puts the text in R2, the metadata in D1, a queued `status.json` and the job on the queue. The consumer hands it to the Ingester named after its language's image, so a deploy that changes an image starts a new container.
+- The ingest Worker has no R2 or D1 binding: containers reach R2 over its S3 API, with a token Terraform makes.
+- Lexicon lookups only see the rows of each language's version in `loaded`.
+
+Locally, `wrangler dev` runs both Workers and the ingest containers, with local D1, R2 and Queue. The API reaches them through small interfaces (`api/src/ports.ts`, faked in the tests); ingest reaches R2 over its S3 API, which wrangler dev also serves for the local bucket. Ingest writes `doc/{doc}/status.json` as it goes (analysing, ready, failed), the API writes queued whenever it queues a document, and the API reads it to tell the reader.
 
 On Cloudflare: Terraform (`infra/`) manages what wrangler doesn't: R2, D1, the queue, ingest's R2 token and billing alerts. Both Workers are deployed with wrangler: `skolia` with the reader as static assets on workers.dev and skolia.io (`api/wrangler.jsonc`), and `skolia-ingest` with its containers, one per language (`api/wrangler.ingest.jsonc`). Wrangler also applies their Durable Object migrations, which the Terraform provider can't do on an update (it resends the first migration and Cloudflare refuses it). The consumer hands each job to its language's container over HTTP and acks it once accepted: a consumer may run 15 minutes and an analysis can take longer. The container keeps jobs in memory, sleeps when idle (the Durable Object asks ingest whether it's busy before stopping it), and has the models and lexicon in its image. A job lost with its container is re-queued by the stuck rule below.
 
+```mermaid
+flowchart TB
+  subgraph Repo
+    PY["analysis/ (Python)"]
+    SH["shared/ (types, schemas, paradigm, lexicon)"]
+    RDR["reader/"]
+    APIS["api/"]
+    TFS["infra/*.tf"]
+  end
+  subgraph Nix["analysis/flake.nix"]
+    INP["inputs.sha256: Kaikki, Walenty"]
+    MOD["models (fixed-output)"]
+    VENV["venv (uv2nix)"]
+    LEXN["lexicon-{lang}: {lang}.sqlite"]
+    CARDS["cards-lexicon-{lang}: {lang}.cards.sqlite"]
+    IMG["ingest-{lang} image"]
+  end
+  subgraph CI["GitHub Actions (ci.yml, deploy.yml)"]
+    CHK["check"]
+    BII["build-ingest-image (per language)"]
+    DI["deploy-infra: terraform, D1 migrations"]
+    LL["load-lexicon"]
+    DGI["deploy-ingest"]
+    DW["deploy-web, smoke"]
+  end
+  CX[("Cachix")]
+  REG[("Cloudflare registry")]
+  subgraph CF["Cloudflare"]
+    TFR["Terraform: R2, D1 skolia, a lexicon D1 per language, queue, ingest's R2 token, alerts"]
+    LXDB[("D1 skolia-lexicon-{lang}")]
+    INGD["skolia-ingest Worker, containers"]
+    WEBD["skolia Worker, reader assets"]
+  end
+
+  PY -->|"schema.gen.ts"| SH
+  SH --> RDR
+  SH --> APIS
+  APIS -.->|"type AppType"| RDR
+  PY --> VENV
+  INP --> LEXN
+  VENV --> LEXN
+  LEXN --> CARDS
+  MOD --> IMG
+  VENV --> IMG
+  LEXN --> IMG
+  CHK --> BII
+  BII --> IMG
+  BII -->|"lexicon, venv"| CX
+  IMG -->|"tag = Nix hash"| REG
+  BII --> DI
+  TFS --> TFR
+  DI --> TFR
+  DI --> LL
+  DI --> DGI
+  DGI --> DW
+  CX -.-> LL
+  LL -->|"wrangler d1 execute"| LXDB
+  REG -->|"pinned by digest"| DGI
+  DGI --> INGD
+  DW --> WEBD
+```
+
+- D1 is bound by name. If Terraform hasn't made a database, `wrangler deploy` creates one outside Terraform, so `deploy-infra` goes first.
+- The ingest image has `lexicon-{lang}` but not the cards lexicon. The cards lexicon is built from the lexicon, with Morfeusz's paradigms for Polish.
+- `load-lexicon` only substitutes from Cachix and never fetches the inputs, so it needs the lexicon there; `build-ingest-image` pushes it only when an image is rebuilt.
+- `deploy-web` doesn't wait for `load-lexicon`, so a smoke test can pass before the cards have entries.
+- `schema.gen.ts` is generated from analysis; the blob keys in `shared/keys.ts` are kept in step by hand.
+- A preview loads wordfreq's 3,000 most common English words only, and accepts 20 imports a day.
+
 | Part | Tech | Responsibility |
 |---|---|---|
-| Client | PWA, Svelte 5 + TypeScript; one layout for phone (bottom sheet) and desktop (side panel) | Reader, word/span sheet, paradigm tables, review sessions (FSRS in JS), local state with background sync |
-| API | Cloudflare Workers (TypeScript) | Auth, sync, import job submission, explain proxy + cache, quotas |
-| User data | D1 | Users, document metadata, known lemmas, cards, overrides, explanation cache |
-| Blobs | R2 | Lexicon files per language, source texts, analysis blobs |
+| Client | PWA, Svelte 5 + TypeScript; one layout for phone (bottom sheet) and desktop (side panel) | Reader, word/span sheet, paradigm tables, review sessions (online for now) |
+| API | Cloudflare Workers (TypeScript) | Auth, import job submission, cards and reviews, quotas; later the explain proxy and cache |
+| User data | D1, a Durable Object per user | D1: users, document metadata. Durable Object: words, cards, reviews (FSRS) |
+| Lexicon | D1, one per language (`skolia-lexicon-{lang}`) | For flashcards, by lemma id: senses, relations, pronunciations and paradigms, with the feature sets they point into; built from the same lexicon as the ingest images |
+| Blobs | R2 | Source texts, analysis blobs, bundles |
 | Analysis | Python on Cloudflare Containers, fed from Cloudflare Queues by a consumer Worker | Segment, analyze, match lexicon, write blob |
 | Lexicon build | Offline Python scripts | Kaikki/Wiktionary + Morfeusz → per-language lexicon files |
 
@@ -44,7 +158,7 @@ Import:       phone → API → queue → analysis container    (slow, once per 
 Open:         phone ← document + its lexicon bundle        (one request, then cached)
 Tap/select:   phone only                                   (structure, paradigm, gloss)
 Translate/why: phone → API → cache or LLM                  (network, metered)
-Mark/review:  phone first, synced later
+Mark/review:  phone → API → user's Durable Object         (online; offline later)
 ```
 
 ## Language plugin
@@ -120,16 +234,17 @@ start, end, text, lemma, lemma_id, upos, xpos?, feats, head, deprel, candidates?
 
 Expressions per sentence: `{ "from": 2, "to": 4, "id": "pl:dać sobie radę" }`, matched by lemma sequence. Contiguous only at first.
 
-## User data (D1)
+## User data
+
+D1 has `document` (a user's imports and the shared library) and Better Auth's tables. Planned, not built:
 
 ```
-user_document(user_id, doc_hash, title, added_at)
-known_lemma(user_id, lemma_id, status)                   -- new / learning / known / ignored
 lookup(user_id, doc_hash, char_start, char_end, at)
-card(id, user_id, lemma_id?, expression_id?, doc_hash, char_start, char_end, fsrs_state, due)
 override(user_id, doc_hash, char_start, char_end, lemma_id, feats)
 explanation_cache(key, text, model, created_at)          -- key = hash(sentence, char_start, char_end)
 ```
+
+Each user's words, flashcards and reviews live in their own Durable Object (`api/src/worker/user.ts`), scheduled with ts-fsrs. The review log is the source of truth, and the cards' scheduling state is rebuilt from it. Cards hold lemma ids, and their dictionary entries come from the lexicon in D1. Details: `docs/adr/0001-flashcards.md`.
 
 After a re-analysis, overrides are re-applied by character offset. If a token boundary has moved, the override is flagged rather than guessed.
 

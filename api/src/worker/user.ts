@@ -1,6 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
-import type { KnownLemma, LemmaId, LemmaStatus } from "@skolia/shared/api";
+import { CARD_KINDS, LANGS, MATURE_DAYS, timestamp, type CardCounts, type Timestamp, type Lang, type LemmaId, type ReviewRequest, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
 import * as schemas from "@skolia/shared/schemas";
+import { CardId } from "@skolia/shared/schemas";
+import type { DueCards, ReviewOutcome } from "../ports.ts";
+import { fromJson, fsrs, newCard, review, toJson } from "./scheduler.ts";
 import { MIGRATIONS } from "../user/migrations/index.ts";
 import { LogEntry, MigrationError, applied, plan, problems, withChecksums, type Checksummed } from "../user/migrator.ts";
 
@@ -37,21 +40,121 @@ export class User extends DurableObject<object> {
     }
   }
 
-  lemmas(): KnownLemma[] {
+  words(): Word[] {
     return this.sql
-      .exec(`SELECT lemma_id AS "lemmaId", status, updated FROM known_lemma`)
+      .exec(
+        `SELECT word.lemma_id AS "lemmaId", word.status, word.updated,
+           coalesce(card.scheduled_days >= ${MATURE_DAYS}, 0) AS mature
+         FROM word LEFT JOIN card ON card.lemma_id = word.lemma_id AND card.kind = 'recognition'
+         ORDER BY word.lemma_id`,
+      )
       .toArray()
-      .map((row) => schemas.KnownLemma.parse(row));
+      .map((row) => schemas.Word.parse({ ...row, mature: row["mature"] === 1 }));
   }
 
-  setLemma(lemmaId: LemmaId, status: LemmaStatus, updated: string): void {
-    this.sql.exec(
-      `INSERT INTO known_lemma (lemma_id, status, updated) VALUES (?, ?, ?)
-       ON CONFLICT (lemma_id) DO UPDATE SET status = excluded.status, updated = excluded.updated`,
-      lemmaId,
-      status,
-      updated,
-    );
+  /** Active gives the word its cards, if it hasn't any; the cards are reviewed while their
+   * word is active (card.active, so the review queries need only card's indexes). */
+  async setWord(lemmaId: LemmaId, status: WordStatus, now: Timestamp): Promise<void> {
+    const s = await fsrs();
+    this.ctx.storage.transactionSync(() => {
+      this.sql.exec(
+        `INSERT INTO word (lemma_id, status, updated) VALUES (?, ?, ?)
+         ON CONFLICT (lemma_id) DO UPDATE SET status = excluded.status, updated = excluded.updated`,
+        lemmaId,
+        status,
+        now,
+      );
+      const active = status === "active" ? 1 : 0;
+      this.sql.exec(`UPDATE card SET active = ? WHERE lemma_id = ?`, active, lemmaId);
+      if (!active) return;
+      for (const kind of CARD_KINDS) {
+        const id = CardId.parse(crypto.randomUUID());
+        this.sql.exec(
+          `INSERT INTO card (id, lemma_id, kind, created, active, fsrs) VALUES (?, ?, ?, ?, 1, ?)
+           ON CONFLICT (lemma_id, kind) DO NOTHING`,
+          id,
+          lemmaId,
+          kind,
+          now,
+          toJson(newCard(s, id, new Date(now))),
+        );
+      }
+    });
+  }
+
+  /** New cards a language has left today: the daily limit is per language. A card counts
+   * against the day the server first had an answer for it, from dayStart. */
+  #newLeft(lang: Lang, dayStart: Timestamp): number {
+    const { newPerDay } = this.settings();
+    const introduced = this.sql
+      .exec(`SELECT count(*) AS n FROM card WHERE lang = ? AND first_reviewed >= ?`, lang, dayStart)
+      .one()["n"];
+    return Math.max(0, newPerDay - Number(introduced));
+  }
+
+  /** A language's active cards due by now, soonest first, then its new cards in the order
+   * their words were added, up to what's left of the day's allowance. */
+  due(lang: Lang, now: Timestamp, dayStart: Timestamp, limit: number): DueCards {
+    const newLeft = this.#newLeft(lang, dayStart);
+    const select = `SELECT id, lemma_id AS "lemmaId", kind, schedule_status = 'new' AS "isNew", due_at AS "dueAt" FROM card`;
+    const rows = [
+      ...this.sql
+        .exec(`${select} WHERE lang = ? AND active = 1 AND schedule_status != 'new' AND due_at <= ? ORDER BY due_at LIMIT ?`, lang, now, limit)
+        .toArray(),
+      ...this.sql
+        .exec(
+          `${select} WHERE lang = ? AND active = 1 AND schedule_status = 'new' ORDER BY created, lemma_id, kind DESC LIMIT ?`,
+          lang,
+          Math.min(newLeft, limit),
+        )
+        .toArray(),
+    ];
+    return { cards: rows.slice(0, limit).map((row) => schemas.ScheduledCard.parse({ ...row, isNew: row["isNew"] === 1 })), newLeft };
+  }
+
+  /** Each language's cards due by now, and new cards it would show today. */
+  counts(now: Timestamp, dayStart: Timestamp): CardCounts[] {
+    return LANGS.map((lang) => {
+      const due = this.sql
+        .exec(`SELECT count(*) AS n FROM card WHERE lang = ? AND active = 1 AND schedule_status != 'new' AND due_at <= ?`, lang, now)
+        .one()["n"];
+      const fresh = this.sql
+        .exec(`SELECT count(*) AS n FROM card WHERE lang = ? AND active = 1 AND schedule_status = 'new'`, lang)
+        .one()["n"];
+      return { lang, due: Number(due), new: Math.min(Number(fresh), this.#newLeft(lang, dayStart)) };
+    });
+  }
+
+  /** Once per review id: a retry gets the card as it is. now: the server's time, which
+   * dates a card's first review for the daily allowance, whatever the client says. */
+  async review({ id, cardId, rating, at }: ReviewRequest, now: Timestamp): Promise<ReviewOutcome> {
+    const s = await fsrs();
+    return this.ctx.storage.transactionSync((): ReviewOutcome => {
+      const row = this.sql.exec(`SELECT fsrs, created FROM card WHERE id = ?`, cardId).toArray()[0];
+      if (row === undefined) return { kind: "no-card" };
+      const card = fromJson(String(row["fsrs"]));
+      const seen = this.sql.exec(`SELECT card_id FROM review WHERE id = ?`, id).toArray()[0];
+      if (seen !== undefined) {
+        return seen["card_id"] === cardId ? { kind: "reviewed", cardId, dueAt: timestamp(card.dueAt) } : { kind: "id-reused" };
+      }
+      const when = new Date(at);
+      if (when < new Date(String(row["created"])) || (card.lastReviewAt !== null && when < card.lastReviewAt)) {
+        return { kind: "out-of-order" };
+      }
+      const next = review(s, card, rating, when);
+      this.sql.exec(`INSERT INTO review (id, card_id, rating, review_time) VALUES (?, ?, ?, ?)`, id, cardId, rating, when.toISOString());
+      this.sql.exec(`UPDATE card SET fsrs = ?, first_reviewed = coalesce(first_reviewed, ?) WHERE id = ?`, toJson(next), now, cardId);
+      return { kind: "reviewed", cardId, dueAt: timestamp(next.dueAt) };
+    });
+  }
+
+  settings(): Settings {
+    const row = this.sql.exec(`SELECT new_per_day AS "newPerDay" FROM settings WHERE id = 1`).one();
+    return schemas.Settings.parse(row);
+  }
+
+  setSettings({ newPerDay }: Settings): void {
+    this.sql.exec(`UPDATE settings SET new_per_day = ? WHERE id = 1`, newPerDay);
   }
 
   async #migrate(target: number): Promise<void> {

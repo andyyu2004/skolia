@@ -123,11 +123,13 @@ class Lexicon:
         )
         return {cast(Upos, upos): json.loads(p) for upos, p in found}
 
-    def _select(self, where: str, value: str) -> Iterator[Row]:
+    def rows(self) -> Iterator[Row]:
+        """Every entry, by lemma_id."""
+        return self._select("ORDER BY lemma_id")
+
+    def _select(self, where: str, *values: str) -> Iterator[Row]:
         query = f"SELECT lemma_id, lemma, upos, senses, relations, paradigms FROM entry {where}"
-        for lemma_id, lemma, upos, senses, relations, paradigms in self._db.execute(
-            query, (value,)
-        ):
+        for lemma_id, lemma, upos, senses, relations, paradigms in self._db.execute(query, values):
             yield Row(
                 lemma_id,
                 lemma,

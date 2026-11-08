@@ -137,6 +137,10 @@ def lexicon_source() -> Source:
     return Source()
 
 
+def paradigms() -> Paradigms:
+    return Paradigms()
+
+
 def bundler(lexicon: Lexicon, data: Path | None) -> Bundler:
     """With data, entries carry Walenty's frames."""
     paradigms = Paradigms()

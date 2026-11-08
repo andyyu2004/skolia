@@ -1,5 +1,6 @@
-// Paradigm tables for the word sheet, with the token's own form marked. Each language lays
-// out its tables (lang/*/paradigm.ts) with the Builder here.
+// Paradigm tables for the word sheet, with the token's own form marked, and for review
+// cards, with the lemma marked. Each language lays out its tables (lang/*/paradigm.ts) with
+// the Builder here.
 import type { Bundle, Entry, Feats, Token } from "@skolia/shared/schema";
 import { featsMatch } from "./lexicon.ts";
 
@@ -27,8 +28,14 @@ export interface Form {
 export type Key = (feats: Feats) => string | undefined;
 export type Labels = readonly (readonly [string, string])[];
 
+/** The word a table is for: a token in a sentence, or a card's lemma. */
+export type Shown = Pick<Token, "text" | "feats">;
+
 /** A language's tables for an entry's forms, laid out with the builder. */
-export type Layout = (builder: Builder, forms: Form[], entry: Entry, token: Token) => Table[];
+export type Layout = (builder: Builder, forms: Form[], entry: Pick<Entry, "upos">, shown: Shown) => Table[];
+
+/** A feature set by its id: the bundle's feats, or a lexicon response's. */
+export type FeatsOf = (id: number) => Feats | undefined;
 
 /** One label for merged rows or columns: "sg m. pers." + "sg m. anim." -> a shorter one. */
 export type MergeLabels = (labels: string[]) => string;
@@ -54,16 +61,36 @@ export function paradigmTables(
   layout: Layout,
   mergeLabels: MergeLabels = (labels) => labels.join("/"),
 ): Table[] {
-  const forms = chooseParadigm(bundle, entry, token);
+  return tables((id) => bundle.feats[id], entry, token, layout, mergeLabels);
+}
+
+/** A card's tables: the lemma's own paradigm, with the lemma marked. */
+export function lemmaTables(
+  featsOf: FeatsOf,
+  entry: Pick<Entry, "lemma" | "upos" | "paradigms">,
+  layout: Layout,
+  mergeLabels: MergeLabels = (labels) => labels.join("/"),
+): Table[] {
+  return tables(featsOf, entry, { text: entry.lemma, feats: {} }, layout, mergeLabels);
+}
+
+function tables(
+  featsOf: FeatsOf,
+  entry: Pick<Entry, "upos" | "paradigms">,
+  shown: Shown,
+  layout: Layout,
+  mergeLabels: MergeLabels,
+): Table[] {
+  const forms = chooseParadigm(featsOf, entry, shown);
   if (forms.length <= 1) return [];
-  return layout(new Builder(isTokenForm(forms, token), mergeLabels), forms, entry, token);
+  return layout(new Builder(isTokenForm(forms, shown), mergeLabels), forms, entry, shown);
 }
 
 /** Matches the token's own form: the same text (ignoring case and the apostrophe's
  * shape, ’m for 'm) with the token's features, counting only features the paradigm's
  * forms have. A feature none of them has doesn't tell forms apart (English first is
  * NumType=Ord, its forms only have Degree). */
-function isTokenForm(forms: Form[], token: Token): (f: Form) => boolean {
+function isTokenForm(forms: Form[], token: Shown): (f: Form) => boolean {
   const used = new Set(forms.flatMap((f) => Object.keys(f.feats)));
   const feats = Object.fromEntries(Object.entries(token.feats).filter(([key]) => used.has(key))) as Feats;
   const text = foldText(token.text);
@@ -74,11 +101,11 @@ function foldText(text: string): string {
   return text.toLowerCase().replaceAll("’", "'");
 }
 
-function chooseParadigm(bundle: Bundle, entry: Entry, token: Token): Form[] {
+function chooseParadigm(featsOf: FeatsOf, entry: Pick<Entry, "paradigms">, token: Shown): Form[] {
   const expanded = entry.paradigms.map((p) =>
     p.forms.flatMap(([text, ids]) =>
       ids.flatMap((id) => {
-        const feats = bundle.feats[id];
+        const feats = featsOf(id);
         return feats ? [{ text, feats }] : [];
       }),
     ),

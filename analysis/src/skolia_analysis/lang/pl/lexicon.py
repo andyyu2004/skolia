@@ -191,10 +191,15 @@ class Paradigms:
 
     def __call__(self, lemma: str, upos: Upos) -> list[Paradigm]:
         """Every form of the lemma Morfeusz can generate, one paradigm per homonym. A verb's
-        paradigm includes its participles and gerunds."""
+        paradigm includes its participles and gerunds. A lemma of several words, which
+        Morfeusz refuses, has none."""
         by_homonym: dict[str, list[Form]] = {}
         seen: set[tuple[str, str]] = set()
-        for interpretation in self._morf.generate(lemma):
+        try:
+            generated = self._morf.generate(lemma)
+        except RuntimeError:
+            return []
+        for interpretation in generated:
             orth, base, _tag, _names, _qualifiers = interpretation
             base_lemma, homonym = split_homonym(base)
             if base_lemma != lemma:

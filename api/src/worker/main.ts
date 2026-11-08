@@ -4,7 +4,7 @@ import type { IngestJob } from "@skolia/shared/schema";
 import { createApp, parseImportCap } from "../app.ts";
 import { NO_AUTH, createAuth } from "../auth.ts";
 import type { Auth } from "../ports.ts";
-import { CloudflareQueue, D1Documents, DurableObjectUsers, R2Blobs } from "./adapters.ts";
+import { CloudflareQueue, D1Documents, D1Lexicon, DurableObjectUsers, R2Blobs, lexiconsOf, type LexiconBindings } from "./adapters.ts";
 import type { User } from "./user.ts";
 
 export { User } from "./user.ts";
@@ -12,12 +12,12 @@ export { User } from "./user.ts";
 /** Replaced at build time (wrangler.jsonc define, justfile deploy-web) */
 declare const VERSION: string;
 
-interface Env {
+interface Env extends LexiconBindings {
   DB: D1Database;
   USER: DurableObjectNamespace<User>;
   BLOBS: R2Bucket;
   INGEST: Queue<IngestJob>;
-  /** Set by Terraform (var.max_imports_per_day) */
+  /** wrangler vars (api/wrangler.jsonc); a preview's from infra/preview.py */
   MAX_IMPORTS_PER_DAY?: string;
   BASE_URL?: string;
   BETTER_AUTH_SECRET?: string;
@@ -54,12 +54,14 @@ export default {
     const app = createApp({
       auth: authFor(env),
       users: new DurableObjectUsers(env.USER),
+      lexicon: new D1Lexicon(lexiconsOf(env)),
       // Misconfigured: accept none rather than run uncapped
       maxImportsPerDay: maxImportsPerDay ?? 0,
       version: VERSION,
       documents: new D1Documents(env.DB),
       blobs: new R2Blobs(env.BLOBS),
       queue: new CloudflareQueue(env.INGEST),
+      now: () => new Date(),
     });
     return app.fetch(request, env, ctx);
   },

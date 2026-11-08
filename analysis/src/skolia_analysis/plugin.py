@@ -10,11 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from .lexicon.schema import Bundle
+from .lexicon.schema import Bundle, Paradigm
 from .lexicon.source import LexiconSource
 from .lexicon.store import Lexicon
 from .parsed import ParsedSentence, Parser
-from .schema import Blob, ExpressionDef
+from .schema import Blob, ExpressionDef, Upos
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +87,11 @@ class LanguagePlugin(Protocol):
     def lexicon_source(self) -> LexiconSource: ...
 
     def bundler(self, lexicon: Lexicon, data: Path | None) -> Bundler: ...
+
+    def paradigms(self) -> Callable[[str, Upos], list[Paradigm]] | None:
+        """Generates a lemma's paradigms, for a language whose lexicon doesn't store them;
+        None when it does."""
+        ...
 
 
 def lexicon_path(data: Path, lang: str) -> Path:
