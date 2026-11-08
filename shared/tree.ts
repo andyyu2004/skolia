@@ -50,12 +50,14 @@ export interface Tree {
 
 type Span = Omit<Arc, "level" | "fromSlot" | "toSlot">;
 
-/** Punctuation is left out: its arcs carry nothing a learner needs and crowd the rest. */
-export function sentenceTree(tokens: Token[]): Tree {
+/** Punctuation is left out: its arcs carry nothing a learner needs and crowd the rest.
+ * With `keep`, only those tokens are drawn (a clause, see `clauseOf`), and depths count
+ * from the shallowest of them. */
+export function sentenceTree(tokens: Token[], keep?: ReadonlySet<number>): Tree {
   const words: TreeWord[] = [];
   const position = new Map<number, number>();
   tokens.forEach((token, index) => {
-    if (token.upos === "PUNCT") return;
+    if (token.upos === "PUNCT" || (keep && !keep.has(index))) return;
     position.set(index, words.length);
     const value = token.feats.Case;
     words.push({
@@ -67,6 +69,8 @@ export function sentenceTree(tokens: Token[]): Tree {
       relation: token.head === null ? "" : relationName(token.deprel),
     });
   });
+  const shallowest = Math.min(...words.map((w) => w.depth));
+  for (const word of words) word.depth -= shallowest;
 
   function span(from: number, to: number, label: string, raw: string): Span | null {
     const a = position.get(from);
@@ -107,14 +111,61 @@ function depthOf(tokens: Token[], index: number): number {
   return seen.size - 1;
 }
 
+/** The tokens of the clause around `index` when the sentence is long: the nearest clause
+ * (a verb's own clause, a relative or adverbial clause, a coordinated clause) above it
+ * with at least `least` words. Null when that is the whole sentence. */
+export function clauseOf(tokens: Token[], index: number, least = 6): Set<number> | null {
+  const isWord = (i: number): boolean => tokens[i]?.upos !== "PUNCT";
+  const seen = new Set<number>();
+  let at: number | null = index;
+  while (at !== null && !seen.has(at)) {
+    seen.add(at);
+    const token: Token | undefined = tokens[at];
+    if (!token || token.head === null) return null;
+    if (opensClause(token)) {
+      const clause = subtree(tokens, at);
+      if ([...clause].filter(isWord).length >= least) return clause;
+    }
+    at = token.head;
+  }
+  return null;
+}
+
+// Relations whose dependent heads a clause of its own. xcomp is left out: an infinitive
+// after mógł or chcieć reads as part of its verb's clause.
+const CLAUSE: ReadonlySet<string> = new Set(["ccomp", "advcl", "acl", "csubj", "parataxis"]);
+
+function opensClause(token: Token): boolean {
+  const base = token.deprel?.split(":")[0] ?? "";
+  return CLAUSE.has(base) || (base === "conj" && (token.upos === "VERB" || token.upos === "AUX"));
+}
+
+/** `top` and every token whose heads lead up to it. */
+function subtree(tokens: Token[], top: number): Set<number> {
+  const inside = new Set<number>();
+  tokens.forEach((_, i) => {
+    const seen = new Set<number>();
+    let at: number | null = i;
+    while (at !== null && !seen.has(at)) {
+      if (at === top) {
+        inside.add(i);
+        return;
+      }
+      seen.add(at);
+      at = tokens[at]?.head ?? null;
+    }
+  });
+  return inside;
+}
+
 function stack(spans: Span[]): Arc[] {
-  // Shorter arcs first, so every arc inside a longer one has its level already
+  // Shorter arcs first, so an arc goes above every arc it spans or crosses
   const sorted = [...spans].sort((a, b) => a.right - a.left - (b.right - b.left) || a.left - b.left);
   const levelled: (Span & { level: number })[] = [];
   for (const s of sorted) {
     let below = 0;
     for (const arc of levelled) {
-      if (arc.left >= s.left && arc.right <= s.right) below = Math.max(below, arc.level);
+      if (arc.left < s.right && arc.right > s.left) below = Math.max(below, arc.level);
     }
     levelled.push({ ...s, level: below + 1 });
   }
@@ -163,10 +214,10 @@ const RELATION: Partial<Record<string, string>> = {
   case: "preposition",
   cc: "conjunction",
   conj: "coordinated",
-  mark: "introduces",
+  mark: "links clause",
   aux: "auxiliary",
   cop: "copula",
-  expl: "placeholder",
+  expl: "dummy subject",
   "expl:pv": "reflexive",
   "expl:pass": "reflexive",
   xcomp: "complement",
@@ -179,7 +230,7 @@ const RELATION: Partial<Record<string, string>> = {
   fixed: "phrase",
   compound: "compound",
   appos: "apposition",
-  parataxis: "aside",
+  parataxis: "side clause",
   vocative: "address",
   discourse: "discourse",
   dep: "related",
@@ -222,5 +273,5 @@ export function caseChain(cases: Arc[], selected: ReadonlySet<number>): Arc[] {
     const next = cases.find((c) => c.to === arc.from);
     if (next) chain.add(next);
   }
-  return stack([...chain].map(({ from, to, label, raw, left, right }) => ({ from, to, label, raw, left, right })));
+  return stack([...chain]);
 }

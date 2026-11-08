@@ -3,6 +3,7 @@ import { layout } from "./paradigm.ts";
 
 export const french: Language = {
   paradigm: layout,
+  cases: false,
   // The analysis gives no case reasons and the lexicon no frames for French
   explainCase: () => null,
   uses: () => [],

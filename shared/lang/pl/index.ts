@@ -9,6 +9,7 @@ const PERSON_ENDING = "aglt";
 export const polish: Language = {
   paradigm: layout,
   mergeLabels,
+  cases: true,
   explainCase: (tokens, index) => explainCase(tokens, index),
   uses: (entry, tokens, index) =>
     frames(entry.frames, argumentsOf(tokens, index)).map((frame) => ({

@@ -7,6 +7,7 @@
   import { afterPoll, notice as noticeFor, queueText, retryAfter } from "./lib/reading.ts";
   import EditDocument from "./EditDocument.svelte";
   import WordSheet from "./WordSheet.svelte";
+  import { sheet } from "./lib/sheet.svelte.ts";
 
   let { id }: { id: string } = $props();
 
@@ -116,7 +117,7 @@
 
 <svelte:window {onkeydown} />
 
-<div class="reader" class:sheet-open={piece !== undefined}>
+<div class="reader" class:sheet-open={piece !== undefined} class:sentence-open={piece !== undefined && sheet.view === "sentence"}>
   <main class="page">
     {#if summary}
       {@const licence = LICENCE_INFO[summary.licence]}
@@ -195,17 +196,15 @@
   </main>
 
   {#if piece && reading}
-    <!-- Keyed, so a new word starts with its lists folded -->
-    {#key selected}
-      <WordSheet
-        lang={reading.lang}
-        bundle={reading.bundle}
-        {piece}
-        {headText}
-        {sentenceTokens}
-        onselectToken={(sentence, index) => (selected = doc?.pieceOf.get(tokenKey(sentence, index)) ?? selected)}
-        onclose={() => (selected = null)}
-      />
-    {/key}
+    <!-- Not remade per word: focus, scroll and the sheet's height carry over -->
+    <WordSheet
+      lang={reading.lang}
+      bundle={reading.bundle}
+      {piece}
+      {headText}
+      {sentenceTokens}
+      onselectToken={(sentence, index) => (selected = doc?.pieceOf.get(tokenKey(sentence, index)) ?? selected)}
+      onclose={() => (selected = null)}
+    />
   {/if}
 </div>

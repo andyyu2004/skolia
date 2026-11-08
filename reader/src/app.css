@@ -1009,6 +1009,11 @@ label.check {
     grid-template-columns: minmax(0, 1fr) 24rem;
   }
 
+  /* A diagram needs more room than a dictionary entry */
+  .reader.sentence-open {
+    grid-template-columns: minmax(0, 1fr) minmax(24rem, 48vw);
+  }
+
   .reader.sheet-open .page {
     padding-bottom: var(--gutter);
   }
@@ -1183,7 +1188,7 @@ label.check {
   background: transparent;
   color: var(--muted);
   font-size: 0.8rem;
-  padding: 0.2rem 0.6rem;
+  padding: 0.35rem 0.7rem;
   cursor: pointer;
 }
 
@@ -1206,11 +1211,30 @@ label.check {
   overscroll-behavior-x: contain;
   margin: 0 calc(-1 * var(--gutter)) 0.5rem;
   padding: 0 var(--gutter);
-  scroll-behavior: smooth;
+  /* Lines carry meaning, so about 3:1 against the sheet */
+  --tree-line: color-mix(in srgb, var(--muted) 75%, var(--surface));
 }
 
 .tree svg {
   display: block;
+}
+
+.clause-note {
+  margin: 0 0 0.4rem;
+}
+
+/* In a long sentence the selected word's lines stand out from the rest */
+.tree svg.crowded .arc:not(.near):not(.why) {
+  opacity: 0.35;
+}
+
+.tree .arc.why path {
+  stroke: var(--trigger);
+  stroke-dasharray: 5 3;
+}
+
+.tree .arc.why text {
+  fill: var(--trigger);
 }
 
 .tree text {
@@ -1219,24 +1243,25 @@ label.check {
 
 .tree .arc path {
   fill: none;
-  stroke: var(--line);
+  stroke: var(--tree-line);
   stroke-width: 1.5;
 }
 
+/* A wide halo, so lines crossing a label stop short of its letters */
 .tree .arc text {
   fill: var(--muted);
   font-family: var(--ui);
   paint-order: stroke;
   stroke: var(--surface);
-  stroke-width: 4px;
+  stroke-width: 6px;
   stroke-linejoin: round;
 }
 
-.tree .arc.near path {
+.tree .arc.near:not(.why) path {
   stroke: var(--head);
 }
 
-.tree .arc.near text {
+.tree .arc.near:not(.why) text {
   fill: var(--head);
 }
 
@@ -1280,9 +1305,14 @@ label.check {
   font-family: var(--ui);
 }
 
+/* Labels on the yellow selection: muted grey and orange are too faint on it */
+.tree .word.selected .pos,
+.tree .word.selected .case-name {
+  fill: var(--text);
+}
+
 .tree .case-name.why {
-  fill: var(--trigger);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .tree .arc.case path {
@@ -1302,12 +1332,7 @@ label.check {
   fill: var(--muted);
 }
 
-.tree svg.hanging .arc path {
-  stroke: color-mix(in srgb, var(--muted) 55%, var(--surface));
-}
-
 .tree svg.hanging .arc.near path {
-  stroke: var(--head);
   stroke-width: 2;
 }
 
@@ -1349,21 +1374,23 @@ label.check {
   stroke: var(--select);
 }
 
+/* Beside the close button, on the same row as Sentence */
 .layout-switch {
+  position: absolute;
+  right: 2.25rem;
+  top: 0.3rem;
   display: inline-flex;
   border: 1px solid var(--line);
   border-radius: 99px;
-  overflow: hidden;
-  margin: 0 0 0.4rem;
 }
 
 .layout-switch button {
   border: 0;
-  border-radius: 0;
+  border-radius: 99px;
   background: transparent;
   color: var(--muted);
   font-size: 0.8rem;
-  padding: 0.15rem 0.7rem;
+  padding: 0.35rem 0.75rem;
   cursor: pointer;
 }
 

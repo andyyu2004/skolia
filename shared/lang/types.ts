@@ -27,6 +27,9 @@ export interface Language {
   paradigm: Layout;
   /** One label for merged table rows or columns; default: joined with "/". */
   mergeLabels?: MergeLabels;
+  /** Nouns, adjectives and pronouns all take cases (Polish), so the sentence view shows
+   * each word's case; English and French mark case only on a few pronouns. */
+  cases: boolean;
   /** Why the token at index has its case, for languages whose analysis says. */
   explainCase(tokens: Token[], index: number): CaseExplanation | null;
   /** How the word combines with others, those the sentence uses first. */

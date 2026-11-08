@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CaseReason, Deprel, Feats, Token, Upos } from "@skolia/shared/schema";
-import { caseChain, relationName, sentenceTree } from "./tree.ts";
+import { caseChain, clauseOf, relationName, sentenceTree } from "./tree.ts";
 
 function token(
   text: string,
@@ -74,6 +74,53 @@ test("an arc is one level above the arcs it spans", () => {
   assert.equal(tree.levels, 2);
 });
 
+test("crossing arcs go on different levels", () => {
+  // 0 <- 2, 1 <- 3: the arcs 0–2 and 1–3 cross
+  const tree = sentenceTree([
+    token("a", "NOUN", 2, "obj"),
+    token("b", "NOUN", 3, "obj"),
+    token("c", "VERB", null, "root"),
+    token("d", "VERB", 2, "conj"),
+  ]);
+  const levels = tree.arcs.map((a) => [a.from, a.to, a.level]);
+  const a = levels.find(([from, to]) => from === 2 && to === 0);
+  const b = levels.find(([from, to]) => from === 3 && to === 1);
+  assert.notEqual(a?.[2], b?.[2]);
+});
+
+// Widzę , że kot je małą rybę . : "że kot je małą rybę" is a clause of widzę
+const LONG = [
+  token("Widzę", "VERB", null, "root"),
+  token(",", "PUNCT", 4, "punct"),
+  token("że", "SCONJ", 4, "mark"),
+  token("kot", "NOUN", 4, "nsubj"),
+  token("je", "VERB", 0, "ccomp"),
+  token("małą", "ADJ", 6, "amod"),
+  token("rybę", "NOUN", 4, "obj"),
+  token(".", "PUNCT", 0, "punct"),
+];
+
+test("the clause around a word is its nearest clause big enough to read on its own", () => {
+  assert.deepEqual([...(clauseOf(LONG, 6, 3) ?? [])].sort(), [1, 2, 3, 4, 5, 6]);
+  // Too few words for a clause of its own: the whole sentence
+  assert.equal(clauseOf(LONG, 6, 6), null);
+  assert.equal(clauseOf(LONG, 0, 3), null);
+});
+
+test("a clause is drawn with depths counted from its own top", () => {
+  const tree = sentenceTree(LONG, clauseOf(LONG, 6, 3) ?? undefined);
+  assert.deepEqual(
+    tree.words.map((w) => [w.token.text, w.depth]),
+    [
+      ["że", 1],
+      ["kot", 1],
+      ["je", 0],
+      ["małą", 2],
+      ["rybę", 1],
+    ],
+  );
+});
+
 test("arcs point from head to dependent", () => {
   const obj = sentenceTree(SENTENCE).arcs.find((a) => a.raw === "obj");
   assert.deepEqual(obj && [obj.from, obj.to, obj.left, obj.right, obj.label], [1, 3, 1, 3, "object"]);
@@ -124,7 +171,7 @@ test("relation names fall back to the base relation, then the raw label", () => 
   assert.equal(relationName("nsubj:pass"), "subject");
   assert.equal(relationName("obl:arg"), "complement");
   assert.equal(relationName("goeswith"), "goeswith");
-  assert.equal(relationName("expl"), "placeholder");
+  assert.equal(relationName("expl"), "dummy subject");
   assert.equal(relationName("expl:pv"), "reflexive");
   assert.equal(relationName(null), "");
 });

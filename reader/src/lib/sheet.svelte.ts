@@ -1,10 +1,18 @@
-// How the word sheet is shown, kept across words: the sheet is remade for each one.
+// How the word sheet is shown, kept across words.
 
 export type SheetView = "word" | "sentence";
 export type SentenceLayout = "arcs" | "tree";
 
-export const sheet = $state<{ view: SheetView; layout: SentenceLayout; formsOpen: boolean }>({
+export const sheet = $state<{
+  view: SheetView;
+  layout: SentenceLayout;
+  /** A long sentence drawn whole rather than only the clause around the word */
+  whole: boolean;
+  /** Paradigm tables unfolded, by title */
+  forms: Record<string, boolean>;
+}>({
   view: "word",
   layout: "arcs",
-  formsOpen: false,
+  whole: false,
+  forms: {},
 });
