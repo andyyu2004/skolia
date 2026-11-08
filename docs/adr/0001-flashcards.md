@@ -59,12 +59,12 @@ review(id, card_id, rating, review_time)      -- append-only
 
 ### Lexicon in D1
 
-The lexicon SQLite is built by Nix (`analysis/flake.nix`, `lexicon`) and only exists inside the ingest images, so the API Worker can't read it. Cards also need what a document's bundle has and the lexicon doesn't: the lemma's pronunciations, and Polish paradigms, which Morfeusz generates during ingest. So `skolia-build-cards` (`analysis/src/skolia_analysis/lexicon/cards.py`) builds a cards lexicon from it, the Nix output `cards-lexicon-{lang}`, which isn't in the images. That goes into a separate D1 database, `skolia-lexicon` (`api/lexicon-migrations`). Each environment has its own, previews included.
+The lexicon SQLite is built by Nix (`analysis/flake.nix`, `lexicon`) and only exists inside the ingest images, so the API Worker can't read it. Cards also need what a document's bundle has and the lexicon doesn't: the lemma's pronunciations, and Polish paradigms, which Morfeusz generates during ingest. So `skolia-build-cards` (`analysis/src/skolia_analysis/lexicon/cards.py`) builds a cards lexicon from it, the Nix output `cards-lexicon-{lang}`, which isn't in the images. That goes into a D1 database of its language's own, `skolia-lexicon-{lang}`, bound as `LEXICON_{LANG}` (`api/lexicon-migrations`). Each environment has its own, previews included.
 
 ```sql
-entry(lemma_id, version, lang, lemma, upos, senses, relations, pronunciations, paradigms)
-featureset(lang, version, id, feature, value)
-loaded(lang, version)          -- the version each language serves
+entry(lemma_id, version, lemma, upos, senses, relations, pronunciations, paradigms)
+featureset(version, id, feature, value)
+loaded(id = 1, version)        -- the version served
 ```
 
 A paradigm lists each spelling once, with the feature sets it has, by id. Morfeusz's
@@ -83,18 +83,19 @@ is `["psa", [50, 51]]` in `entry.paradigms`:
 and sets 50 and 51 are rows of `featureset`, one per UD feature:
 
 ```
-lang  version  id  feature  value
-pl    …        50  Animacy  Nhum
-pl    …        50  Case     Gen
-pl    …        50  Gender   Masc
-pl    …        50  Number   Sing
-pl    …        51  Case     Acc
+version  id  feature  value
+…        50  Animacy  Nhum
+…        50  Case     Gen
+…        50  Gender   Masc
+…        50  Number   Sing
+…        51  Case     Acc
 …
 ```
 
 - It's the bundle's compact form (`compact` and `FeatsTable` in `bundle.py`): repeated feature objects and Morfeusz's `xpos` take most of the room, so all of Polish is 45 MB this way and about 889 MB as Morfeusz gives it (extrapolated from 3,000 lemmas).
-- Feature sets are rows, not a column per feature: languages use different features (Polish 24, among them Variant, PrepCase and the layered `Number[psor]`; English 7), and UD lets a language add its own. A set's id only means something within its language and version, since a rebuild can number them differently.
+- Feature sets are rows, not a column per feature: languages use different features (Polish 24, among them Variant, PrepCase and the layered `Number[psor]`; English 7), and UD lets a language add its own. A set's id only means something within its version, since a rebuild can number them differently.
 - `entry.pronunciations` is the lemma's, with the bundle's fallbacks: `[{"ipa": "/ˈpjɛs/"}]`.
+- A database per language, so each grows on its own as languages are added, a language's load or cleanup doesn't touch another's, and none gets near D1's 10 GB limit. The cost is a binding, its migrations and a Terraform resource per language, all driven by one list each (`LANGS`, `local.langs` in `infra/variables.tf`, `langs` in the `justfile`, and the bindings in `api/wrangler.jsonc`), and a lookup across languages makes a query per language (`D1Lexicon`).
 - Paradigms stay JSON rather than a row per form: a card shows a lemma's whole table. A row per form would be about 6.4 million rows (Polish about 5.0 million, extrapolated; English 1,420,877), about 13 million rows written per full load against D1's 50 million a month included. Practising cases, or checking a typed answer against any form, would be the reason to change that.
 - Sizes of the local cards lexicons (`data/lexicon/*.cards.sqlite`):
 

@@ -3,7 +3,7 @@
 # requires-python = ">=3.12"
 # dependencies = ["wordfreq==3.1.1"]
 # ///
-"""Loads a language's lexicon into the lexicon D1 database (LEXICON in api/wrangler.jsonc):
+"""Loads a language's lexicon into its D1 database (LEXICON_{LANG} in api/wrangler.jsonc):
   load-lexicon.py <staging|production|pr-N|local> <sqlite> [--sample N]
 sqlite is analysis's {lang}.cards.sqlite (skolia-build-cards, or the Nix output
 analysis#cards-lexicon-{lang}); its meta table gives the language and version. Skipped if D1
@@ -33,14 +33,14 @@ MAX_STATEMENT_BYTES = 90_000
 CLEAN_BATCH = 50_000
 
 
-def wrangler(env: str, *args: str) -> str:
+def wrangler(env: str, lang: str, *args: str) -> str:
     target = ["--local"] if env == "local" else ["--remote"]
     command = [
         str(WRANGLER),
         "production" if env == "local" else env,
         "d1",
         "execute",
-        "LEXICON",
+        f"LEXICON_{lang.upper()}",
         *target,
         *args,
     ]
@@ -56,13 +56,13 @@ def meta(db: sqlite3.Connection) -> tuple[str, str]:
     lang, version = rows.get("lang"), rows.get("version")
     if lang is None or version is None:
         raise SystemExit("the lexicon's meta table has no lang or version")
+    if not re.fullmatch(r"[a-z]+", lang):
+        raise SystemExit(f"the lexicon's lang isn't a language code: {lang}")
     return lang, version
 
 
 def serving(env: str, lang: str) -> str | None:
-    out = wrangler(
-        env, "--json", "--command", f"SELECT version FROM loaded WHERE lang = {quote(lang)}"
-    )
+    out = wrangler(env, lang, "--json", "--command", "SELECT version FROM loaded")
     results = cast(list[dict[str, list[dict[str, str]]]], json.loads(out))
     rows = results[0]["results"] if results else []
     return rows[0]["version"] if rows else None
@@ -83,23 +83,23 @@ def selection(lang: str, sample: int | None) -> str:
 def statements(
     db: sqlite3.Connection, lang: str, version: str, sample: int | None
 ) -> list[str]:
-    which = f"lang = {quote(lang)} AND version = {quote(version)}"
+    which = f"version = {quote(version)}"
     out = [f"DELETE FROM entry WHERE {which};", f"DELETE FROM featureset WHERE {which};"]
     entries = cast(list[tuple[str, ...]], db.execute(selection(lang, sample)))
     out += inserts(
-        "INSERT INTO entry (lemma_id, version, lang, lemma, upos, senses, relations, "
+        "INSERT INTO entry (lemma_id, version, lemma, upos, senses, relations, "
         "pronunciations, paradigms) VALUES",
-        ((lemma_id, version, lang, *rest) for lemma_id, *rest in entries),
+        ((lemma_id, version, *rest) for lemma_id, *rest in entries),
     )
     features = cast(list[tuple[int, str, str]], db.execute("SELECT id, feature, value FROM featureset"))
     out += inserts(
-        "INSERT INTO featureset (lang, version, id, feature, value) VALUES",
-        ((lang, version, str(i), feature, value) for i, feature, value in features),
-        numeric=frozenset({2}),
+        "INSERT INTO featureset (version, id, feature, value) VALUES",
+        ((version, str(i), feature, value) for i, feature, value in features),
+        numeric=frozenset({1}),
     )
     out.append(
-        f"INSERT INTO loaded (lang, version) VALUES ({quote(lang)}, {quote(version)}) "
-        "ON CONFLICT (lang) DO UPDATE SET version = excluded.version;"
+        f"INSERT INTO loaded (id, version) VALUES (1, {quote(version)}) "
+        "ON CONFLICT (id) DO UPDATE SET version = excluded.version;"
     )
     return out
 
@@ -125,25 +125,24 @@ def inserts(
 
 
 def clean(env: str, lang: str, version: str) -> None:
-    """Deletes the language's rows of other versions, in batches. Run on every load, so a
-    load that stopped after repointing loaded is cleaned up by the next."""
-    old = f"FROM entry WHERE lang = {quote(lang)} AND version != {quote(version)}"
+    """Deletes the rows of other versions, in batches. Run on every load, so a load that
+    stopped after repointing loaded is cleaned up by the next."""
+    old = f"FROM entry WHERE version != {quote(version)}"
     batch = f"SELECT lemma_id, version {old} LIMIT {CLEAN_BATCH}"
     delete = f"DELETE FROM entry WHERE (lemma_id, version) IN ({batch})"
     # wrangler's local output doesn't count a delete's changes, so ask what's left
     count = f"SELECT count(*) AS n {old}"
-    while (left := remaining(env, count)) > 0:
+    while (left := remaining(env, lang, count)) > 0:
         print(f"{env}: deleting {left} old {lang} rows")
-        wrangler(env, "--command", delete)
+        wrangler(env, lang, "--command", delete)
     # A few thousand rows per version
-    features = f"DELETE FROM featureset WHERE lang = {quote(lang)} AND version != {quote(version)}"
-    wrangler(env, "--command", features)
+    wrangler(env, lang, "--command", f"DELETE FROM featureset WHERE version != {quote(version)}")
 
 
-def remaining(env: str, count: str) -> int:
+def remaining(env: str, lang: str, count: str) -> int:
     results = cast(
         list[dict[str, list[dict[str, int]]]],
-        json.loads(wrangler(env, "--json", "--command", count)),
+        json.loads(wrangler(env, lang, "--json", "--command", count)),
     )
     return results[0]["results"][0]["n"]
 
@@ -170,7 +169,7 @@ def main() -> None:
         sql = Path(scratch) / f"lexicon-{lang}.sql"
         sql.write_text("\n".join(statements(db, lang, version, sample)) + "\n")
         print(f"{env}: loading {lang} {version} ({sql.stat().st_size / 1e6:.0f} MB of SQL)")
-        wrangler(env, "--yes", "--file", str(sql))
+        wrangler(env, lang, "--yes", "--file", str(sql))
     if serving(env, lang) != version:
         raise SystemExit(f"{env}: {lang} doesn't serve {version} after loading it")
     print(f"{env}: {lang} serves {version}")

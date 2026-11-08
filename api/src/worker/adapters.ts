@@ -10,6 +10,7 @@ import {
   type Lang,
   type LemmaId,
   type LexiconEntry,
+  langOf,
   type Lookup,
   type Timestamp,
   type UserId,
@@ -69,7 +70,6 @@ export class DurableObjectUsers implements UserData {
 
 const LexiconRow = z.object({
   lemmaId: LemmaIdSchema,
-  lang: z.enum(LANGS),
   version: z.string(),
   lemma: z.string(),
   upos: z.enum(UPOS),
@@ -81,37 +81,58 @@ const LexiconRow = z.object({
 
 const FeatureRow = z.object({ id: z.number().int(), feature: z.string(), value: z.string() });
 
-/** The lexicon database (skolia-lexicon), loaded by infra/load-lexicon.py from the
- * same build as the ingest images: each language's loaded version. Its JSON is ours, so
- * it's trusted to match. */
-export class D1Lexicon implements Lexicon {
-  private readonly db: D1Database;
+/** Each language's lexicon database, skolia-lexicon-{lang}[-env], bound as LEXICON_{LANG}
+ * (api/wrangler.jsonc). */
+export type LexiconBindings = { [L in Lang as `LEXICON_${Uppercase<L>}`]: D1Database };
 
-  constructor(db: D1Database) {
-    this.db = db;
+export function lexiconBinding(lang: Lang): keyof LexiconBindings {
+  return `LEXICON_${lang.toUpperCase() as Uppercase<Lang>}`;
+}
+
+export function lexiconsOf(env: LexiconBindings): Record<Lang, D1Database> {
+  return Object.fromEntries(LANGS.map((lang) => [lang, env[lexiconBinding(lang)]])) as Record<Lang, D1Database>;
+}
+
+/** Each language's lexicon database, loaded by infra/load-lexicon.py from the same build
+ * as the ingest images, serving its loaded version. Its JSON is ours, so it's trusted to
+ * match. */
+export class D1Lexicon implements Lexicon {
+  private readonly dbs: Record<Lang, D1Database>;
+
+  constructor(dbs: Record<Lang, D1Database>) {
+    this.dbs = dbs;
+  }
+
+  async entries(ids: readonly LemmaId[]): Promise<Lookup> {
+    const byLang = new Map<Lang, LemmaId[]>();
+    for (const id of ids) byLang.set(langOf(id), [...(byLang.get(langOf(id)) ?? []), id]);
+    const found = await Promise.all([...byLang].map(async ([lang, wanted]) => ({ lang, ...(await this.#entries(this.dbs[lang], wanted)) })));
+    return {
+      entries: found.flatMap((f) => f.entries),
+      featureSets: Object.fromEntries(found.filter((f) => f.featureSets !== null).map((f) => [f.lang, f.featureSets])),
+    };
   }
 
   /** The entries, then the feature sets their paradigms use, from the version each
    * entry came from: a load that switches versions in between leaves the old version's
    * rows until it cleans up. */
-  async entries(ids: readonly LemmaId[]): Promise<Lookup> {
-    if (ids.length === 0) return { entries: [], featureSets: {} };
-    const { results } = await this.db
+  async #entries(db: D1Database, ids: LemmaId[]): Promise<{ entries: LexiconEntry[]; featureSets: FeatureSets | null }> {
+    const { results } = await db
       .prepare(
-        `SELECT entry.lemma_id AS lemmaId, entry.lang, entry.version, entry.lemma, entry.upos, entry.senses,
+        `SELECT entry.lemma_id AS lemmaId, entry.version, entry.lemma, entry.upos, entry.senses,
            entry.relations, entry.pronunciations, entry.paradigms
-         FROM entry JOIN loaded ON loaded.lang = entry.lang AND loaded.version = entry.version
+         FROM entry JOIN loaded ON loaded.version = entry.version
          WHERE entry.lemma_id IN (${ids.map(() => "?").join(", ")})`,
       )
       .bind(...ids)
       .all();
-    const used = new Map<string, { lang: Lang; version: string; ids: Set<number> }>();
+    const used = new Map<string, Set<number>>();
     const entries = results.map((row): LexiconEntry => {
-      const { lang, version, senses, relations, pronunciations, paradigms, ...rest } = LexiconRow.parse(row);
+      const { version, senses, relations, pronunciations, paradigms, ...rest } = LexiconRow.parse(row);
       const parsed = JSON.parse(paradigms) as BundleParadigm[];
-      const sets = used.get(`${lang} ${version}`) ?? { lang, version, ids: new Set<number>() };
-      for (const paradigm of parsed) for (const [, ids] of paradigm.forms) for (const id of ids) sets.ids.add(id);
-      used.set(`${lang} ${version}`, sets);
+      const sets = used.get(version) ?? new Set<number>();
+      for (const paradigm of parsed) for (const [, ids] of paradigm.forms) for (const id of ids) sets.add(id);
+      used.set(version, sets);
       return {
         ...rest,
         senses: JSON.parse(senses) as Sense[],
@@ -120,23 +141,19 @@ export class D1Lexicon implements Lexicon {
         paradigms: parsed,
       };
     });
-    const wanted = [...used.values()].filter((sets) => sets.ids.size > 0);
-    const statement = this.db.prepare(
-      `SELECT id, feature, value FROM featureset
-       WHERE lang = ? AND version = ? AND id IN (SELECT value FROM json_each(?))`,
-    );
-    const found = wanted.length === 0 ? [] : await this.db.batch(wanted.map((s) => statement.bind(s.lang, s.version, JSON.stringify([...s.ids]))));
-    const featureSets: Partial<Record<Lang, FeatureSets>> = {};
-    wanted.forEach(({ lang }, i) => {
-      // A UD feature set: its features are whatever the language's rows name
-      const sets: Record<number, Record<string, string>> = {};
-      for (const row of found[i]?.results ?? []) {
+    const wanted = [...used].filter(([, sets]) => sets.size > 0);
+    if (wanted.length === 0) return { entries, featureSets: null };
+    const statement = db.prepare(`SELECT id, feature, value FROM featureset WHERE version = ? AND id IN (SELECT value FROM json_each(?))`);
+    const found = await db.batch(wanted.map(([version, sets]) => statement.bind(version, JSON.stringify([...sets]))));
+    // A UD feature set: its features are whatever the language's rows name
+    const sets: Record<number, Record<string, string>> = {};
+    for (const result of found) {
+      for (const row of result.results) {
         const { id, feature, value } = FeatureRow.parse(row);
         (sets[id] ??= {})[feature] = value;
       }
-      featureSets[lang] = sets as FeatureSets;
-    });
-    return { entries, featureSets };
+    }
+    return { entries, featureSets: sets as FeatureSets };
   }
 }
 

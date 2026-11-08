@@ -1,11 +1,11 @@
 import { after, before, beforeEach } from "node:test";
 import { brotliCompressSync } from "node:zlib";
 import { hc } from "hono/client";
-import type { DocumentId, DocumentList, DocumentSummary } from "@skolia/shared/api";
+import type { DocumentId, DocumentList, DocumentSummary, Lang } from "@skolia/shared/api";
 import { partKey, statusKey, versionsKey } from "@skolia/shared/keys";
 import { createApp, type AppType } from "../app.ts";
 import type { Auth } from "../ports.ts";
-import { CloudflareQueue, D1Documents, D1Lexicon, DurableObjectUsers, R2Blobs } from "../worker/adapters.ts";
+import { CloudflareQueue, D1Documents, D1Lexicon, DurableObjectUsers, R2Blobs, lexiconsOf } from "../worker/adapters.ts";
 import { ORIGIN, startLocal, type Local } from "./harness.ts";
 
 export let local: Local;
@@ -33,7 +33,7 @@ export function setup({ maxImportsPerDay = 100, auth = local.auth, at = NOW }: {
   return createApp({
     auth,
     users: new DurableObjectUsers(env.USER),
-    lexicon: new D1Lexicon(env.LEXICON),
+    lexicon: new D1Lexicon(lexiconsOf(env)),
     maxImportsPerDay,
     documents: new D1Documents(env.DB),
     blobs: new R2Blobs(env.BLOBS),
@@ -74,16 +74,15 @@ export interface TestEntry {
 }
 
 /** Loads a lexicon version with its feature sets, by id, and makes it the one served. */
-export async function loadLexicon(lang: string, version: string, entries: TestEntry[], featureSets: Record<string, string>[] = []): Promise<void> {
-  const db = local.env.LEXICON;
+export async function loadLexicon(lang: Lang, version: string, entries: TestEntry[], featureSets: Record<string, string>[] = []): Promise<void> {
+  const db = lexiconsOf(local.env)[lang];
   await db.batch([
     ...entries.map((e) =>
       db
-        .prepare("INSERT INTO entry (lemma_id, version, lang, lemma, upos, senses, relations, pronunciations, paradigms) VALUES (?, ?, ?, ?, ?, ?, '[]', ?, ?)")
+        .prepare("INSERT INTO entry (lemma_id, version, lemma, upos, senses, relations, pronunciations, paradigms) VALUES (?, ?, ?, ?, ?, '[]', ?, ?)")
         .bind(
           e.lemmaId,
           version,
-          lang,
           e.lemma,
           e.upos,
           JSON.stringify([{ gloss: e.gloss, tags: [] }]),
@@ -93,10 +92,10 @@ export async function loadLexicon(lang: string, version: string, entries: TestEn
     ),
     ...featureSets.flatMap((set, id) =>
       Object.entries(set).map(([feature, value]) =>
-        db.prepare("INSERT INTO featureset (lang, version, id, feature, value) VALUES (?, ?, ?, ?, ?)").bind(lang, version, id, feature, value),
+        db.prepare("INSERT INTO featureset (version, id, feature, value) VALUES (?, ?, ?, ?)").bind(version, id, feature, value),
       ),
     ),
-    db.prepare("INSERT INTO loaded (lang, version) VALUES (?, ?) ON CONFLICT (lang) DO UPDATE SET version = excluded.version").bind(lang, version),
+    db.prepare("INSERT INTO loaded (id, version) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET version = excluded.version").bind(version),
   ]);
 }
 

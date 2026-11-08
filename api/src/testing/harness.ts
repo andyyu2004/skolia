@@ -3,11 +3,12 @@ import { existsSync } from "node:fs";
 import { betterAuth } from "better-auth";
 import { testUtils } from "better-auth/plugins";
 import { createTestHarness, type TestHarness } from "wrangler";
-import type { User } from "@skolia/shared/api";
+import { LANGS, type User } from "@skolia/shared/api";
 import { UserId } from "@skolia/shared/schemas";
 import type { IngestJob } from "@skolia/shared/schema";
 import { authOptions, toAuth, type AuthConfig } from "../auth.ts";
 import type { Auth } from "../ports.ts";
+import { lexiconBinding, lexiconsOf, type LexiconBindings } from "../worker/adapters.ts";
 import type { User as UserObject } from "../worker/user.ts";
 import type IngestRecorder from "./ingest-recorder.ts";
 
@@ -20,9 +21,8 @@ interface Flush {
   flush: number;
 }
 
-export interface TestEnv {
+export interface TestEnv extends LexiconBindings {
   DB: D1Database;
-  LEXICON: D1Database;
   USER: DurableObjectNamespace<UserObject>;
   BLOBS: R2Bucket;
   INGEST: Queue<IngestJob | Flush>;
@@ -60,7 +60,7 @@ export async function startLocal(): Promise<Local> {
   await server.listen();
   const worker = server.getWorker<TestEnv>();
   await worker.applyD1Migrations("DB");
-  await worker.applyD1Migrations("LEXICON");
+  for (const lang of LANGS) await worker.applyD1Migrations(lexiconBinding(lang));
   const env = await worker.getEnv();
   const recorder = await server.getWorker<object, { default: typeof IngestRecorder }>("ingest-recorder").getExport();
   const options = authOptions(authConfig(env.DB));
@@ -99,7 +99,9 @@ export async function startLocal(): Promise<Local> {
         // The system user is the migrations'
         env.DB.prepare(`DELETE FROM "user" WHERE "id" != 'system'`),
       ]);
-      await env.LEXICON.batch([env.LEXICON.prepare("DELETE FROM entry"), env.LEXICON.prepare("DELETE FROM featureset"), env.LEXICON.prepare("DELETE FROM loaded")]);
+      for (const db of Object.values(lexiconsOf(env))) {
+        await db.batch(["entry", "featureset", "loaded"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+      }
       const { objects } = await env.BLOBS.list();
       if (objects.length > 0) await env.BLOBS.delete(objects.map((o) => o.key));
       await takeQueued();

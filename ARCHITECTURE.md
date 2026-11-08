@@ -26,7 +26,7 @@ flowchart LR
     end
     UDO["User DO, one per user: word, card, review, settings"]
     DB[("D1 skolia: document, auth tables")]
-    LX[("D1 skolia-lexicon: entry, featureset, loaded")]
+    LX[("D1 skolia-lexicon-{lang}, one per language: entry, featureset, loaded")]
     R2[("R2 skolia: doc/{id}/..., versions/{lang}.json")]
     Q[["Queue skolia-ingest"]]
     subgraph INGW["skolia-ingest Worker"]
@@ -61,7 +61,7 @@ flowchart LR
 
 - **Open a document:** D1 has its metadata and R2's `status.json` the names of its current analysis and bundle, which the reader then fetches from R2 through the API, as stored. Browsers cache them by HTTP (`immutable`); there's no IndexedDB yet.
 - **Tap a word:** local, from the bundle already loaded (`shared/lexicon`, `shared/paradigm`). Setting a word's status goes to the User DO.
-- **Review:** the User DO gives the due cards and the API adds their entries from the lexicon D1. The DO never reads the lexicon, and the reader's word sheet never reads the lexicon D1, so the two can show different lexicon versions until a document is re-bundled.
+- **Review:** the User DO gives the due cards and the API adds their entries from its language's lexicon D1. The DO never reads the lexicon, and the reader's word sheet never reads the lexicon D1s, so the two can show different lexicon versions until a document is re-bundled.
 - **Import:** the API puts the text in R2, the metadata in D1, a queued `status.json` and the job on the queue. The consumer hands it to the Ingester named after its language's image, so a deploy that changes an image starts a new container.
 - The ingest Worker has no R2 or D1 binding: containers reach R2 over its S3 API, with a token Terraform makes.
 - Lexicon lookups only see the rows of each language's version in `loaded`.
@@ -98,8 +98,8 @@ flowchart TB
   CX[("Cachix")]
   REG[("Cloudflare registry")]
   subgraph CF["Cloudflare"]
-    TFR["Terraform: R2, both D1s, queue, ingest's R2 token, alerts"]
-    LXDB[("D1 skolia-lexicon")]
+    TFR["Terraform: R2, D1 skolia, a lexicon D1 per language, queue, ingest's R2 token, alerts"]
+    LXDB[("D1 skolia-lexicon-{lang}")]
     INGD["skolia-ingest Worker, containers"]
     WEBD["skolia Worker, reader assets"]
   end
@@ -144,7 +144,7 @@ flowchart TB
 | Client | PWA, Svelte 5 + TypeScript; one layout for phone (bottom sheet) and desktop (side panel) | Reader, word/span sheet, paradigm tables, review sessions (online for now) |
 | API | Cloudflare Workers (TypeScript) | Auth, import job submission, cards and reviews, quotas; later the explain proxy and cache |
 | User data | D1, a Durable Object per user | D1: users, document metadata. Durable Object: words, cards, reviews (FSRS) |
-| Lexicon | D1 (`skolia-lexicon`) | For flashcards, by lemma id: senses, relations, pronunciations and paradigms, with the feature sets they point into; built from the same lexicon as the ingest images |
+| Lexicon | D1, one per language (`skolia-lexicon-{lang}`) | For flashcards, by lemma id: senses, relations, pronunciations and paradigms, with the feature sets they point into; built from the same lexicon as the ingest images |
 | Blobs | R2 | Source texts, analysis blobs, bundles |
 | Analysis | Python on Cloudflare Containers, fed from Cloudflare Queues by a consumer Worker | Segment, analyze, match lexicon, write blob |
 | Lexicon build | Offline Python scripts | Kaikki/Wiktionary + Morfeusz → per-language lexicon files |

@@ -204,6 +204,10 @@ export function lemmaParam(id: LemmaId): LemmaId {
   return encodeURIComponent(id) as LemmaId;
 }
 
+export function langOf(id: LemmaId): Lang {
+  return id.slice(0, id.indexOf(":")) as Lang;
+}
+
 /** mature: its recognition card is mature, so the reader shows it as known. */
 export type Word = z.output<typeof schemas.Word>;
 
