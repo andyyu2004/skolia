@@ -9,6 +9,7 @@ form gets one feature set per person and number it serves.
 
 from collections.abc import Iterable, Iterator, Mapping
 
+from ...lexicon import kaikki
 from ...lexicon import senses as kaikki_senses
 from ...lexicon.kaikki import KaikkiEntry, KaikkiForm, KaikkiSound
 from ...lexicon.pronunciation import pronunciations
@@ -43,67 +44,25 @@ FORM_NOTES = {"strong form", "weak form", "stressed form", "unstressed form"}
 # Not how the word is said today, even when also tagged UK or US
 NOT_TODAY_TAGS = {"obsolete", "archaic", "dialectal", "Early", "Middle"}
 
-# Kaikki part of speech -> the UPOS the analyser gives such a word. Where the analyser
-# differs (can, will as AUX), a bundle falls back to the same lemma under another UPOS.
-KAIKKI_POS: dict[str, Upos] = {
-    "noun": "NOUN",
-    "name": "PROPN",
-    "verb": "VERB",
-    "adj": "ADJ",
-    "adv": "ADV",
-    "pron": "PRON",
-    "det": "DET",
-    "article": "DET",
-    "num": "NUM",
-    "prep": "ADP",
-    "postp": "ADP",
-    "conj": "CCONJ",
-    "particle": "PART",
-    "intj": "INTJ",
-}
-# Left out: affixes, letters, symbols, contractions (the parser splits don't into do +
-# n't); phrases and proverbs become multi-word expressions later.
+# Parts of speech are kaikki.POS. Where the analyser differs (can, will as AUX), a bundle
+# falls back to the same lemma under another UPOS. Left out: affixes, letters, symbols,
+# contractions (the parser splits don't into do + n't); phrases and proverbs become
+# multi-word expressions later.
 
 # Suffixes the parser splits off as words of their own: Wiktionary files the possessive
 # (the dog's bone) under the suffix -'s, UD makes it a particle, lemma 's
 ENCLITICS: dict[str, tuple[str, Upos]] = {"-'s": ("'s", "PART")}
 
-# Tags on a form-of sense that make it an inflected form ("plural of dog", "simple past of
-# go"). The analyser already gives those words the lemma, so these senses add nothing.
-INFLECTION_TAGS = {
-    "singular",
-    "plural",
-    "first-person",
-    "second-person",
-    "third-person",
-    "present",
-    "past",
-    "participle",
-    "indicative",
+INFLECTION_TAGS = kaikki.INFLECTION_TAGS | {
     "subjunctive",
-    "imperative",
     "infinitive",
     "gerund",
     "comparative",
     "superlative",
 }
-DERIVATION_TAGS = ("diminutive", "augmentative", "feminine", "masculine")
 
-# Forms that aren't an inflection of today's word: spellings, old forms, the extract's
-# own bookkeeping rows
-SKIPPED_FORM_TAGS = {
-    "alternative",
-    "obsolete",
-    "archaic",
-    "dialectal",
-    "nonstandard",
-    "misspelling",
+SKIPPED_FORM_TAGS = kaikki.SKIPPED_FORM_TAGS | {
     "pronunciation-spelling",
-    "abbreviation",
-    "table-tags",
-    "inflection-template",
-    "class",
-    "romanization",
     # can's "participle" able: another word standing in for the missing form
     "suppletive",
 }
@@ -114,8 +73,6 @@ UNTAGGED_ARCHAIC_FORMS = {"art", "'rt"}
 
 PERSONS: tuple[Person, ...] = ("1", "2", "3")
 NUMBERS: tuple[Number, ...] = ("Sing", "Plur")
-PERSON_TAGS: Mapping[str, Person] = {"first-person": "1", "second-person": "2", "third-person": "3"}
-NUMBER_TAGS: Mapping[str, Number] = {"singular": "Sing", "plural": "Plur"}
 TENSE_TAGS: Mapping[str, Tense] = {"present": "Pres", "past": "Past"}
 
 
@@ -125,7 +82,7 @@ class Source:
 
     def convert(self, entry: KaikkiEntry) -> Converted | None:
         word, pos = entry.get("word", ""), entry.get("pos", "")
-        upos = KAIKKI_POS.get(pos)
+        upos = kaikki.POS.get(pos)
         if pos == "suffix" and word in ENCLITICS:
             word, upos = ENCLITICS[word]
         if upos is None or not word or " " in word:
@@ -137,7 +94,7 @@ class Source:
         senses = [s for s in found if s is not None]
         if not senses:
             return None
-        relations = list(kaikki_senses.derived_from(entry, INFLECTION_TAGS, DERIVATION_TAGS))
+        relations = list(kaikki_senses.derived_from(entry, INFLECTION_TAGS, kaikki.DERIVATION_TAGS))
         forms = list(paradigm_forms(word, upos, entry.get("forms", [])))
         # Wiktionary splits a word by etymology, usually with the same forms (bank, the
         # shore and the institution); merge keeps one copy of each table
@@ -146,7 +103,7 @@ class Source:
 
     def pronounce(self, entry: KaikkiEntry) -> Pronounced | None:
         word, pos = entry.get("word", ""), entry.get("pos", "")
-        upos = KAIKKI_POS.get(pos)
+        upos = kaikki.POS.get(pos)
         if pos == "suffix" and word in ENCLITICS:
             word, upos = ENCLITICS[word]
         if upos is None or not word or " " in word:
@@ -274,8 +231,12 @@ def _verb_forms(
 def _persons(tags: set[str]) -> Iterator[tuple[Person, Number]]:
     """The persons and numbers a finite form's tags name; all of them when it names none
     (the past of a regular verb: walked)."""
-    persons: list[Person] = [PERSON_TAGS[t] for t in tags if t in PERSON_TAGS] or list(PERSONS)
-    numbers: list[Number] = [NUMBER_TAGS[t] for t in tags if t in NUMBER_TAGS] or list(NUMBERS)
+    persons: list[Person] = [
+        kaikki.PERSON_TAGS[t] for t in tags if t in kaikki.PERSON_TAGS
+    ] or list(PERSONS)
+    numbers: list[Number] = [
+        kaikki.NUMBER_TAGS[t] for t in tags if t in kaikki.NUMBER_TAGS
+    ] or list(NUMBERS)
     for person in persons:
         for number in numbers:
             yield person, number

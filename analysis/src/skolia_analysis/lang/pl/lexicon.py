@@ -11,6 +11,7 @@ from collections.abc import Iterator
 from importlib.metadata import version
 from typing import TYPE_CHECKING
 
+from ...lexicon import kaikki
 from ...lexicon import senses as kaikki_senses
 from ...lexicon.kaikki import KaikkiEntry, KaikkiSound
 from ...lexicon.pronunciation import pronunciations
@@ -60,9 +61,7 @@ REFLEXIVE_TAG = "się"
 # Tags on a form-of sense that make it an inflected form ("genitive plural of kuna",
 # "comparative of stary", "passive participle of robić"). The analyser already gives
 # those words the target's lemma, so these senses add nothing.
-INFLECTION_TAGS = {
-    "singular",
-    "plural",
+INFLECTION_TAGS = kaikki.INFLECTION_TAGS | {
     "nominative",
     "genitive",
     "dative",
@@ -70,17 +69,9 @@ INFLECTION_TAGS = {
     "instrumental",
     "locative",
     "vocative",
-    "first-person",
-    "second-person",
-    "third-person",
-    "past",
-    "present",
     "future",
     "conditional",
-    "imperative",
-    "indicative",
     "impersonal",
-    "participle",
     "adverbial",
     "anterior",
     "comparative",
