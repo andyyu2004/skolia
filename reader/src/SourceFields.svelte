@@ -12,39 +12,69 @@
     share = $bindable(),
   }: { licence: Licence | ""; ownWork: boolean; author: string; source: string; share: boolean } = $props();
 
+  const id = $props.id();
   const shareable = $derived(licence !== "" && isShareable(licence));
+  const licenceUrl = $derived(licence === "" ? null : LICENCE_INFO[licence].url);
 </script>
 
-<fieldset>
-  <legend>Where it's from</legend>
-  <label>
-    Licence
-    <select bind:value={licence} required>
-      <option value="" disabled>Choose a licence</option>
-      {#each LICENCES.filter((l) => l !== "unknown") as l (l)}
-        <option value={l}>{LICENCE_INFO[l].label}</option>
-      {/each}
-    </select>
-  </label>
-  <label class="check">
-    <input type="checkbox" bind:checked={ownWork} />
-    I wrote this text
-  </label>
-  {#if !ownWork}
-    <label>
-      <span>Author <span class="muted">(optional)</span></span>
-      <input bind:value={author} maxlength={MAX_AUTHOR_LENGTH} />
-    </label>
+<div class="field">
+  <label for="{id}-licence">Licence</label>
+  <select id="{id}-licence" bind:value={licence} required>
+    <option value="" disabled>Choose a licence</option>
+    {#each LICENCES.filter((l) => l !== "unknown") as l (l)}
+      <option value={l}>{LICENCE_INFO[l].label}</option>
+    {/each}
+  </select>
+  {#if licence !== "" && licenceUrl}
+    <p class="hint"><a href={licenceUrl} target="_blank" rel="license noreferrer">What {LICENCE_INFO[licence].short} allows</a></p>
   {/if}
-  <label>
-    <span>Source URL <span class="muted">(optional)</span></span>
-    <input type="url" bind:value={source} placeholder="https://" maxlength={MAX_SOURCE_LENGTH} />
-  </label>
-  <label class="check" class:muted={!shareable}>
-    <input type="checkbox" bind:checked={share} disabled={!shareable} />
-    Share it in Explore. I confirm the text is under the licence above.
-  </label>
+</div>
+
+<div class="field">
+  <div class="field-label">
+    <label for="{id}-author">Author <span class="optional">optional</span></label>
+    <label class="check">
+      <input type="checkbox" bind:checked={ownWork} />
+      I wrote it
+    </label>
+  </div>
+  {#if ownWork}
+    <input id="{id}-author" placeholder="You" disabled />
+  {:else}
+    <input id="{id}-author" bind:value={author} maxlength={MAX_AUTHOR_LENGTH} />
+  {/if}
+</div>
+
+<div class="field">
+  <label for="{id}-source">Source <span class="optional">optional</span></label>
+  <input id="{id}-source" type="url" bind:value={source} placeholder="https://" maxlength={MAX_SOURCE_LENGTH} />
+</div>
+
+<fieldset class="field">
+  <legend>Visibility</legend>
+  <div class="choices">
+    <label class="choice">
+      <input type="radio" name="{id}-visibility" checked={!(share && shareable)} onchange={() => (share = false)} />
+      <span>
+        <strong>Private</strong>
+        <span class="hint">Left out of Explore. Anyone with its link can still open it.</span>
+      </span>
+    </label>
+    <label class="choice" class:disabled={!shareable}>
+      <input
+        type="radio"
+        name="{id}-visibility"
+        checked={share && shareable}
+        disabled={!shareable}
+        onchange={() => (share = true)}
+      />
+      <span>
+        <strong>Public</strong>
+        <span class="hint">Listed in Explore. You confirm the text is under the licence above.</span>
+      </span>
+    </label>
+  </div>
   {#if licence !== "" && !shareable}
-    <p class="muted small">Only public domain and Creative Commons texts can be shared. This one stays private to you.</p>
+    <p class="hint">Only public domain and Creative Commons texts can be shared.</p>
   {/if}
 </fieldset>

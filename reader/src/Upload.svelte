@@ -8,7 +8,7 @@
 
   let title = $state("");
   let text = $state("");
-  let lang = $state<Lang>("pl");
+  let lang = $state<Lang | "">("");
   let licence = $state<Licence | "">("");
   let ownWork = $state(false);
   let author = $state("");
@@ -18,11 +18,11 @@
   let error = $state<string | null>(null);
 
   const shareable = $derived(licence !== "" && isShareable(licence));
-  const ready = $derived(title.trim() !== "" && text.trim() !== "" && licence !== "");
+  const ready = $derived(title.trim() !== "" && text.trim() !== "" && lang !== "" && licence !== "");
 
   async function submit(event: SubmitEvent): Promise<void> {
     event.preventDefault();
-    if (licence === "" || !user) return;
+    if (lang === "" || licence === "" || !user) return;
     importing = true;
     try {
       const by = ownWork ? user.name : author.trim();
@@ -50,35 +50,53 @@
     <p class="muted">Sign in to upload a text.</p>
     <button type="button" class="primary" onclick={() => void signIn()}>Sign in</button>
   {:else if user}
-    <form class="upload" onsubmit={submit}>
-      <div class="row">
-        <input bind:value={title} placeholder="Title" aria-label="Title" maxlength="200" required />
-        <select bind:value={lang} aria-label="Language">
-          {#each LANGS as code (code)}
-            <option value={code} lang={code}>{LANGUAGE_INFO[code].flag} {LANGUAGE_INFO[code].endonym}</option>
-          {/each}
-        </select>
-      </div>
-      <textarea
-        bind:value={text}
-        {lang}
-        placeholder={`Paste ${LANGUAGE_INFO[lang].name} text here`}
-        rows="14"
-        maxlength={MAX_TEXT_LENGTH}
-        required
-      ></textarea>
-      <div class="muted small count">{text.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}</div>
+    <form class="form" onsubmit={submit}>
+      <section class="panel">
+        <div class="field-pair">
+          <div class="field">
+            <label for="upload-title">Title</label>
+            <input id="upload-title" bind:value={title} maxlength="200" required />
+          </div>
+          <div class="field">
+            <label for="upload-lang">Language</label>
+            <select id="upload-lang" bind:value={lang} required>
+              <option value="" disabled>Choose a language</option>
+              {#each LANGS as code (code)}
+                <option value={code} lang={code}>{LANGUAGE_INFO[code].flag} {LANGUAGE_INFO[code].endonym}</option>
+              {/each}
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <div class="field-label">
+            <label for="upload-text">Text</label>
+            <span class="hint">{text.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}</span>
+          </div>
+          <textarea
+            id="upload-text"
+            bind:value={text}
+            lang={lang || undefined}
+            placeholder={lang === "" ? "Paste the text here" : `Paste ${LANGUAGE_INFO[lang].name} text here`}
+            rows="14"
+            maxlength={MAX_TEXT_LENGTH}
+            required
+          ></textarea>
+        </div>
+      </section>
 
-      <SourceFields bind:licence bind:ownWork bind:author bind:source bind:share />
+      <section class="panel">
+        <h2>Provenance</h2>
+        <SourceFields bind:licence bind:ownWork bind:author bind:source bind:share />
+      </section>
 
-      <div class="row end">
+      {#if error}
+        <p class="error">{error}</p>
+      {/if}
+      <div class="form-actions">
         <button type="submit" class="primary" disabled={importing || !ready}>
           {importing ? "Uploading…" : "Upload"}
         </button>
       </div>
     </form>
-    {#if error}
-      <p class="error">{error}</p>
-    {/if}
   {/if}
 </main>

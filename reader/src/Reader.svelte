@@ -120,7 +120,15 @@
   <main class="page">
     {#if summary}
       {@const licence = LICENCE_INFO[summary.licence]}
-      <h1>{summary.title}</h1>
+      <div class="title-row">
+        <h1>{summary.title}</h1>
+        {#if summary.mine}
+          <button type="button" class="quiet small with-icon" onclick={() => (editing = true)}>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 2.5 13.5 5 6 12.5 3 13l.5-3z" /></svg>
+            Edit
+          </button>
+        {/if}
+      </div>
       <p class="credit muted small">
         {#if summary.author}<span>{summary.author}</span>{/if}
         <span>
@@ -131,9 +139,6 @@
         {#if notice.kind === "processing" || notice.kind === "updating"}
           {@const place = queueText(summary)}
           <em class="processing">{notice.kind === "processing" ? "Processing" : "Updating"}{place ? `: ${place}` : "…"}</em>
-        {/if}
-        {#if summary.mine && !editing}
-          <button type="button" class="link" onclick={() => (editing = true)}>Edit</button>
         {/if}
       </p>
       {#if editing}
