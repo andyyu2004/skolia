@@ -2,6 +2,7 @@
   import type { DocumentSummary, Lang, User } from "@skolia/shared/api";
   import { LANGS, LANGUAGE_INFO, LICENCE_INFO } from "@skolia/shared/api";
   import { listDocuments } from "./lib/api.ts";
+  import { filterDocuments, otherImporters, type ImporterFilter } from "./lib/explore.ts";
   import { badge } from "./lib/reading.ts";
 
   let { user }: { user: User | null | undefined } = $props();
@@ -10,28 +11,15 @@
   let error = $state<string | null>(null);
   let query = $state("");
   let lang = $state<Lang | "all">("all");
-  let importer = $state<"all" | "mine" | `by:${string}`>("all");
+  let importer = $state<ImporterFilter>("all");
 
-  const importers = $derived(
-    [...new Set((documents ?? []).filter((d) => !d.mine).map((d) => d.importerName))].sort((a, b) => a.localeCompare(b)),
-  );
-
-  function byImporter(d: DocumentSummary): boolean {
-    if (importer === "all") return true;
-    if (importer === "mine") return d.mine;
-    return !d.mine && `by:${d.importerName}` === importer;
-  }
+  const importers = $derived(otherImporters(documents ?? []));
 
   $effect(() => {
     if (!user && importer === "mine") importer = "all";
   });
 
-  const shown = $derived.by(() => {
-    const q = query.trim().toLocaleLowerCase();
-    return (documents ?? []).filter(
-      (d) => (lang === "all" || d.lang === lang) && byImporter(d) && (q === "" || d.title.toLocaleLowerCase().includes(q)),
-    );
-  });
+  const shown = $derived(filterDocuments(documents ?? [], { lang, importer, query }));
 
   const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 
