@@ -16,10 +16,11 @@ from ...parsed import ParsedSentence, Parser
 from ...parsers.stanza_parser import StanzaParser
 from ...plugin import Bundler, Options, ParsingAnalyzer
 from ...schema import Blob
+from .lemmas import relemmatize
 from .lexicon import Source
 
 LANG = "fr"
-PLUGIN_VERSION = "0.1"
+PLUGIN_VERSION = "0.2"
 
 # Parser models, by name. Each loads on first use. Stanza's French models are trained on
 # UD French GSD and the other UD French treebanks ("combined"). Scores: EVALUATION.md.
@@ -48,7 +49,7 @@ def assemble(
     text: str, parsed: Iterable[ParsedSentence], model_name: str, options: Options
 ) -> Blob:
     return build(
-        parsed,
+        relemmatize(parsed),
         lang=LANG,
         analyzer=analyzer_name(model_name),
         text=text,
