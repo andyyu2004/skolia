@@ -1057,6 +1057,11 @@ label.check {
   margin: 0.2rem 0;
 }
 
+.lemma-said {
+  display: contents;
+  color: var(--muted);
+}
+
 .pronunciation {
   margin: 0.2rem 0;
   display: flex;

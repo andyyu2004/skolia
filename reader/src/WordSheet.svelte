@@ -71,11 +71,16 @@
         const tokens = sentenceTokens(w.sentence);
         const uses = entry && partOfWord === null ? language.uses(entry, tokens, w.index) : [];
         const parsedId = LemmaIdSchema.safeParse(entryIdFor(bundle, w.token));
+        const said = mainPronunciations(pronunciationsOf(bundle, w.token.text, w.token.upos));
         return {
           ref: w,
           entry,
           lemmaId: parsedId.success ? parsedId.data : null,
-          said: mainPronunciations(pronunciationsOf(bundle, w.token.text, w.token.upos)),
+          said,
+          lemmaSaid:
+            said.length === 0 && entry && !sameWord(entry.lemma, w.token.text)
+              ? mainPronunciations(pronunciationsOf(bundle, entry.lemma, entry.upos))
+              : [],
           heard: recordingsOf(bundle, w.token.text, w.token.upos).slice(0, 1),
           partOfWord,
           role: role && head ? { role, head } : null,
@@ -173,12 +178,20 @@
           >
         {/each}
       {/snippet}
-      {#if word.said.length > 0 || word.heard.length > 0}
+      {#if word.said.length > 0 || word.lemmaSaid.length > 0 || word.heard.length > 0}
         <p class="pronunciation">
           {#each word.said as p (p.ipa)}
             <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
           {/each}
           {@render speakers(word.heard, token.text)}
+          {#if word.lemmaSaid.length > 0 && word.entry}
+            <span class="lemma-said"
+              ><span {lang}>{word.entry.lemma}</span>
+              {#each word.lemmaSaid as p (p.ipa)}
+                <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
+              {/each}</span
+            >
+          {/if}
         </p>
       {/if}
       <p class="grammar">
