@@ -17,6 +17,7 @@
   let error = $state<string | null>(null);
   let selected = $state<number | null>(null);
   let editing = $state(false);
+  let structure = $state(false);
 
   const notice = $derived(noticeFor(summary, reading !== null, error));
 
@@ -203,6 +204,8 @@
         {piece}
         {headText}
         {sentenceTokens}
+        onselectToken={(sentence, index) => (selected = doc?.pieceOf.get(tokenKey(sentence, index)) ?? selected)}
+        bind:structure
         onclose={() => (selected = null)}
       />
     {/key}

@@ -1171,6 +1171,118 @@ label.check {
   font-weight: 600;
 }
 
+.structure summary {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 0 0 0.3rem;
+  cursor: pointer;
+}
+
+.tree {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  margin: 0 calc(-1 * var(--gutter)) 0.5rem;
+  padding: 0 var(--gutter);
+  scroll-behavior: smooth;
+}
+
+.tree svg {
+  display: block;
+}
+
+.tree text {
+  text-anchor: middle;
+}
+
+.tree .arc path {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1.5;
+}
+
+.tree .arc text {
+  fill: var(--muted);
+  font-family: var(--ui);
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.tree .arc.near path {
+  stroke: var(--head);
+}
+
+.tree .arc.near text {
+  fill: var(--head);
+}
+
+.tree .word {
+  cursor: pointer;
+}
+
+.tree .word rect {
+  fill: transparent;
+}
+
+.tree .word:focus-visible {
+  outline: none;
+}
+
+.tree .word:focus-visible rect {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.tree .word.selected rect {
+  fill: var(--select);
+}
+
+.tree .word.linked .form {
+  fill: var(--head);
+}
+
+.tree .word.root .form {
+  font-weight: 700;
+}
+
+.tree .form {
+  fill: var(--text);
+  font-family: var(--reading);
+}
+
+.tree .pos,
+.tree .case-name {
+  fill: var(--muted);
+  font-family: var(--ui);
+}
+
+.tree .case-name.why {
+  fill: var(--trigger);
+  font-weight: 600;
+}
+
+.tree .arc.case path {
+  stroke: var(--trigger);
+  stroke-dasharray: 4 3;
+}
+
+.tree .arc.case path.arrow {
+  stroke-dasharray: none;
+}
+
+.tree .arc.case text {
+  fill: var(--trigger);
+}
+
+.tree line.trigger {
+  stroke: var(--trigger);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+
 .frames li.here {
   border-left: 3px solid var(--trigger);
   padding-left: 0.5rem;

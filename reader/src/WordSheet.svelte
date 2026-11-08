@@ -19,6 +19,7 @@
   import { paradigmTables } from "@skolia/shared/paradigm";
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
   import ParadigmTable from "./ParadigmTable.svelte";
+  import SentenceTree from "./SentenceTree.svelte";
 
   type WordPiece = Extract<Piece, { kind: "word" }>;
 
@@ -28,6 +29,8 @@
     piece,
     headText,
     sentenceTokens,
+    onselectToken,
+    structure = $bindable(),
     onclose,
   }: {
     /** The document's language, also for the lang attribute of its text */
@@ -36,8 +39,14 @@
     piece: WordPiece;
     headText: (sentence: number, index: number) => string | null;
     sentenceTokens: (sentence: number) => Token[];
+    onselectToken: (sentence: number, index: number) => void;
+    /** Whether the sentence's structure is unfolded; kept by the reader across words. */
+    structure: boolean;
     onclose: () => void;
   } = $props();
+
+  const sentence = $derived(piece.words[0]?.sentence ?? 0);
+  const selectedTokens = $derived(new Set(piece.words.map((w) => w.index)));
   const language = $derived(LANGUAGES[lang]);
 
   const SHOWN_SENSES = 3;
@@ -154,6 +163,18 @@
     ></button>
     <button type="button" class="close" aria-label="Close" onclick={onclose}>×</button>
   </div>
+
+  <details class="structure" bind:open={structure}>
+    <summary>Sentence structure</summary>
+    {#if structure}
+      <SentenceTree
+        {lang}
+        tokens={sentenceTokens(sentence)}
+        selected={selectedTokens}
+        onselect={(index) => onselectToken(sentence, index)}
+      />
+    {/if}
+  </details>
 
   {#each words as word (word.ref.index)}
     {@const token = word.ref.token}
