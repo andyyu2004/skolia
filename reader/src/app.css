@@ -1001,12 +1001,19 @@ label.check {
   background: var(--surface);
 }
 
-.sheet-tabs {
+/* The tabs, then copy link and close, centred on one row over one rule */
+.sheet-head {
   display: flex;
+  align-items: center;
   flex-basis: 100%;
-  gap: 1.25rem;
   margin-top: 0.15rem;
   border-bottom: 1px solid var(--line);
+}
+
+.sheet-tabs {
+  display: flex;
+  align-self: stretch;
+  gap: 1.25rem;
 }
 
 .sheet-tabs button {
@@ -1043,11 +1050,8 @@ label.check {
   background: var(--line);
 }
 
-/* Copy link and close, top right of the sheet, on one line */
 .sheet-actions {
-  position: absolute;
-  right: 0;
-  top: 0;
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 0.25rem;
@@ -1123,15 +1127,8 @@ label.check {
     display: none;
   }
 
-  /* Tabs at the top, clear of the share and close buttons */
-  .sheet-tabs {
+  .sheet-head {
     margin-top: 0;
-    padding-right: 4.5rem;
-  }
-
-  /* With no handle, level with the tabs */
-  .sheet-actions {
-    top: 0.7rem;
   }
 }
 
