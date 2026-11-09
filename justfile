@@ -123,13 +123,18 @@ migrate env:
 # The Nix store path must be readable here: Linux, or SKOLIA_NIX=host (analysis/scripts/nix.sh).
 # Load each language's lexicon into its database (staging, production, pr-N or local), from its Nix build for cards.
 # A preview gets each language's entries for wordfreq's 3,000 most common words (infra/load-lexicon.py --sample).
+# A language whose build evaluates to the Nix output D1 last loaded is skipped without building it.
 load-lexicon env:
     #!/usr/bin/env bash
     set -euo pipefail
     case {{ env }} in pr-*) langs=({{ langs }}) sample=(--sample 3000) ;; *) langs=({{ langs }}) sample=() ;; esac
     for lang in "${langs[@]}"; do
-      out=$(analysis/scripts/nix.sh nix build --no-link --print-out-paths "./analysis#cards-lexicon-$lang")
-      infra/load-lexicon.py {{ env }} "$out/$lang.cards.sqlite" "${sample[@]}"
+      build="./analysis#cards-lexicon-$lang"
+      out=$(analysis/scripts/nix.sh nix eval --raw "$build.outPath")
+      state=$(infra/load-lexicon.py {{ env }} --lang "$lang" --built-from "$out" "${sample[@]}")
+      if [ "$state" = current ]; then echo "{{ env }}: $lang already serves $out"; continue; fi
+      out=$(analysis/scripts/nix.sh nix build --no-link --print-out-paths "$build")
+      infra/load-lexicon.py {{ env }} "$out/$lang.cards.sqlite" --built-from "$out" "${sample[@]}"
     done
 
 # Terraform: storage, queue, ingest's R2 token, billing alerts

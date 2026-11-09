@@ -106,6 +106,7 @@ version  id  feature  value
 
 - `just load-lexicon <env>` loads it through `infra/load-lexicon.py`, and every deploy runs it (`deploy.yml`, job `load-lexicon`). It's keyed by the cards lexicon's version, the lexicon's with `+cards1` (`CARDS_VERSION`):
   - An unchanged version is skipped.
+  - Before building, `just load-lexicon` asks Nix for the build's output path (`nix eval`, which doesn't build) and skips the language when D1 last loaded that path (`loaded.built_from`, set once the old rows are deleted). Building all three only to find their versions unchanged took about 100 s of a deploy.
   - A new version's rows go in beside the old ones, then `loaded` points at it, and the old rows are deleted 50,000 at a time. A load that stops part way leaves the old version serving. Every run deletes any old rows left over, even when the version hasn't changed.
   - A preview loads only each language's entries for wordfreq's 3,000 most common words (`--sample`): for English, 6,028 entries, about 12,000 rows written with the primary key's index. Polish is loaded too, so the end-to-end tests run the same in every environment.
   - Locally (`just lexicon-local`, which rebuilds `{lang}.cards.sqlite` when the lexicon is newer), loading both took about 75 s: 80 MB of SQL for Polish, 301 MB for English.
