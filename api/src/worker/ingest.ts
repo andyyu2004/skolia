@@ -15,7 +15,10 @@
 import { DurableObject } from "cloudflare:workers";
 import { isLang, type Lang } from "@skolia/shared/api";
 import type { IngestJob } from "@skolia/shared/schema";
+import { log } from "../log.ts";
 import type { IngestJobs } from "../ports.ts";
+
+const logger = log("ingest");
 
 interface Env {
   INGESTER: DurableObjectNamespace<Ingester>;
@@ -131,11 +134,11 @@ export class Ingester extends DurableObject<Env> {
           ...(this.env.S3_HOST === undefined ? {} : { SKOLIA_S3_HOST: this.env.S3_HOST }),
         },
       });
-      console.log("starting ingest:", image);
+      logger.info("starting ingest", { image });
       this.ctx.waitUntil(
         container.monitor().then(
-          () => console.log("ingest exited:", image),
-          (error: unknown) => console.error("ingest failed:", image, error),
+          () => logger.info("ingest exited", { image }),
+          (error: unknown) => logger.error("ingest failed", { image, error }),
         ),
       );
       await container.setInactivityTimeout(this.inactivityTimeoutMs());
@@ -154,15 +157,15 @@ export class Ingester extends DurableObject<Env> {
     // that arrives meanwhile waits, then starts a new container
     await this.ctx.blockConcurrencyWhile(async () => {
       if (await this.busy(container)) {
-        console.log("ingest is busy; keeping it awake");
+        logger.info("ingest is busy; keeping it awake");
         await this.ctx.storage.setAlarm(Date.now() + this.sleepAfterMs);
         return;
       }
-      console.log("ingest is idle; stopping it");
+      logger.info("ingest is idle; stopping it");
       // SIGTERM rather than destroy(), whose SIGKILL makes the exit look like a crash
       container.signal(SIGTERM);
       if (!(await this.stopped(container))) {
-        console.error(`ingest didn't stop within ${STOP_TIMEOUT_MS} ms; killing it`);
+        logger.error("ingest didn't stop in time; killing it", { timeoutMs: STOP_TIMEOUT_MS });
         await container.destroy();
       }
     });
@@ -221,13 +224,13 @@ export class Ingester extends DurableObject<Env> {
       const body = await response.text();
       if (response.status === 202) return "accepted";
       if (response.status === 400) {
-        console.error("ingest refused job:", job, body);
+        logger.error("ingest refused job", { doc: job.doc, lang: job.lang, body });
         return "malformed";
       }
-      console.error("ingest answered", response.status, "for", job, body);
+      logger.error("ingest answered with an error", { doc: job.doc, lang: job.lang, status: response.status, body });
       return "failed";
     } catch (error: unknown) {
-      console.error("handing job to ingest failed:", job, error);
+      logger.error("handing job to ingest failed", { doc: job.doc, lang: job.lang, error });
       return "failed";
     }
   }
@@ -240,7 +243,7 @@ export class Ingester extends DurableObject<Env> {
       const body: unknown = await response.json();
       return typeof body === "object" && body !== null && "busy" in body && body.busy === true;
     } catch (error: unknown) {
-      console.error("asking ingest whether it's busy failed:", error);
+      logger.error("asking ingest whether it's busy failed", { error });
       return false;
     }
   }
@@ -248,12 +251,13 @@ export class Ingester extends DurableObject<Env> {
 
 export default {
   async queue(batch, env) {
+    logger.info("received jobs", { docs: batch.messages.map((message) => message.body.doc), attempts: batch.messages.map((message) => message.attempts) });
     const byLang = new Map<Lang, Message<IngestJob>[]>();
     for (const message of batch.messages) {
       const lang = message.body.lang;
       if (!isLang(lang)) {
         // The API only queues languages it knows: retrying won't help
-        console.error("no ingest for language:", message.body);
+        logger.error("no ingest for language", { job: message.body });
         message.ack();
         continue;
       }
@@ -272,7 +276,7 @@ async function handOver(env: Env, lang: Lang, messages: Message<IngestJob>[]): P
       messages.map((message) => message.body),
     );
   } catch (error: unknown) {
-    console.error("starting ingest failed:", error);
+    logger.error("starting ingest failed", { lang, docs: messages.map((message) => message.body.doc), error });
     for (const message of messages) message.retry({ delaySeconds: RETRY_DELAY_SECONDS });
     return;
   }

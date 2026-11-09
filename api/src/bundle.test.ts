@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { gzipSync } from "node:zlib";
 
-const BUDGET_KIB = 290;
+const BUDGET_KIB = 305;
 
 test(`the Worker bundle is at most ${BUDGET_KIB} KiB gzipped`, () => {
   const kib = gzipSync(readFileSync(new URL("../dist/main.js", import.meta.url))).length / 1024;
