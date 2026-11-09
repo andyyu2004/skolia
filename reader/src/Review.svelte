@@ -4,7 +4,10 @@
   import { LANGUAGES } from "@skolia/shared/lang";
   import { lemmaTables, type Table } from "@skolia/shared/paradigm";
   import { UPOS_LABEL } from "@skolia/shared/ud";
+  import Button from "./Button.svelte";
+  import Page from "./Page.svelte";
   import ParadigmTable from "./ParadigmTable.svelte";
+  import Pronunciations from "./Pronunciations.svelte";
   import { cardCounts, dueCards, review, signIn } from "./lib/api.ts";
   import { clue, keyTarget, shortcut } from "./lib/review.ts";
   import { setStatus } from "./lib/words.svelte.ts";
@@ -185,11 +188,7 @@
   {@const lang = langOf(c)}
   {@const said = c.entry?.pronunciations ?? []}
   {#if said.length > 0}
-    <p class="pronunciation">
-      {#each said as p (p.ipa)}
-        <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
-      {/each}
-    </p>
+    <Pronunciations {said} />
   {/if}
   {@render meanings(c)}
   {@const tables = tablesOf(c)}
@@ -217,9 +216,8 @@
   {/if}
 {/snippet}
 
-<main class="container review">
-  <div class="title-row">
-    <h1>Review</h1>
+<Page title="Review">
+  {#snippet actions()}
     {#if user && counts && (withCards.length > 0 || selected)}
       <select
         aria-label="Language"
@@ -236,25 +234,26 @@
         {/each}
       </select>
     {/if}
-  </div>
+  {/snippet}
+  <div class="review">
   {#if user === null}
     <p class="muted">Sign in to review your words.</p>
-    <button type="button" class="primary" onclick={() => void signIn()}>Sign in</button>
+    <Button variant="primary" onclick={() => void signIn()}>Sign in</Button>
   {:else if !counts}
     {#if !error}<p class="muted">Loading…</p>{/if}
   {/if}
   {#if user && counts && !selected}
     <p>Nothing to review right now. Words you look up in the reader turn into cards here.</p>
-    <button type="button" class="quiet" onclick={refresh}>Check again</button>
+    <Button variant="quiet" onclick={refresh}>Check again</Button>
   {:else if user && selected && !due}
     {#if !error}<p class="muted">Loading…</p>{/if}
   {:else if user && due}
     <p class="counts muted">{left} to go · {due.newLeft} new left today · <a href="#/settings">Settings</a></p>
     {#if card}
       <section class="flashcard" aria-live="polite" aria-atomic="true">
-        <button type="button" class="known quiet" disabled={busy} title="You know this word: stop reviewing it" onclick={markKnown}
-          >Known</button
-        >
+        <div class="known">
+          <Button variant="quiet" small disabled={busy} title="You know this word: stop reviewing it" onclick={markKnown}>Known</Button>
+        </div>
         {#if card.kind === "recognition"}
           {@render lemma(card)}
         {:else}
@@ -270,27 +269,121 @@
         <div class="grades">
           {#each RATINGS as rating (rating)}
             {#if rating === 3}
-              <button type="button" class="primary" disabled={busy} aria-keyshortcuts={String(rating)} bind:this={goodButton} onclick={() => grade(rating)}
-                >{GRADE_LABELS[rating]}</button
+              <Button variant="primary" disabled={busy} aria-keyshortcuts={String(rating)} bind:element={goodButton} onclick={() => grade(rating)}
+                >{GRADE_LABELS[rating]}</Button
               >
             {:else}
-              <button type="button" class="quiet" disabled={busy} aria-keyshortcuts={String(rating)} onclick={() => grade(rating)}
-                >{GRADE_LABELS[rating]}</button
+              <Button variant="quiet" disabled={busy} aria-keyshortcuts={String(rating)} onclick={() => grade(rating)}
+                >{GRADE_LABELS[rating]}</Button
               >
             {/if}
           {/each}
         </div>
-        <p class="muted hint">Keys 1 to 4 grade the card.</p>
+        <p class="hint">Keys 1 to 4 grade the card.</p>
       {:else}
-        <button type="button" class="primary" disabled={busy} aria-keyshortcuts="Space Enter" bind:this={showButton} onclick={reveal}
-          >Show answer</button
+        <Button variant="primary" disabled={busy} aria-keyshortcuts="Space Enter" bind:element={showButton} onclick={reveal}
+          >Show answer</Button
         >
-        <p class="muted hint">Space or Enter shows the answer.</p>
+        <p class="hint">Space or Enter shows the answer.</p>
       {/if}
     {:else}
       <p>Nothing to review right now. Words you look up in the reader turn into cards here.</p>
-      <button type="button" class="quiet" disabled={busy} onclick={refresh}>Check again</button>
+      <Button variant="quiet" disabled={busy} onclick={refresh}>Check again</Button>
     {/if}
   {/if}
   {#if error}<p class="error" role="alert">{error}</p>{/if}
-</main>
+  </div>
+</Page>
+
+<style>
+  .review {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .counts,
+  .hint {
+    margin: 0;
+  }
+
+  .muted {
+    color: var(--muted);
+  }
+
+  .error {
+    color: var(--error);
+  }
+
+  .hint {
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-align: center;
+  }
+
+  .flashcard {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 2rem var(--gutter);
+    min-height: 12rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    text-align: center;
+    position: relative;
+  }
+
+  .known {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    color: var(--muted);
+  }
+
+  .prompt {
+    font-family: var(--reading);
+    font-size: 2rem;
+    margin: 0;
+  }
+
+  .glosses {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: 1.1rem;
+  }
+
+  .tags {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-left: 0.3rem;
+  }
+
+  hr {
+    width: 100%;
+    border: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .forms {
+    margin-top: 0.75rem;
+    text-align: left;
+  }
+
+  .forms summary {
+    cursor: pointer;
+    color: var(--muted);
+  }
+
+  .grades {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+  }
+
+  .grades :global(button) {
+    padding-inline: 0;
+  }
+</style>

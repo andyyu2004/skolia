@@ -2,6 +2,9 @@
   import type { Lang, Licence, User } from "@skolia/shared/api";
   import { LANGS, LANGUAGE_INFO, MAX_TEXT_LENGTH, isShareable } from "@skolia/shared/api";
   import { importDocument, signIn } from "./lib/api.ts";
+  import Button from "./Button.svelte";
+  import Field from "./Field.svelte";
+  import Page from "./Page.svelte";
   import SourceFields from "./SourceFields.svelte";
 
   let { user }: { user: User | null | undefined } = $props();
@@ -44,34 +47,30 @@
   }
 </script>
 
-<main class="container">
-  <h1>Upload</h1>
+<Page title="Upload">
   {#if user === null}
     <p class="muted">Sign in to upload a text.</p>
-    <button type="button" class="primary" onclick={() => void signIn()}>Sign in</button>
+    <Button variant="primary" onclick={() => void signIn()}>Sign in</Button>
   {:else if user}
-    <form class="form" onsubmit={submit}>
+    <form onsubmit={submit}>
       <section class="panel">
-        <div class="field-pair">
-          <div class="field">
-            <label for="upload-title">Title</label>
+        <div class="pair">
+          <Field label="Title" for="upload-title">
             <input id="upload-title" bind:value={title} maxlength="200" required />
-          </div>
-          <div class="field">
-            <label for="upload-lang">Language</label>
+          </Field>
+          <Field label="Language" for="upload-lang">
             <select id="upload-lang" bind:value={lang} required>
               <option value="" disabled>Choose a language</option>
               {#each LANGS as code (code)}
                 <option value={code} lang={code}>{LANGUAGE_INFO[code].flag} {LANGUAGE_INFO[code].endonym}</option>
               {/each}
             </select>
-          </div>
+          </Field>
         </div>
-        <div class="field">
-          <div class="field-label">
-            <label for="upload-text">Text</label>
-            <span class="hint">{text.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}</span>
-          </div>
+        <Field label="Text" for="upload-text">
+          {#snippet aside()}
+            <span class="count">{text.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}</span>
+          {/snippet}
           <textarea
             id="upload-text"
             bind:value={text}
@@ -81,7 +80,7 @@
             maxlength={MAX_TEXT_LENGTH}
             required
           ></textarea>
-        </div>
+        </Field>
       </section>
 
       <section class="panel">
@@ -92,11 +91,70 @@
       {#if error}
         <p class="error">{error}</p>
       {/if}
-      <div class="form-actions">
-        <button type="submit" class="primary" disabled={importing || !ready}>
+      <div class="actions">
+        <Button type="submit" variant="primary" disabled={importing || !ready}>
           {importing ? "Uploading…" : "Upload"}
-        </button>
+        </Button>
       </div>
     </form>
   {/if}
-</main>
+</Page>
+
+<style>
+  form {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .panel {
+    display: grid;
+    gap: 1.1rem;
+    padding: 1.25rem;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: var(--card-shadow);
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  .pair {
+    display: grid;
+    grid-template-columns: 1fr minmax(9rem, auto);
+    gap: 0.75rem;
+  }
+
+  @media (max-width: 500px) {
+    .pair {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .count {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  textarea {
+    width: 100%;
+    resize: vertical;
+    line-height: 1.5;
+  }
+
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .muted {
+    color: var(--muted);
+  }
+
+  .error {
+    color: var(--error);
+  }
+</style>
