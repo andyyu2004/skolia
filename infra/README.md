@@ -68,17 +68,20 @@ A push to main deploys staging and runs the end-to-end tests against it (`api/sr
 - in the `staging` and `production` environments, secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (the OAuth clients above)
 - environments `staging`, `production` and `preview` (every pull request's)
 
-Not every change deploys. CI's `changes` job (`.github/changes.py`) sorts a run by the files it changes, into two outputs:
+Not every change deploys. CI's `changes` job (`.github/changes.py`) sorts a run by the files it changes, into three outputs:
 
-- `deploy`: false only if every file is content, meaning `texts/`, `docs/` or Markdown, none of which goes into a build. CI then skips the screenshots, image builds, plans and deploys; `check` and `test` still run. A tag, a manual run, or a push it can't compare with its parent always deploys.
-- `texts`: true if a curated text in `texts/` changed, a subset of content. With `deploy` false, CI runs only `just seed` (`.github/workflows/seed.yml`): against staging on a push to main, and against a pull request's preview if an earlier push deployed one. Production gets them at the next tag.
+- `deploy`: false only if every file is content, meaning `texts/`, `docs/` or Markdown, none of which goes into a build. CI then skips `check`, the screenshots, image builds, plans and deploys. A tag, a manual run, or a push it can't compare with its parent always deploys.
+- `texts`: true if a curated text in `texts/` changed, a subset of content. With `deploy` false, CI checks only that the texts parse (`check-texts`, `api/src/texts.test.ts`) and runs `just seed` (`.github/workflows/seed.yml`): against staging on a push to main, and against a pull request's preview if an earlier push deployed one. Production gets them at the next tag.
+- `infra`: true if something a Terraform plan reads changed (`infra/`, the flake, the justfile, `.github/`). Pull requests run `plan-infra` only then.
 
 | Change | `deploy` | `texts` | Runs |
 |---|---|---|---|
-| curated texts only | false | true | check, test, seed |
-| docs or Markdown only | false | false | check, test |
+| curated texts only | false | true | check-texts, seed |
+| docs or Markdown only | false | false | nothing but `changes` and `mergeable` |
 | texts and code | true | true | everything (the deploy seeds) |
-| code | true | false | everything |
+| code | true | false | everything; `plan-infra` only if `infra` |
+
+`check` is a required check and a skipped job counts as passing, so `mergeable` fails when `check` should have run and didn't pass, or when `check-texts` failed.
 
 CI installs Terraform's providers from the public R2 bucket `skolia-tf-providers` (`infra/providers.tf`, made with production) through `infra/terraformrc`, since the registry sends Terraform to GitHub's releases, which time out for unauthenticated requests at times. CI's `mirror-providers` job (`infra/mirror-providers.py`, also `just mirror-providers`) runs before `check` and adds whatever in `.terraform.lock.hcl` the mirror is missing, downloading GitHub's zips with a token; a zip whose hash isn't in the lock file is refused, and the lock file's hashes check what CI installs.
 

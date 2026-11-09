@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { docId } from "@skolia/shared/keys";
-import { parseCurated, readCurated, sync, type Change } from "./seed.ts";
+import { parseCurated, sync, type Change } from "./seed.ts";
 import { CURATED_USER } from "./seed-key.ts";
 import { client, listed, local, setup, useLocal } from "./testing/app.ts";
 
@@ -43,9 +43,4 @@ test("the seed imports, updates and deletes until the curated user's documents m
   assert.deepEqual(await sync(api, [retitled, edited], { check: true, log }), []);
   assert.deepEqual((await listed(app)).sort(), [first.id, edited.id].sort());
   assert.equal((await app.request(`/api/documents/${second.id}`)).status, 404);
-});
-
-test("every curated text in texts/ parses", async () => {
-  const texts = await readCurated(new URL("../../texts", import.meta.url).pathname);
-  assert.ok(texts.length > 0);
 });
