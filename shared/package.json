@@ -12,7 +12,8 @@
     "./paradigm": "./paradigm.ts",
     "./lexicon": "./lexicon.ts",
     "./doc": "./doc.ts",
-    "./tree": "./tree.ts"
+    "./tree": "./tree.ts",
+    "./diagram": "./diagram.ts"
   },
   "scripts": {
     "test": "node --test \"lang/**/*.test.ts\" \"*.test.ts\""

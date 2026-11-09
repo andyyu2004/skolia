@@ -1,114 +1,181 @@
-// A sentence's dependency tree as arcs above its words, and why each word has its case as
-// arcs below them, for the structure view.
+// A sentence's dependency analysis as a tree of words for the structure view: what each
+// word is, what it hangs from, and why it has its case. No geometry: see diagram.ts.
 import type { CaseRule, Deprel, Token } from "@skolia/shared/schema";
-import { CASE_NAME } from "./ud.ts";
+import { CASE_NAME, UPOS_LABEL } from "./ud.ts";
 
-export interface TreeWord {
-  /** The token's index in the sentence, which arcs refer to. */
+export interface Word {
+  /** The token's index in the sentence, which selections refer to. */
   index: number;
   token: Token;
-  root: boolean;
-  /** "genitive", for words with a case */
-  caseName: string | null;
-  /** Steps from the root, for the top-down layout. */
-  depth: number;
-  /** The relation to its head, as a noun ("subject"); empty for the root. */
+  /** As drawn: "-ś" for a person ending fused to the word before. */
+  form: string;
+  /** Joins the word before it in the text (powróciła + ś). */
+  ending: boolean;
+  /** Its part of speech, or the language's label for part of a word. */
+  pos: string;
+  /** The relation to its head as a noun ("subject"), "main word" for the root. */
   relation: string;
+  /** "genitive", for words with a case in languages that show them. */
+  caseName: string | null;
+  root: boolean;
+  head: Word | null;
+  /** Dependents in sentence order. */
+  children: Word[];
+  /** Steps from the top of what is drawn. */
+  depth: number;
+  /** Position among the drawn words. */
+  order: number;
 }
 
-/** Where an arc's end sits among the arcs meeting the same word, left to right. */
-export interface Slot {
-  rank: number;
-  count: number;
-}
-
-export interface Arc {
-  /** Token indices: the head (or the word causing a case) and the word it points at. */
-  from: number;
-  to: number;
+/** A dependency (head to dependent), or a case reason (the word causing it to the word with it). */
+export interface Link {
+  from: Word;
+  to: Word;
   label: string;
   /** The UD relation or case rule the label stands for. */
   raw: string;
-  /** Positions of the left and right ends among `words`. */
-  left: number;
-  right: number;
-  /** 1 for an arc between neighbours; one more than the highest arc it spans. */
-  level: number;
-  fromSlot: Slot;
-  toSlot: Slot;
 }
 
-export interface Tree {
-  words: TreeWord[];
-  /** Dependencies, drawn above the words. */
-  arcs: Arc[];
-  levels: number;
-  /** Case reasons, drawn below the words. */
-  cases: Arc[];
-  caseLevels: number;
+export interface Sentence {
+  /** In sentence order. */
+  words: Word[];
+  /** Words drawn without a head: the main word, or the top of a clause. */
+  tops: Word[];
+  dependencies: Link[];
+  cases: Link[];
 }
 
-type Span = Omit<Arc, "level" | "fromSlot" | "toSlot">;
+export interface SentenceOptions {
+  /** Only these tokens: the clause around the word in a long sentence (`clauseOf`). */
+  keep?: ReadonlySet<number> | undefined;
+  /** Show each word's case: for languages where nouns and adjectives have one. */
+  cases?: boolean;
+  /** The language's label for a token that is only part of a word (Polish -em). */
+  partOfWord?: (token: Token) => string | null;
+}
 
-/** Punctuation is left out: its arcs carry nothing a learner needs and crowd the rest.
- * With `keep`, only those tokens are drawn (a clause, see `clauseOf`), and depths count
- * from the shallowest of them. */
-export function sentenceTree(tokens: Token[], keep?: ReadonlySet<number>): Tree {
-  const words: TreeWord[] = [];
-  const position = new Map<number, number>();
+/** Punctuation is left out: its links carry nothing a learner needs and crowd the rest. */
+export function parseSentence(tokens: Token[], options: SentenceOptions = {}): Sentence {
+  const { keep, cases: withCases = true, partOfWord } = options;
+  const words: Word[] = [];
+  const byIndex = new Map<number, Word>();
   tokens.forEach((token, index) => {
     if (token.upos === "PUNCT" || (keep && !keep.has(index))) return;
-    position.set(index, words.length);
+    const ending = isEnding(tokens, index);
     const value = token.feats.Case;
-    words.push({
+    const word: Word = {
       index,
       token,
+      form: ending ? `-${token.text}` : token.text,
+      ending,
+      pos: partOfWord?.(token) ?? UPOS_LABEL[token.upos],
+      relation: token.head === null ? "main word" : relationName(token.deprel),
+      caseName: withCases && value ? CASE_NAME[value] : null,
       root: token.head === null,
-      caseName: value ? CASE_NAME[value] : null,
-      depth: depthOf(tokens, index),
-      relation: token.head === null ? "" : relationName(token.deprel),
-    });
+      head: null,
+      children: [],
+      depth: 0,
+      order: words.length,
+    };
+    words.push(word);
+    byIndex.set(index, word);
   });
-  const shallowest = Math.min(...words.map((w) => w.depth));
-  for (const word of words) word.depth -= shallowest;
 
-  function span(from: number, to: number, label: string, raw: string): Span | null {
-    const a = position.get(from);
-    const b = position.get(to);
-    if (a === undefined || b === undefined || a === b) return null;
-    return { from, to, label, raw, left: Math.min(a, b), right: Math.max(a, b) };
-  }
-
-  const deps: Span[] = [];
-  const cases: Span[] = [];
   for (const word of words) {
-    const { head, deprel, case_reason: reason } = word.token;
-    const dep = head === null ? null : span(head, word.index, relationName(deprel), deprel ?? "");
-    if (dep) deps.push(dep);
-    const trigger = reason?.trigger;
-    const why = reason && trigger !== undefined ? span(trigger, word.index, RULE[reason.rule], reason.rule) : null;
-    if (why) cases.push(why);
+    const head = word.token.head === null ? undefined : byIndex.get(word.token.head);
+    if (head && head !== word) {
+      word.head = head;
+      head.children.push(word);
+    }
   }
-  const arcs = stack(deps);
-  const caseArcs = stack(cases);
-  return {
-    words,
-    arcs,
-    levels: Math.max(0, ...arcs.map((a) => a.level)),
-    cases: caseArcs,
-    caseLevels: Math.max(0, ...caseArcs.map((a) => a.level)),
-  };
+  const tops = depths(words);
+
+  const dependencies: Link[] = [];
+  const cases: Link[] = [];
+  for (const word of words) {
+    if (word.head) dependencies.push({ from: word.head, to: word, label: word.relation, raw: word.token.deprel ?? "" });
+    const reason = word.token.case_reason;
+    const cause = reason?.trigger === undefined ? undefined : byIndex.get(reason.trigger);
+    if (reason && cause && cause !== word) cases.push({ from: cause, to: word, label: RULE[reason.rule], raw: reason.rule });
+  }
+  return { words, tops, dependencies, cases };
 }
 
-/** Steps up to the root. A head chain that loops is cut where it repeats. */
-function depthOf(tokens: Token[], index: number): number {
-  const seen = new Set<number>([index]);
-  let head = tokens[index]?.head ?? null;
-  while (head !== null && !seen.has(head)) {
-    seen.add(head);
-    head = tokens[head]?.head ?? null;
+/** Sets each word's depth from the tops down, and returns the tops. A head chain that
+ * loops has no top: it is cut at its first word, which becomes one. */
+function depths(words: Word[]): Word[] {
+  const tops = words.filter((w) => w.head === null);
+  const seen = new Set<Word>();
+  const walk = (top: Word): void => {
+    const queue: Word[] = [top];
+    top.depth = 0;
+    seen.add(top);
+    for (let word = queue.shift(); word; word = queue.shift()) {
+      for (const child of word.children) {
+        if (seen.has(child)) continue;
+        child.depth = word.depth + 1;
+        seen.add(child);
+        queue.push(child);
+      }
+    }
+  };
+  tops.forEach(walk);
+  for (const word of words) {
+    if (seen.has(word)) continue;
+    const head = word.head;
+    if (head) head.children = head.children.filter((c) => c !== word);
+    word.head = null;
+    tops.push(word);
+    walk(word);
   }
-  return seen.size - 1;
+  return tops.sort((a, b) => a.order - b.order);
+}
+
+/** A token sharing its characters with the one before is the end of a fused word (-em). */
+export function isEnding(tokens: Token[], index: number): boolean {
+  const token = tokens[index];
+  const before = tokens[index - 1];
+  return token !== undefined && before !== undefined && token.start === before.start && token.end === before.end;
+}
+
+/** The case links explaining the selected word: its own, and the case of the word it
+ * agrees with or is listed with, as the sheet's "Why …?" follows one step (lang/pl/cases.ts). */
+export function caseChain(sentence: Sentence, selected: ReadonlySet<number>): Link[] {
+  const chain: Link[] = [];
+  for (const link of sentence.cases) {
+    if (!selected.has(link.to.index)) continue;
+    chain.push(link);
+    if (link.raw !== "agreement" && link.raw !== "coordination") continue;
+    const next = sentence.cases.find((c) => c.to === link.from);
+    if (next && !chain.includes(next)) chain.push(next);
+  }
+  return chain;
+}
+
+export interface Focus {
+  /** The case reasons to draw: `caseChain`. */
+  chain: Link[];
+  /** Token indices of the selected word's head and dependents. */
+  linked: Set<number>;
+  /** The token causing the selected word's case, as the text marks it. */
+  trigger: number | null;
+}
+
+export function focusOn(sentence: Sentence, selected: ReadonlySet<number>): Focus {
+  const linked = new Set<number>();
+  for (const { from, to } of sentence.dependencies) {
+    if (selected.has(to.index)) linked.add(from.index);
+    if (selected.has(from.index)) linked.add(to.index);
+  }
+  for (const index of selected) linked.delete(index);
+  const trigger = sentence.cases.find((c) => selected.has(c.to.index))?.from.index ?? null;
+  return { chain: caseChain(sentence, selected), linked, trigger };
+}
+
+/** A word as a screen reader says it: "cię, pronoun, object of cenić, accusative". */
+export function spokenLabel(word: Word): string {
+  const role = word.head ? `${word.relation} of ${word.head.token.text}` : word.relation;
+  return [word.token.text, word.pos, role, word.caseName].filter(Boolean).join(", ");
 }
 
 /** The tokens of the clause around `index` when the sentence is long: the nearest clause
@@ -158,44 +225,7 @@ function subtree(tokens: Token[], top: number): Set<number> {
   return inside;
 }
 
-function stack(spans: Span[]): Arc[] {
-  // Shorter arcs first, so an arc goes above every arc it spans or crosses
-  const sorted = [...spans].sort((a, b) => a.right - a.left - (b.right - b.left) || a.left - b.left);
-  const levelled: (Span & { level: number })[] = [];
-  for (const s of sorted) {
-    let below = 0;
-    for (const arc of levelled) {
-      if (arc.left < s.right && arc.right > s.left) below = Math.max(below, arc.level);
-    }
-    levelled.push({ ...s, level: below + 1 });
-  }
-
-  // At each word, arcs to the left leave on its left and arcs to the right on its right,
-  // and the shorter an arc the nearer its side it leaves, so the longer, higher arcs pass
-  // outside it and no two cross at the word.
-  const ends = new Map<number, { arc: number; other: number; leftward: boolean }[]>();
-  levelled.forEach((arc, i) => {
-    // Token order is word order, so the other end is the far side of the span
-    const [fromOther, toOther] = arc.from < arc.to ? [arc.right, arc.left] : [arc.left, arc.right];
-    for (const [at, other, leftward] of [
-      [arc.from, fromOther, arc.to < arc.from],
-      [arc.to, toOther, arc.from < arc.to],
-    ] as const) {
-      const list = ends.get(at) ?? [];
-      list.push({ arc: i, other, leftward });
-      ends.set(at, list);
-    }
-  });
-  const slot = (at: number, arc: number): Slot => {
-    const list = [...(ends.get(at) ?? [])].sort(
-      (a, b) => Number(b.leftward) - Number(a.leftward) || b.other - a.other,
-    );
-    return { rank: list.findIndex((e) => e.arc === arc), count: list.length };
-  };
-  return levelled.map((arc, i) => ({ ...arc, fromSlot: slot(arc.from, i), toSlot: slot(arc.to, i) }));
-}
-
-// A relation as a noun for the arc's label; `roleLabel` in ud.ts phrases it for the sheet
+// A relation as a noun for the diagram; `roleLabel` in ud.ts phrases it for the sheet
 const RELATION: Partial<Record<string, string>> = {
   nsubj: "subject",
   csubj: "subject clause",
@@ -244,8 +274,8 @@ export function relationName(deprel: Deprel | null): string {
   return RELATION[deprel] ?? RELATION[deprel.split(":")[0] ?? ""] ?? deprel;
 }
 
-// What the word at an arc's start does to the case of the word at its end. Rules without
-// a trigger (vocative, instrumental) have no arc.
+// What the word at a case link's start does to the case of the word at its end. Rules
+// without a trigger (vocative, instrumental) have no link.
 const RULE: Record<CaseRule, string> = {
   vocative: "addressed",
   preposition: "preposition",
@@ -263,18 +293,3 @@ const RULE: Record<CaseRule, string> = {
   "verbal-noun": "verbal noun",
   instrumental: "instrumental",
 };
-
-/** The case arcs explaining the selected word, stacked on their own: its own, and the
- * case of the word it agrees with or is listed with, as the sheet's "Why …?" follows one
- * step (lang/pl/cases.ts). */
-export function caseChain(cases: Arc[], selected: ReadonlySet<number>): Arc[] {
-  const chain = new Set<Arc>();
-  for (const arc of cases) {
-    if (!selected.has(arc.to)) continue;
-    chain.add(arc);
-    if (arc.raw !== "agreement" && arc.raw !== "coordination") continue;
-    const next = cases.find((c) => c.to === arc.from);
-    if (next) chain.add(next);
-  }
-  return stack([...chain]);
-}

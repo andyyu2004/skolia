@@ -1264,6 +1264,7 @@ label.check {
 
 /* A wide halo, so lines crossing a label stop short of its letters */
 .tree .arc text {
+  dominant-baseline: central;
   fill: var(--muted);
   font-family: var(--ui);
   paint-order: stroke;

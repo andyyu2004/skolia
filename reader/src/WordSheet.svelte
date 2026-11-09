@@ -19,11 +19,10 @@
   import { paradigmTables } from "@skolia/shared/paradigm";
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
   import ParadigmTable from "./ParadigmTable.svelte";
-  import SentenceTree from "./SentenceTree.svelte";
-  import SentenceColumn from "./SentenceColumn.svelte";
+  import SentenceDiagram from "./SentenceDiagram.svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { sheet, type SheetView } from "./lib/sheet.svelte.ts";
-  import { clauseOf } from "@skolia/shared/tree";
+  import { clauseOf, parseSentence } from "@skolia/shared/tree";
 
   type WordPiece = Extract<Piece, { kind: "word" }>;
 
@@ -63,7 +62,6 @@
 
   /** Too narrow for a diagram read left to right: it's turned to read top to bottom */
   const narrow = new MediaQuery("max-width: 599px");
-  const Diagram = $derived(narrow.current ? SentenceColumn : SentenceTree);
 
   const VIEWS = [
     ["word", "Word"],
@@ -229,13 +227,15 @@
         >
       </div>
     </div>
-    <Diagram
+    <SentenceDiagram
       {lang}
-      layout={sheet.layout}
-      {tokens}
-      keep={clause && !sheet.whole ? clause : undefined}
-      cases={language.cases}
-      partOfWord={language.partOfWord}
+      sentence={parseSentence(tokens, {
+        keep: clause && !sheet.whole ? clause : undefined,
+        cases: language.cases,
+        partOfWord: language.partOfWord,
+      })}
+      shape={sheet.layout}
+      direction={narrow.current ? "down" : "across"}
       selected={selectedTokens}
       onselect={(index) => onselectToken(sentence, index)}
     />
