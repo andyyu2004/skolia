@@ -1,7 +1,7 @@
 // Screenshots of the reader's pages against a mocked API (screenshots/api.ts), to see
 // what a change does to how they look. Fonts render differently on each OS, so the
-// screenshots are taken in Playwright's Linux image: just screenshots, or
-// just screenshots --update-snapshots to accept a change. The reader is built first.
+// screenshots are taken in Playwright's Linux image: just screenshot, or
+// just screenshot --update-snapshots to accept a change. The reader is built first.
 import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({

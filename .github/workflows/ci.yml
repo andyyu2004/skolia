@@ -50,7 +50,7 @@ jobs:
       - run: just check
       - run: just test
 
-  # The reader's pages against their baselines (just screenshots), on arm64 like the
+  # The reader's pages against their baselines (just screenshot), on arm64 like the
   # Docker image on a Mac that takes them. A failure's expected, actual and diff images
   # are in its screenshots artifact.
   screenshots:
@@ -61,7 +61,7 @@ jobs:
         with:
           lfs: true
       - uses: ./.github/actions/setup
-      - run: just screenshots
+      - run: just screenshot
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
