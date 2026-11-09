@@ -259,7 +259,7 @@
           >
         {/each}
       {/snippet}
-      {#if sheet.view === "word" && (word.said.length > 0 || word.lemmaSaid.length > 0)}
+      {#if word.said.length > 0 || word.lemmaSaid.length > 0}
         <p class="pronunciation">
           {#each word.said as p (p.ipa)}
             <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
@@ -292,7 +292,7 @@
         </p>
       {/if}
 
-      {#if sheet.view === "word" && word.partOfWord === null}
+      {#if word.partOfWord === null}
         {#if word.senses.length > 0}
           <ol class="senses">
             {#each allSenses ? word.senses : word.senses.slice(0, SHOWN_SENSES) as { sense, fits }, i (i)}
