@@ -1,11 +1,13 @@
-// Where the reader was in each text: the character offset at the top of the screen. Signed
-// in, it's kept with the user's cards (/api/me/positions); signed out, in this browser.
+// Where the reader was in each text: the word at the top of the screen, by sentence and
+// token index as a link's w= has it. Signed in, it's kept with the user's cards
+// (/api/me/positions); signed out, in this browser.
 import { getPosition, putPosition } from "./api.ts";
+import { formatWord, parseWord, type WordKey } from "./link.ts";
 
 export interface Positions {
   /** Where the reader was, or null for the start. */
-  readonly saved: number | null;
-  save(offset: number, keepalive: boolean): Promise<void>;
+  readonly saved: WordKey | null;
+  save(word: WordKey, keepalive: boolean): Promise<void>;
 }
 
 /** Wait this long after scrolling stops before saving. */
@@ -13,20 +15,19 @@ export const SAVE_AFTER_MS = 3000;
 
 const key = (id: string): string => `skolia:position:${id}`;
 
-/** The offset stored in the browser, or null when there's none or it isn't one. Storage
+/** The word stored in the browser, or null when there's none or it isn't one. Storage
  * can be missing or throw, in a private window or with site data blocked. */
-export function readLocal(storage: Storage | undefined, id: string): number | null {
+export function readLocal(storage: Storage | undefined, id: string): WordKey | null {
   try {
-    const offset: unknown = JSON.parse(storage?.getItem(key(id)) ?? "null");
-    return Number.isInteger(offset) && Number(offset) >= 0 ? Number(offset) : null;
+    return parseWord(storage?.getItem(key(id)) ?? null);
   } catch {
     return null;
   }
 }
 
-export function writeLocal(storage: Storage | undefined, id: string, offset: number): void {
+export function writeLocal(storage: Storage | undefined, id: string, word: WordKey): void {
   try {
-    storage?.setItem(key(id), JSON.stringify(offset));
+    storage?.setItem(key(id), formatWord(word));
   } catch {
     // Full or blocked: the position just isn't kept
   }
@@ -44,82 +45,40 @@ function browserStorage(): Storage | undefined {
 export async function positionsOf(id: string, storage = browserStorage()): Promise<Positions> {
   const remote = await getPosition(id);
   if (remote === undefined) {
-    return { saved: readLocal(storage, id), save: async (offset) => writeLocal(storage, id, offset) };
+    return { saved: readLocal(storage, id), save: async (word) => writeLocal(storage, id, word) };
   }
   return {
-    saved: remote?.offset ?? null,
-    save: (offset, keepalive) => putPosition(id, { offset, at: new Date().toISOString() }, keepalive),
+    saved: remote && [remote.sentence, remote.token],
+    save: ([sentence, token], keepalive) => putPosition(id, { sentence, token, at: new Date().toISOString() }, keepalive),
   };
 }
 
-/** The start of the sentence holding the offset, so a text reopens at a sentence's start. */
-export function sentenceStart(sentences: readonly { readonly start: number }[], offset: number): number {
-  return sentences.reduce((found, s) => (s.start <= offset && s.start > found ? s.start : found), 0);
+/** The text's word pieces' elements, in piece id order (Layout.words): each is a span,
+ * .w or .punct. */
+export function wordElements(root: ParentNode): readonly HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>(":scope > .w, :scope > .punct")];
 }
 
-interface TextNode {
-  readonly node: Text;
-  /** Its first character's offset in the root's text. */
-  readonly start: number;
-}
-
-function textNodes(root: Node): readonly TextNode[] {
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const nodes: TextNode[] = [];
-  let start = 0;
-  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-    const text = node as Text;
-    nodes.push({ node: text, start });
-    start += text.length;
-  }
-  return nodes;
-}
-
-/** Where the character at the offset is drawn, or null for one that isn't (a line break). */
-function charRect(nodes: readonly TextNode[], offset: number): DOMRect | null {
-  const found = nodes.findLast((n) => n.start <= offset);
-  if (!found || offset - found.start >= found.node.length) return null;
-  const range = document.createRange();
-  range.setStart(found.node, offset - found.start);
-  range.setEnd(found.node, offset - found.start + 1);
-  return [...range.getClientRects()].find((r) => r.height > 0) ?? null;
-}
-
-/** The first drawn character at or after the offset, and where it's drawn. */
-function drawnFrom(nodes: readonly TextNode[], offset: number, length: number): { offset: number; rect: DOMRect } | null {
-  for (let o = offset; o < length; o++) {
-    const rect = charRect(nodes, o);
-    if (rect) return { offset: o, rect };
-  }
-  return null;
-}
-
-/** The offset of the first character on a line that ends below `top`, a y in the
- * viewport: the text at the top of the screen. The root's text is the document's, so its
- * offsets are the text's. */
-export function offsetAt(root: Node, top: number): number {
-  const nodes = textNodes(root);
-  const length = root.textContent?.length ?? 0;
-  let [lo, hi] = [0, length];
+/** The index of the first element on a line that ends below `top`, a y in the viewport:
+ * the word at the top of the screen. */
+export function firstBelow(elements: readonly Element[], top: number): number {
+  let [lo, hi] = [0, elements.length];
   while (lo < hi) {
     const mid = Math.floor((lo + hi) / 2);
-    const drawn = drawnFrom(nodes, mid, length);
-    if (!drawn || drawn.rect.bottom > top) hi = mid;
-    else lo = drawn.offset + 1;
+    if ((elements[mid]?.getBoundingClientRect().bottom ?? Infinity) > top) hi = mid;
+    else lo = mid + 1;
   }
-  return Math.min(lo, Math.max(0, length - 1));
+  return Math.min(lo, elements.length - 1);
 }
 
-/** Whether the line with the offset is on screen, when there's no need to go to it. */
-export function onScreen(root: Node, offset: number): boolean {
-  const drawn = drawnFrom(textNodes(root), offset, root.textContent?.length ?? 0);
-  return drawn !== null && drawn.rect.top >= 0 && drawn.rect.bottom <= window.innerHeight;
+export function onScreen(element: Element): boolean {
+  const { top, bottom } = element.getBoundingClientRect();
+  return top >= 0 && bottom <= window.innerHeight;
 }
 
-/** Scrolls the window so the line with the offset is at `top`, a y in the viewport. */
-export function scrollToOffset(root: Node, offset: number, top: number): void {
-  const drawn = drawnFrom(textNodes(root), offset, root.textContent?.length ?? 0);
-  if (drawn) window.scrollBy({ top: drawn.rect.top - top, behavior: "instant" });
+/** Scrolls the window so the element's line is at `top`, a y in the viewport. */
+export function scrollToTop(element: Element, top: number): void {
+  window.scrollBy({ top: element.getBoundingClientRect().top - top, behavior: "instant" });
 }
 
 /** The start of the text from the offset, up to about `length` characters, cut at a space. */

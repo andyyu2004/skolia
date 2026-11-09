@@ -9,9 +9,9 @@
   import EditDocument from "./EditDocument.svelte";
   import WordSheet from "./WordSheet.svelte";
   import { sheet } from "../../lib/sheet.svelte.ts";
-  import { readLink, writeLink } from "../../lib/link.ts";
+  import { readLink, writeLink, type WordKey } from "../../lib/link.ts";
   import { onDestroy, tick, untrack } from "svelte";
-  import { SAVE_AFTER_MS, offsetAt, onScreen, positionsOf, scrollToOffset, sentenceStart, snippet, type Positions } from "../../lib/position.ts";
+  import { SAVE_AFTER_MS, firstBelow, onScreen, positionsOf, scrollToTop, snippet, wordElements, type Positions } from "../../lib/position.ts";
   import type { ReaderMode } from "../../lib/mode.ts";
   import { words as known } from "../../lib/words.svelte.ts";
 
@@ -159,13 +159,13 @@
   let article = $state<HTMLElement | undefined>();
   /** Where the reader was in this text and how to save it; null if that couldn't be loaded. */
   let positions = $state<Positions | null | undefined>(undefined);
-  /** The offset last saved, or loaded: 0, the start, if there's none. */
-  let savedOffset: number | null = null;
-  /** Whether the saved position has been offered. Nothing is saved before, or the top of
-   * the text, where it opens, would replace it. */
+  /** The sentence last saved, or loaded: 0, the start, if there's none. */
+  let savedSentence: number | null = null;
+  /** Whether the saved position has been offered, once the analysis is in. Nothing is
+   * saved before, or the top of the text, where it opens, would replace it. */
   let restored = false;
-  /** The saved position, offered until the reader goes there or closes the offer. */
-  let resume = $state<number | null>(null);
+  /** The saved word, offered until the reader goes there or closes the offer. */
+  let resume = $state<WordKey | null>(null);
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   const MEASURE_EVERY_MS = 200;
 
@@ -174,7 +174,7 @@
     positionsOf(id).then(
       (loaded) => {
         if (cancelled) return;
-        savedOffset = loaded.saved ?? 0;
+        savedSentence = loaded.saved?.[0] ?? 0;
         positions = loaded;
       },
       () => {
@@ -191,16 +191,21 @@
     return Math.max(0, document.querySelector("header")?.getBoundingClientRect().bottom ?? 0);
   }
 
-  // Once the text is shown, offer to go back to where the reader was, unless that's on
+  function elementOf(word: WordKey): HTMLElement | undefined {
+    const piece = doc?.pieceOf.get(tokenKey(...word));
+    return piece === undefined || !article ? undefined : wordElements(article)[piece];
+  }
+
+  // Once the analysis is shown, offer to go back to where the reader was, unless that's on
   // screen already or the address links a word
   $effect(() => {
-    if (restored || positions === undefined || !article) return;
+    if (restored || positions === undefined || !doc || !article) return;
     restored = true;
-    const offset = positions?.saved ?? null;
-    if (offset === null || readLink(location.hash, id)) return;
-    const root = article;
+    const word = positions?.saved ?? null;
+    if (word === null || readLink(location.hash, id)) return;
     void tick().then(() => {
-      if (!onScreen(root, offset)) resume = offset;
+      const element = elementOf(word);
+      if (element && !onScreen(element)) resume = word;
     });
   });
 
@@ -215,38 +220,40 @@
 
   /** Goes to the saved position, once the offer is gone, so the text doesn't move after. */
   async function continueReading(): Promise<void> {
-    const offset = resume;
+    const word = resume;
     resume = null;
     await tick();
-    if (offset !== null && article) scrollToOffset(article, offset, topOfText());
+    const element = word && elementOf(word);
+    if (element) scrollToTop(element, topOfText());
   }
 
-  /** Where the top of the screen was at the last scroll, to save. */
+  /** The sentence at the top of the screen at the last scroll, to save. */
   let pending: number | null = null;
   let measuring = false;
 
   function measure(): void {
     measuring = false;
-    if (!article?.isConnected) return;
-    const top = offsetAt(article, topOfText());
-    pending = reading ? sentenceStart(reading.analysis.sentences, top) : top;
+    if (!doc || !article?.isConnected) return;
+    const piece = doc.words[firstBelow(wordElements(article), topOfText())];
+    pending = piece?.words[0]?.sentence ?? null;
   }
 
+  /** Saves the start of the sentence at the top of the screen. */
   function savePosition(keepalive: boolean): void {
     clearTimeout(saveTimer);
     saveTimer = undefined;
-    const offset = pending;
-    if (!positions || offset === null || offset === savedOffset) return;
+    const sentence = pending;
+    if (!positions || sentence === null || sentence === savedSentence) return;
     // While Continue is offered, the saved place stands, unless the reader reads on past it
     if (resume !== null) {
-      if (offset <= resume) return;
+      if (sentence <= resume[0]) return;
       void dropOffer();
     }
-    const previous = savedOffset;
-    savedOffset = offset;
-    positions.save(offset, keepalive).catch(() => {
+    const previous = savedSentence;
+    savedSentence = sentence;
+    positions.save([sentence, 0], keepalive).catch(() => {
       // Offline: try again after the next scroll
-      if (savedOffset === offset) savedOffset = previous;
+      if (savedSentence === sentence) savedSentence = previous;
     });
   }
 
@@ -334,10 +341,10 @@
         {/if}
       </p>
       {#if resume !== null}
-        {@const text = reading?.text ?? plain}
+        {@const start = reading?.analysis.sentences[resume[0]]?.tokens[resume[1]]?.start}
         <p class="continue">
           <Button variant="quiet" small onclick={() => void continueReading()}>Continue reading</Button>
-          {#if text}<span class="from">{snippet(text, resume)}</span>{/if}
+          {#if reading && start !== undefined}<span class="from">{snippet(reading.text, start)}</span>{/if}
           <Button variant="icon" aria-label="Close" onclick={() => (resume = null)}>
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
           </Button>

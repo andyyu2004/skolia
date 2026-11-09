@@ -158,16 +158,18 @@ export class User extends DurableObject<object> {
   }
 
   position(documentId: DocumentId): StoredPosition | null {
-    const row = this.sql.exec(`SELECT "offset", at FROM reading_position WHERE document_id = ?`, documentId).toArray()[0];
-    return row === undefined ? null : { offset: Number(row["offset"]), at: schemas.Timestamp.parse(row["at"]) };
+    const row = this.sql.exec(`SELECT sentence, token, at FROM reading_position WHERE document_id = ?`, documentId).toArray()[0];
+    return row === undefined ? null : { sentence: Number(row["sentence"]), token: Number(row["token"]), at: schemas.Timestamp.parse(row["at"]) };
   }
 
-  setPosition(documentId: DocumentId, { offset, at }: StoredPosition): void {
+  setPosition(documentId: DocumentId, { sentence, token, at }: StoredPosition): void {
     this.sql.exec(
-      `INSERT INTO reading_position (document_id, "offset", at) VALUES (?, ?, ?)
-       ON CONFLICT (document_id) DO UPDATE SET "offset" = excluded."offset", at = excluded.at WHERE excluded.at > reading_position.at`,
+      `INSERT INTO reading_position (document_id, sentence, token, at) VALUES (?, ?, ?, ?)
+       ON CONFLICT (document_id) DO UPDATE SET sentence = excluded.sentence, token = excluded.token, at = excluded.at
+       WHERE excluded.at > reading_position.at`,
       documentId,
-      offset,
+      sentence,
+      token,
       at,
     );
   }
