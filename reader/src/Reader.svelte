@@ -10,6 +10,8 @@
   import { sheet } from "./lib/sheet.svelte.ts";
   import { readLink, writeLink } from "./lib/link.ts";
   import { tick, untrack } from "svelte";
+  import { defaultMode, rememberMode, type ReaderMode } from "./lib/mode.ts";
+  import { words as known } from "./lib/words.svelte.ts";
 
   let { id }: { id: string } = $props();
 
@@ -20,6 +22,7 @@
   let error = $state<string | null>(null);
   let selected = $state<number | null>(null);
   let editing = $state(false);
+  let mode = $state<ReaderMode>(defaultMode());
 
   const notice = $derived(noticeFor(summary, reading !== null, error));
 
@@ -111,6 +114,16 @@
     event.preventDefault();
   }
 
+  const MODES: { mode: ReaderMode; label: string; help: string }[] = [
+    { mode: "reading", label: "Reading", help: "Tapping a word shows it; add it to your cards from its sheet" },
+    { mode: "learning", label: "Learning", help: "Tapping a word you haven't marked adds it to your cards" },
+  ];
+
+  function change(next: ReaderMode): void {
+    mode = next;
+    rememberMode(next);
+  }
+
   function headText(sentence: number, index: number): string | null {
     const id = doc?.pieceOf.get(tokenKey(sentence, index));
     return id === undefined ? null : (doc?.words[id]?.text ?? null);
@@ -159,12 +172,23 @@
       {@const licence = LICENCE_INFO[summary.licence]}
       <div class="title-row">
         <h1>{summary.title}</h1>
-        {#if summary.mine}
-          <button type="button" class="quiet small with-icon" onclick={() => (editing = true)}>
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 2.5 13.5 5 6 12.5 3 13l.5-3z" /></svg>
-            Edit
-          </button>
-        {/if}
+        <div class="title-actions">
+          {#if known.byId}
+            <div class="mode" role="group" aria-label="Mode">
+              {#each MODES as m (m.mode)}
+                <button type="button" aria-pressed={mode === m.mode} title={m.help} onclick={() => change(m.mode)}
+                  >{m.label}</button
+                >
+              {/each}
+            </div>
+          {/if}
+          {#if summary.mine}
+            <button type="button" class="quiet small with-icon" onclick={() => (editing = true)}>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 2.5 13.5 5 6 12.5 3 13l.5-3z" /></svg>
+              Edit
+            </button>
+          {/if}
+        </div>
       </div>
       <p class="credit muted small">
         {#if summary.author}<span>{summary.author}</span>{/if}
@@ -237,6 +261,7 @@
       lang={reading.lang}
       bundle={reading.bundle}
       {piece}
+      {mode}
       {headText}
       {sentenceTokens}
       onselectToken={(sentence, index) => (selected = doc?.pieceOf.get(tokenKey(sentence, index)) ?? selected)}

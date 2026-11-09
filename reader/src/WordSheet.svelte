@@ -16,6 +16,7 @@
   import type { Recording } from "@skolia/shared/schema";
   import { LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
   import { setStatus, words as known } from "./lib/words.svelte.ts";
+  import type { ReaderMode } from "./lib/mode.ts";
   import { paradigmTables } from "@skolia/shared/paradigm";
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
   import ParadigmTable from "./ParadigmTable.svelte";
@@ -30,6 +31,7 @@
     lang,
     bundle,
     piece,
+    mode,
     headText,
     sentenceTokens,
     onselectToken,
@@ -39,6 +41,7 @@
     lang: Lang;
     bundle: Bundle;
     piece: WordPiece;
+    mode: ReaderMode;
     headText: (sentence: number, index: number) => string | null;
     sentenceTokens: (sentence: number) => Token[];
     onselectToken: (sentence: number, index: number) => void;
@@ -149,27 +152,28 @@
     return a.toLocaleLowerCase() === b.toLocaleLowerCase();
   }
 
-  /** Not added on a tap: names, numbers and symbols aren't vocabulary. */
+  /** Not offered for your cards: names, numbers and symbols aren't vocabulary. */
   const UNLEARNABLE: ReadonlySet<string> = new Set(["PROPN", "NUM", "SYM", "PUNCT", "X"]);
+
+  function learnable(w: (typeof words)[number]): w is (typeof words)[number] & { lemmaId: LemmaId } {
+    return w.lemmaId !== null && w.partOfWord === null && !UNLEARNABLE.has(w.ref.token.upos);
+  }
 
   /** The last failure to add a word, by lemma id. */
   let statusError = $state<{ lemmaId: LemmaId; message: string } | null>(null);
 
+  /** Being added from the sheet's button. */
+  let adding = $state<LemmaId | null>(null);
+
   /** Tried in this sheet: a failed save shows its error rather than being retried. */
   const tried = new Set<LemmaId>();
 
-  /** A word you tap and have never marked goes into your cards; Known while reviewing
-   * takes it out. */
+  /** In learning mode a word you tap and have never marked goes into your cards; Known
+   * while reviewing takes it out. In reading mode the sheet's button adds it. */
   $effect(() => {
-    if (!known.byId) return;
+    if (!known.byId || mode !== "learning") return;
     const fresh = words.flatMap((w) =>
-      w.lemmaId &&
-      w.partOfWord === null &&
-      !UNLEARNABLE.has(w.ref.token.upos) &&
-      known.byId?.[w.lemmaId] === undefined &&
-      !tried.has(w.lemmaId)
-        ? [w.lemmaId]
-        : [],
+      learnable(w) && known.byId?.[w.lemmaId] === undefined && !tried.has(w.lemmaId) ? [w.lemmaId] : [],
     );
     for (const lemmaId of fresh) tried.add(lemmaId);
     untrack(() => {
@@ -185,6 +189,13 @@
     } catch (e: unknown) {
       statusError = { lemmaId, message: `Couldn't add it to your cards: ${e instanceof Error ? e.message : String(e)}` };
     }
+  }
+
+  async function add(lemmaId: LemmaId): Promise<void> {
+    adding = lemmaId;
+    statusError = null;
+    await learn(lemmaId);
+    adding = null;
   }
 </script>
 
@@ -277,6 +288,19 @@
           <span class="lemma">(<span {lang}>{word.entry?.lemma ?? token.lemma}</span>)</span>
         {/if}
       </h2>
+      {#if known.byId && learnable(word)}
+        {@const status = known.byId[word.lemmaId]?.status}
+        {#if status === "active"}
+          <p class="in-cards muted small">In your cards</p>
+        {:else if status === undefined && mode === "reading"}
+          <button
+            type="button"
+            class="quiet small add-card"
+            disabled={adding === word.lemmaId}
+            onclick={() => void add(word.lemmaId)}>Add to cards</button
+          >
+        {/if}
+      {/if}
       {#if word.lemmaId && statusError?.lemmaId === word.lemmaId}
         <p class="error" role="alert">{statusError.message}</p>
       {/if}

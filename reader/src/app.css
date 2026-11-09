@@ -739,6 +739,54 @@ label.check {
   flex-shrink: 0;
 }
 
+.title-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Reading or learning: two buttons joined, the current one filled */
+.mode {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.mode button {
+  padding: 0.2rem 0.7rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.mode button:hover {
+  color: var(--text);
+}
+
+.mode button[aria-pressed="true"] {
+  background: var(--current);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.mode button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.word .add-card {
+  margin: 0.25rem 0;
+}
+
+.word .in-cards {
+  margin: 0.2rem 0;
+}
+
 .modal {
   width: min(34rem, calc(100vw - 2 * var(--gutter)));
   max-height: calc(100dvh - 2 * var(--gutter));
