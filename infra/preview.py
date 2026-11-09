@@ -27,7 +27,7 @@ type JsonObject = dict[str, Json]
 API = Path(__file__).resolve().parent.parent / "api"
 # The end-to-end tests take one per language, so ten deploys a day
 MAX_IMPORTS_PER_DAY = "20"
-# A preview's only jobs are its deploy's (the end-to-end tests, then the seed), so its
+# A preview's only jobs are its deploy's (the end-to-end tests, then the curated sync), so its
 # containers needn't wait long for more
 PREVIEW_SLEEP_AFTER = "10s"
 

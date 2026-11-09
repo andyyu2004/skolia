@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local end to end: wrangler dev with both Workers, the ingest containers and empty local
 # D1, R2 and queue, each language's lexicon sample (as a preview has) loaded, then the
-# end-to-end tests (src/e2e.ts) and the seed (src/seed.ts, twice: the second run must find
+# end-to-end tests (src/e2e.ts) and the curated texts' sync (src/sync-curated.ts, twice: the second run must find
 # nothing to do) against it. Needs Docker, the reader build, the ingest images (just images)
 # and data/lexicon/{lang}.cards.sqlite (just cards-local). Port 8787 must be free: api/.env
 # points the containers at it.
@@ -45,14 +45,14 @@ until curl -fs -o /dev/null "http://localhost:$port/api/documents"; do
   sleep 2
 done
 
-E2E_API_KEY=$(openssl rand -hex 32) E2E_USER_KEY=$(openssl rand -hex 32) SEED_API_KEY=$(openssl rand -hex 32)
-export E2E_API_KEY E2E_USER_KEY SEED_API_KEY
+E2E_API_KEY=$(openssl rand -hex 32) E2E_USER_KEY=$(openssl rand -hex 32) SYNC_CURATED_API_KEY=$(openssl rand -hex 32)
+export E2E_API_KEY E2E_USER_KEY SYNC_CURATED_API_KEY
 node src/e2e-keys.ts > "$state/e2e-keys.sql"
-node src/seed-key.ts > "$state/seed-key.sql"
+node src/sync-curated-key.ts > "$state/sync-curated-key.sql"
 d1 execute DB --file "$state/e2e-keys.sql"
-d1 execute DB --file "$state/seed-key.sql"
+d1 execute DB --file "$state/sync-curated-key.sql"
 
 # wrangler dev serves version "dev" (define in wrangler.jsonc)
 node src/e2e.ts "http://localhost:$port" dev || { echo "end-to-end tests failed; see api/$log" >&2; exit 1; }
-node src/seed.ts "http://localhost:$port" ../texts || { echo "seed failed; see api/$log" >&2; exit 1; }
-node src/seed.ts "http://localhost:$port" ../texts --check || { echo "seed left changes; see api/$log" >&2; exit 1; }
+node src/sync-curated.ts "http://localhost:$port" ../curated || { echo "sync-curated failed; see api/$log" >&2; exit 1; }
+node src/sync-curated.ts "http://localhost:$port" ../curated --check || { echo "sync-curated left changes; see api/$log" >&2; exit 1; }

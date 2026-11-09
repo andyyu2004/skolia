@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { insertKeySql } from "./api-keys.ts";
 import { API_KEY_HEADER, NO_AUTH, createAuth } from "./auth.ts";
 import { SYSTEM_USER, e2eKeysSql } from "./e2e-keys.ts";
-import { CURATED_USER, seedKeySql } from "./seed-key.ts";
+import { CURATED_USER, syncCuratedKeySql } from "./sync-curated-key.ts";
 import { ALICE, TEXT, client, importText, importer, local, setup, useLocal } from "./testing/app.ts";
 import { ORIGIN, authConfig } from "./testing/harness.ts";
-import { body } from "./testing/responses.ts";
+import { body, expectStatus } from "./testing/responses.ts";
 
 useLocal();
 
@@ -91,13 +92,21 @@ async function whoIs(app: ReturnType<typeof setup>, key: string): Promise<string
   return ((await me.json()) as { id: string }).id;
 }
 
-test("the seed's key signs in the curated user, a system user; new end-to-end keys leave it", async () => {
+test("sync-curated's key signs in the curated user, a system user; new end-to-end keys leave it", async () => {
   const app = setup();
-  const seed = "56".repeat(32);
-  await local.env.DB.batch(seedKeySql(seed, "2026-11-04T00:00:00.000Z").map((q) => local.env.DB.prepare(q)));
+  const key = "56".repeat(32);
+  await local.env.DB.batch(syncCuratedKeySql(key, "2026-11-04T00:00:00.000Z").map((q) => local.env.DB.prepare(q)));
   await local.env.DB.batch(e2eKeysSql({ system: "ab".repeat(32), user: "12".repeat(32) }, "2026-11-05T00:00:00.000Z").map((q) => local.env.DB.prepare(q)));
-  const me = await body("me", client(app, new Headers({ [API_KEY_HEADER]: seed })).me.$get());
+  const me = await body("me", client(app, new Headers({ [API_KEY_HEADER]: key })).me.$get());
   assert.deepEqual([me.id, me.type], [CURATED_USER, "system"]);
+});
+
+test("a new sync-curated key deletes the key it had when it was the seed's", async () => {
+  const app = setup();
+  const old = "78".repeat(32);
+  await local.env.DB.prepare(insertKeySql("seed", CURATED_USER, old, "2026-11-04T00:00:00.000Z")).run();
+  await local.env.DB.batch(syncCuratedKeySql("56".repeat(32), "2026-11-10T00:00:00.000Z").map((q) => local.env.DB.prepare(q)));
+  await expectStatus("me with the old key", client(app, new Headers({ [API_KEY_HEADER]: old })).me.$get(), 401);
 });
 
 test("signed-in users can't make API keys", async () => {

@@ -1,11 +1,11 @@
-// Makes the curated user's documents match texts/: imports each text there publicly,
+// Makes the curated user's documents match curated/: imports each text there publicly,
 // updates the title, licence, author or source of those already imported, and deletes the
 // curated user's documents that aren't there any more. A document's id is its text's hash,
 // so an edited text is a new document and the old one is deleted. With --check, only
 // lists what it would do, and fails if that's anything.
-// texts/{lang}/{name}.txt: "key: value" lines (title and licence; author and source if
+// curated/{lang}/{name}.txt: "key: value" lines (title and licence; author and source if
 // known), a line "---", then the text.
-// usage: SEED_API_KEY=<key> node src/seed.ts <base url> <texts dir> [--check]
+// usage: SYNC_CURATED_API_KEY=<key> node src/sync-curated.ts <base url> <texts dir> [--check]
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { hc } from "hono/client";
@@ -135,9 +135,9 @@ export async function sync(api: Api, texts: readonly Curated[], { check = false,
 
 async function main(): Promise<void> {
   const [, , url, dir, flag] = process.argv;
-  const key = process.env["SEED_API_KEY"];
+  const key = process.env["SYNC_CURATED_API_KEY"];
   if (!url || !dir || !key || (flag !== undefined && flag !== "--check")) {
-    console.error("usage: SEED_API_KEY=<key> node src/seed.ts <base url> <texts dir> [--check]");
+    console.error("usage: SYNC_CURATED_API_KEY=<key> node src/sync-curated.ts <base url> <texts dir> [--check]");
     process.exit(2);
   }
   const api = hc<AppType>(url.replace(/\/$/u, ""), { headers: { [API_KEY_HEADER]: key } }).api;

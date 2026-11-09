@@ -1,4 +1,4 @@
-// API keys written straight to D1, for scripts that call the API (e2e-keys.ts, seed-key.ts).
+// API keys written straight to D1, for scripts that call the API (e2e-keys.ts, sync-curated-key.ts).
 // A key is stored as Better Auth's API key plugin stores it (SHA-256, base64url, unpadded).
 import { createHash } from "node:crypto";
 

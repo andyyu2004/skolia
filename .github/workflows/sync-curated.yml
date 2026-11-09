@@ -1,8 +1,8 @@
-name: Seed
+name: Sync curated
 
-# Only the curated texts in texts/ (just seed), for a run that changes nothing else
+# Only the curated texts in curated/ (just sync-curated), for a run that changes nothing else
 # (.github/changes.py), so it doesn't need a deploy. Shares deploy-web's concurrency group,
-# so it waits for a deploy in progress, which seeds too. With if-deployed, an environment
+# so it waits for a deploy in progress, which syncs too. With if-deployed, an environment
 # whose Worker isn't there (a pull request that never had a preview) is skipped.
 
 on:
@@ -23,7 +23,7 @@ env:
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
 jobs:
-  seed:
+  sync-curated:
     runs-on: ubuntu-24.04
     environment: ${{ startsWith(inputs.env, 'pr-') && 'preview' || inputs.env }}
     concurrency:
@@ -41,7 +41,7 @@ jobs:
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/skolia-${{ inputs.env }}/settings")
           case $status in
             200) echo "yes=true" >> "$GITHUB_OUTPUT" ;;
-            404) echo "yes=false" >> "$GITHUB_OUTPUT"; echo "no skolia-${{ inputs.env }} Worker, so nothing to seed" ;;
+            404) echo "yes=false" >> "$GITHUB_OUTPUT"; echo "no skolia-${{ inputs.env }} Worker, so nothing to sync" ;;
             *) echo "couldn't tell whether skolia-${{ inputs.env }} is deployed: HTTP $status" >&2; exit 1 ;;
           esac
       - if: steps.deployed.outputs.yes == 'true'
@@ -49,4 +49,4 @@ jobs:
       - if: steps.deployed.outputs.yes == 'true'
         uses: ./.github/actions/setup
       - if: steps.deployed.outputs.yes == 'true'
-        run: just seed ${{ inputs.env }}
+        run: just sync-curated ${{ inputs.env }}
