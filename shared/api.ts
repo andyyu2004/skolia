@@ -290,7 +290,7 @@ export interface Reviewed {
 }
 
 /** standard: someone who signed in. system: skolia.io's own accounts, the end-to-end
- * tests' importer and the seed's, whose imports are outside the daily import cap. */
+ * tests' importer and the curated texts', whose imports are outside the daily import cap. */
 export const USER_TYPES = ["standard", "system"] as const;
 export type UserType = (typeof USER_TYPES)[number];
 

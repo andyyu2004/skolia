@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { docId } from "@skolia/shared/keys";
-import { parseCurated, sync, type Change } from "./seed.ts";
-import { CURATED_USER } from "./seed-key.ts";
+import { parseCurated, sync, type Change } from "./sync-curated.ts";
+import { CURATED_USER } from "./sync-curated-key.ts";
 import { client, listed, local, setup, useLocal } from "./testing/app.ts";
 
 useLocal();
@@ -26,7 +26,7 @@ test("a text file is its header, a --- line and the text", async () => {
   await assert.rejects(parseCurated("pl/a.txt", "pl", "title: A\nlicence: cc0\nyear: 1834\n---\nText."), /pl\/a.txt/);
 });
 
-test("the seed imports, updates and deletes until the curated user's documents match the texts", async () => {
+test("the sync imports, updates and deletes until the curated user's documents match the texts", async () => {
   const app = setup();
   const api = client(app, await local.signIn(CURATED_USER));
   const log = () => {};

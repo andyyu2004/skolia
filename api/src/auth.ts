@@ -15,7 +15,7 @@ export interface AuthConfig {
 }
 
 /** The header an API key is sent in. Keys are made only by writing them to D1
- * (e2e-keys.ts, seed-key.ts), for the end-to-end tests and the seed. */
+ * (e2e-keys.ts, sync-curated-key.ts), for the end-to-end tests and just sync-curated. */
 export const API_KEY_HEADER = "x-api-key";
 
 /** The API key plugin's routes, for making and managing keys as a signed-in user. Nobody

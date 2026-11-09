@@ -46,7 +46,7 @@ Closing the pull request tears the preview down (`just teardown pr-N`, `infra/te
 
 ### Container usage
 
-`infra/container-usage.py [--since DATE] [--until DATE]` prints the containers' memory use (GiB-seconds, what Cloudflare bills; 25 GiB-hours a month are free) per environment and per day, by default for this month. Torn-down previews show as `deleted`. Most of it is deploys': each one's end-to-end tests and seed start a container per language, which stays up `SLEEP_AFTER` (`api/src/worker/ingest.ts`) once idle.
+`infra/container-usage.py [--since DATE] [--until DATE]` prints the containers' memory use (GiB-seconds, what Cloudflare bills; 25 GiB-hours a month are free) per environment and per day, by default for this month. Torn-down previews show as `deleted`. Most of it is deploys': each one's end-to-end tests and curated sync start a container per language, which stays up `SLEEP_AFTER` (`api/src/worker/ingest.ts`) once idle.
 
 ## Credentials
 
@@ -61,7 +61,7 @@ set -x AWS_SECRET_ACCESS_KEY (pass show $p/skolia-tfstate-secret-access-key)
 
 ## Deploy
 
-A push to main deploys staging and runs the end-to-end tests against it (`api/src/e2e.ts`), through the API: in each language it imports a new text and waits until it's ready, and meanwhile checks auth, both languages' lexicon entries, and a new user's cards (add a word, review it, mark it known). Production deploys are tested the same way. It writes two API keys to D1 first (`api/src/e2e-keys.ts`): the system user's, which imports privately, so its two texts per deploy stay out of the library (a system user's imports are outside the day's import cap); and a new user's, `e2e-<time>`, whose cards start empty (the last run's user is deleted). `deploy-web` waits for `load-lexicon`, since the journeys read the lexicon. Then `just seed <env>` makes the library's curated texts match `texts/`: it imports them publicly as the curated user, a system user, with its own key (`api/src/seed-key.ts`), updates their titles and licences, and deletes the curated user's texts that are no longer there (`just seed <env> --check` lists what it would do). Pushing a `v*` tag on a commit in main deploys staging, then production once staging passes (`git tag v0.1.0 && git push origin v0.1.0`; `.github/workflows/ci.yml`, `deploy.yml`). The ingest Worker is deployed before the skolia Worker, since it consumes the queue the skolia Worker feeds: an API that sends a new kind of job never goes live before the ingest that handles it. Rolling back goes the other way: the skolia Worker first. Every deploy runs `deploy-ingest`: each language's image (`skolia-ingest-{lang}`) is tagged with its Nix hash, so it's built and pushed only when that tag isn't in the registry yet, and wrangler leaves an unchanged image deployed as it is. Pull requests get a `terraform plan` for staging and production (Terraform's resources only, not the Workers). GitHub needs:
+A push to main deploys staging and runs the end-to-end tests against it (`api/src/e2e.ts`), through the API: in each language it imports a new text and waits until it's ready, and meanwhile checks auth, both languages' lexicon entries, and a new user's cards (add a word, review it, mark it known). Production deploys are tested the same way. It writes two API keys to D1 first (`api/src/e2e-keys.ts`): the system user's, which imports privately, so its two texts per deploy stay out of the library (a system user's imports are outside the day's import cap); and a new user's, `e2e-<time>`, whose cards start empty (the last run's user is deleted). `deploy-web` waits for `load-lexicon`, since the journeys read the lexicon. Then `just sync-curated <env>` makes the library's curated texts match `texts/`: it imports them publicly as the curated user, a system user, with its own key (`api/src/sync-curated-key.ts`), updates their titles and licences, and deletes the curated user's texts that are no longer there (`just sync-curated <env> --check` lists what it would do). Pushing a `v*` tag on a commit in main deploys staging, then production once staging passes (`git tag v0.1.0 && git push origin v0.1.0`; `.github/workflows/ci.yml`, `deploy.yml`). The ingest Worker is deployed before the skolia Worker, since it consumes the queue the skolia Worker feeds: an API that sends a new kind of job never goes live before the ingest that handles it. Rolling back goes the other way: the skolia Worker first. Every deploy runs `deploy-ingest`: each language's image (`skolia-ingest-{lang}`) is tagged with its Nix hash, so it's built and pushed only when that tag isn't in the registry yet, and wrangler leaves an unchanged image deployed as it is. Pull requests get a `terraform plan` for staging and production (Terraform's resources only, not the Workers). GitHub needs:
 
 - variable `CLOUDFLARE_ACCOUNT_ID`
 - secrets `CLOUDFLARE_API_TOKEN` (the Terraform token above), `TFSTATE_ACCESS_KEY_ID`, `TFSTATE_SECRET_ACCESS_KEY`, `ALERT_EMAIL`, `CACHIX_AUTH_TOKEN`
@@ -71,14 +71,14 @@ A push to main deploys staging and runs the end-to-end tests against it (`api/sr
 Not every change deploys. CI's `changes` job (`.github/changes.py`) sorts a run by the files it changes, into three outputs:
 
 - `deploy`: false only if every file is content, meaning `texts/`, `docs/` or Markdown, none of which goes into a build. CI then skips `check`, the screenshots, image builds, plans and deploys. A tag, a manual run, or a push it can't compare with its parent always deploys.
-- `texts`: true if a curated text in `texts/` changed, a subset of content. With `deploy` false, CI checks only that the texts parse (`check-texts`, `api/src/texts.test.ts`) and runs `just seed` (`.github/workflows/seed.yml`): against staging on a push to main, and against a pull request's preview if an earlier push deployed one. Production gets them at the next tag.
+- `curated`: true if a curated text in `texts/` changed, a subset of content. With `deploy` false, CI checks only that the texts parse (`check-texts`, `api/src/texts.test.ts`) and runs `just sync-curated` (`.github/workflows/sync-curated.yml`): against staging on a push to main, and against a pull request's preview if an earlier push deployed one. Production gets them at the next tag.
 - `infra`: true if something a Terraform plan reads changed (`infra/`, the flake, the justfile, `.github/`). Pull requests run `plan-infra` only then.
 
-| Change | `deploy` | `texts` | Runs |
+| Change | `deploy` | `curated` | Runs |
 |---|---|---|---|
-| curated texts only | false | true | check-texts, seed |
+| curated texts only | false | true | check-texts, sync-curated |
 | docs or Markdown only | false | false | nothing but `changes` and `mergeable` |
-| texts and code | true | true | everything (the deploy seeds) |
+| texts and code | true | true | everything (the deploy syncs) |
 | code | true | false | everything; `plan-infra` only if `infra` |
 
 `check` is a required check and a skipped job counts as passing, so `mergeable` fails when `check` should have run and didn't pass, or when `check-texts` failed.

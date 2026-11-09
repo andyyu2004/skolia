@@ -10,7 +10,7 @@ name: CI
 # infra/deploy-ingest.sh, so a deploy by hand runs the same commands.
 # A pull request, merge group or push to main that only changes content (curated texts, docs,
 # Markdown; .github/changes.py) skips check, the screenshots, the image builds, the plans and
-# the deploys. If texts changed, it checks they parse (check-texts) and runs just the seed:
+# the deploys. If texts changed, it checks they parse (check-texts) and runs just sync-curated:
 # against staging on a push to main, and against the pull request's preview if an earlier
 # push deployed one. The plans run only when something they read changed.
 
@@ -30,13 +30,13 @@ env:
   CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
 
 jobs:
-  # deploy, texts and infra, from the files the run changes (.github/changes.py)
+  # deploy, curated and infra, from the files the run changes (.github/changes.py)
   changes:
     if: github.event.action != 'closed'
     runs-on: ubuntu-24.04
     outputs:
       deploy: ${{ steps.changes.outputs.deploy }}
-      texts: ${{ steps.changes.outputs.texts }}
+      curated: ${{ steps.changes.outputs.curated }}
       infra: ${{ steps.changes.outputs.infra }}
     steps:
       - uses: actions/checkout@v7
@@ -77,7 +77,7 @@ jobs:
   # In place of check, for a run that only changes content, some of it curated texts: that
   # they parse (api/src/texts.test.ts), which needs no build. A docs-only run checks nothing.
   check-texts:
-    if: github.event.action != 'closed' && needs.changes.outputs.deploy == 'false' && needs.changes.outputs.texts == 'true'
+    if: github.event.action != 'closed' && needs.changes.outputs.deploy == 'false' && needs.changes.outputs.curated == 'true'
     needs: changes
     runs-on: ubuntu-24.04
     steps:
@@ -187,16 +187,16 @@ jobs:
   # skips this, which counts as passing; check itself is required too.
   mergeable:
     if: always() && (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository))
-    needs: [changes, check, check-texts, deploy-preview, seed-preview]
+    needs: [changes, check, check-texts, deploy-preview, sync-curated-preview]
     runs-on: ubuntu-24.04
     steps:
       - if: needs.check-texts.result == 'failure'
         run: |
           echo "a curated text doesn't parse" >&2
           exit 1
-      - if: github.event_name == 'pull_request' && needs.seed-preview.result == 'failure'
+      - if: github.event_name == 'pull_request' && needs.sync-curated-preview.result == 'failure'
         run: |
-          echo "seeding the preview failed" >&2
+          echo "syncing the curated texts to the preview failed" >&2
           exit 1
       # A skipped check counts as passing, so a run that should check must have
       - if: needs.changes.result != 'success'
@@ -212,15 +212,15 @@ jobs:
           echo "the preview's deploy or end-to-end tests didn't pass: ${{ needs.deploy-preview.result }}" >&2
           exit 1
 
-  # A pull request that only changes content, some of it curated texts: seeds its preview
-  # if an earlier push deployed one (deploy-preview seeds a preview it deploys)
-  seed-preview:
-    if: needs.changes.outputs.deploy == 'false' && needs.changes.outputs.texts == 'true' && github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+  # A pull request that only changes content, some of it curated texts: syncs them to its
+  # preview if an earlier push deployed one (deploy-preview syncs a preview it deploys)
+  sync-curated-preview:
+    if: needs.changes.outputs.deploy == 'false' && needs.changes.outputs.curated == 'true' && github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     needs: [changes, check-texts]
     concurrency:
       group: preview-pr-${{ github.event.number }}
       cancel-in-progress: false
-    uses: ./.github/workflows/seed.yml
+    uses: ./.github/workflows/sync-curated.yml
     with:
       env: pr-${{ github.event.number }}
       if-deployed: true
@@ -254,11 +254,11 @@ jobs:
     secrets: inherit
 
   # A push to main that only changes content, some of it curated texts. A tag always
-  # deploys (deploy-staging), which seeds.
-  seed-staging:
-    if: needs.changes.outputs.deploy == 'false' && needs.changes.outputs.texts == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+  # deploys (deploy-staging), which syncs them.
+  sync-curated-staging:
+    if: needs.changes.outputs.deploy == 'false' && needs.changes.outputs.curated == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [changes, check-texts]
-    uses: ./.github/workflows/seed.yml
+    uses: ./.github/workflows/sync-curated.yml
     with:
       env: staging
     secrets: inherit

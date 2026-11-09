@@ -2,7 +2,7 @@ name: Deploy
 
 # One environment: Terraform and migrations; then the ingest Worker with the images
 # ci.yml's build-ingest-image pushed; then the skolia Worker (reader and API), the
-# end-to-end tests and the curated texts in texts/ (just seed). The ingest Worker consumes
+# end-to-end tests and the curated texts in texts/ (just sync-curated). The ingest Worker consumes
 # the queue the skolia Worker feeds, so it goes
 # first. Called by ci.yml, after the images are built. wrangler leaves an unchanged image
 # as it is. The lexicon loads beside them, after the migrations; it's skipped when D1
@@ -100,5 +100,5 @@ jobs:
       - run: just deploy-web ${{ inputs.env }}
       - name: End-to-end tests
         run: just e2e ${{ inputs.env }}
-      - name: Seed the curated texts
-        run: just seed ${{ inputs.env }}
+      - name: Sync the curated texts
+        run: just sync-curated ${{ inputs.env }}

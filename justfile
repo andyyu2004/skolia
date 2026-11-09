@@ -38,21 +38,21 @@ build:
     pnpm --dir api exec wrangler deploy --dry-run --outdir dist --env=''
 
 # wrangler dev (both Workers, the ingest container, local D1/R2/queue) and the reader's Vite server,
-# with the curated texts in texts/ seeded once the API is up
+# with the curated texts in texts/ synced once the API is up
 [parallel]
-dev: dev-api dev-reader dev-seed
+dev: dev-api dev-reader dev-sync-curated
 
-# Waits up to 30 minutes for wrangler dev (dev-api builds the ingest images first), then just seed local
-dev-seed:
+# Waits up to 30 minutes for wrangler dev (dev-api builds the ingest images first), then just sync-curated local
+dev-sync-curated:
     #!/usr/bin/env bash
     set -euo pipefail
     for _ in $(seq 900); do
       if curl -fs -o /dev/null http://localhost:8787/api/documents; then
-        exec just seed local
+        exec just sync-curated local
       fi
       sleep 2
     done
-    echo "wrangler dev didn't come up on :8787; not seeding" >&2
+    echo "wrangler dev didn't come up on :8787; not syncing" >&2
     exit 1
 
 # migrations apply has no flag to skip its confirmation; without a TTY on stdin it doesn't ask
@@ -186,16 +186,16 @@ e2e env="local":
     just d1-sql {{ env }} api/src/e2e-keys.ts
     node api/src/e2e.ts "$url" "$(git describe --tags --always --dirty)"
 
-# Make the curated user's documents match texts/ (api/src/seed.ts); with --check, only list what that takes.
-# Writes a new API key for the curated user to the environment's D1 first (api/src/seed-key.ts).
-seed env *flags:
+# Make the curated user's documents match texts/ (api/src/sync-curated.ts); with --check, only list what that takes.
+# Writes a new API key for the curated user to the environment's D1 first (api/src/sync-curated-key.ts).
+sync-curated env *flags:
     #!/usr/bin/env bash
     set -euo pipefail
     url=$(just url {{ env }})
-    SEED_API_KEY=$(openssl rand -hex 32)
-    export SEED_API_KEY
-    just d1-sql {{ env }} api/src/seed-key.ts
-    node api/src/seed.ts "$url" texts {{ flags }}
+    SYNC_CURATED_API_KEY=$(openssl rand -hex 32)
+    export SYNC_CURATED_API_KEY
+    just d1-sql {{ env }} api/src/sync-curated-key.ts
+    node api/src/sync-curated.ts "$url" texts {{ flags }}
 
 # The environment's URL
 [private]
