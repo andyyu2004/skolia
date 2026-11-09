@@ -9,7 +9,7 @@ test("leaves out punctuation and builds the tree from the main word", () => {
     sentence.words.map((w) => [w.form, w.root, w.depth, w.relation, w.caseName]),
     [
       ["Kot", false, 1, "subject", "nominative"],
-      ["je", true, 0, "main word", null],
+      ["je", true, 0, null, null],
       ["małą", false, 2, "adjective", "accusative"],
       ["rybę", false, 1, "object", "accusative"],
     ],
@@ -93,7 +93,7 @@ test("focus marks the selected word's head and dependents and what causes its ca
 test("a word is spoken with its relation to its head", () => {
   const sentence = parseSentence(SENTENCE);
   assert.equal(spokenLabel(sentence.words[3]!), "rybę, noun, object of je, accusative");
-  assert.equal(spokenLabel(sentence.words[1]!), "je, verb, main word");
+  assert.equal(spokenLabel(sentence.words[1]!), "je, verb");
 });
 
 // Widzę , że kot je małą rybę . : "że kot je małą rybę" is a clause of widzę

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { fitted, layout, stack, type Diagram, type LayoutOptions, type Point } from "./diagram.ts";
+import { fitted, labels, layout, stack, type Diagram, type LayoutOptions, type Point } from "./diagram.ts";
 import { caseChain, parseSentence, type Sentence } from "./tree.ts";
 import { SENTENCE, token } from "./tree.fixtures.ts";
 
@@ -162,4 +162,11 @@ test("a sentence reads across when it roughly fits its space, and down when it's
   // A little sideways scrolling is fine
   assert.equal(fit(across.width / 1.4).anchor, "middle");
   assert.equal(fit(across.width / 2).anchor, "start");
+});
+
+test("the root has no relation, so it shows its part of speech where others show theirs", () => {
+  const je = parseSentence(SENTENCE).words[1]!;
+  const texts = (lines: ReturnType<typeof labels>) => lines.map((line) => line.map((run) => run.text).join(""));
+  assert.deepEqual(texts(labels(je, "tree", "across")), ["je", "verb"]);
+  assert.deepEqual(texts(labels(je, "arcs", "down")), ["je", "verb"]);
 });
