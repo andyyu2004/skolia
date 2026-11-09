@@ -3,9 +3,18 @@
 // sentence drawn as a tree, whole. Only what differs from the defaults is written.
 import type { SentenceLayout, SheetView } from "./sheet.svelte.ts";
 
+/** A token by sentence and token index, as w= writes it: 3.12. */
+export type WordKey = readonly [number, number];
+
+export const formatWord = (word: WordKey): string => word.join(".");
+
+export function parseWord(value: string | null): WordKey | null {
+  const match = /^(\d+)\.(\d+)$/.exec(value ?? "");
+  return match ? [Number(match[1]), Number(match[2])] : null;
+}
+
 export interface WordLink {
-  /** Sentence and token index */
-  readonly word: readonly [number, number];
+  readonly word: WordKey;
   readonly view: SheetView;
   readonly layout: SentenceLayout;
   readonly whole: boolean;
@@ -16,7 +25,7 @@ export function writeLink(link: WordLink | null): string {
   if (!link) return "";
   const sentence = link.view === "sentence";
   const entries: readonly (readonly [string, string])[] = [
-    ["w", link.word.join(".")],
+    ["w", formatWord(link.word)],
     ...(sentence ? [["view", "sentence"] as const] : []),
     ...(sentence && link.layout === "tree" ? [["draw", "tree"] as const] : []),
     ...(sentence && link.whole ? [["whole", "1"] as const] : []),
@@ -29,11 +38,11 @@ export function readLink(hash: string, id: string): WordLink | null {
   const prefix = `#/doc/${id}?`;
   if (!hash.startsWith(prefix)) return null;
   const query = new URLSearchParams(hash.slice(prefix.length));
-  const match = /^(\d+)\.(\d+)$/.exec(query.get("w") ?? "");
-  if (!match) return null;
+  const word = parseWord(query.get("w"));
+  if (!word) return null;
   const sentence = view(query.get("view"));
   return {
-    word: [Number(match[1]), Number(match[2])],
+    word,
     view: sentence,
     layout: sentence === "sentence" && query.get("draw") === "tree" ? "tree" : "arcs",
     whole: sentence === "sentence" && query.get("whole") === "1",

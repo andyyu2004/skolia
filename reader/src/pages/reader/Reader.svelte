@@ -9,8 +9,9 @@
   import EditDocument from "./EditDocument.svelte";
   import WordSheet from "./WordSheet.svelte";
   import { sheet } from "../../lib/sheet.svelte.ts";
-  import { readLink, writeLink } from "../../lib/link.ts";
-  import { tick, untrack } from "svelte";
+  import { readLink, writeLink, type WordKey } from "../../lib/link.ts";
+  import { onDestroy, tick, untrack } from "svelte";
+  import { SAVE_AFTER_MS, firstBelow, onScreen, positionsOf, scrollToTop, snippet, wordElements, type Positions } from "../../lib/position.ts";
   import type { ReaderMode } from "../../lib/mode.ts";
   import { words as known } from "../../lib/words.svelte.ts";
 
@@ -154,9 +155,130 @@
     const hash = `#/doc/${id}${query}`;
     if (hash !== location.hash) history.replaceState(history.state, "", hash);
   });
+
+  let article = $state<HTMLElement | undefined>();
+  /** Where the reader was in this text and how to save it; null if that couldn't be loaded. */
+  let positions = $state<Positions | null | undefined>(undefined);
+  /** The sentence last saved, or loaded: 0, the start, if there's none. */
+  let savedSentence: number | null = null;
+  /** Whether the saved position has been offered, once the analysis is in. Nothing is
+   * saved before, or the top of the text, where it opens, would replace it. */
+  let restored = false;
+  /** The saved word, offered until the reader goes there or closes the offer. */
+  let resume = $state<WordKey | null>(null);
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  const MEASURE_EVERY_MS = 200;
+
+  $effect(() => {
+    let cancelled = false;
+    positionsOf(id).then(
+      (loaded) => {
+        if (cancelled) return;
+        savedSentence = loaded.saved?.[0] ?? 0;
+        positions = loaded;
+      },
+      () => {
+        if (!cancelled) positions = null;
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  /** Below the sticky header: where the top of the screen's text is. */
+  function topOfText(): number {
+    return Math.max(0, document.querySelector("header")?.getBoundingClientRect().bottom ?? 0);
+  }
+
+  function elementOf(word: WordKey): HTMLElement | undefined {
+    const piece = doc?.pieceOf.get(tokenKey(...word));
+    return piece === undefined || !article ? undefined : wordElements(article)[piece];
+  }
+
+  // Once the analysis is shown, offer to go back to where the reader was, unless that's on
+  // screen already or the address links a word
+  $effect(() => {
+    if (restored || positions === undefined || !doc || !article) return;
+    restored = true;
+    const word = positions?.saved ?? null;
+    if (word === null || readLink(location.hash, id)) return;
+    void tick().then(() => {
+      const element = elementOf(word);
+      if (element && !onScreen(element)) resume = word;
+    });
+  });
+
+  /** Removes the offer without moving the text on screen, which is below it. */
+  async function dropOffer(): Promise<void> {
+    const before = article?.getBoundingClientRect().top;
+    resume = null;
+    await tick();
+    const after = article?.getBoundingClientRect().top;
+    if (before !== undefined && after !== undefined && window.scrollY > 0) window.scrollBy({ top: after - before, behavior: "instant" });
+  }
+
+  /** Goes to the saved position, once the offer is gone, so the text doesn't move after. */
+  async function continueReading(): Promise<void> {
+    const word = resume;
+    resume = null;
+    await tick();
+    const element = word && elementOf(word);
+    if (element) scrollToTop(element, topOfText());
+  }
+
+  /** The sentence at the top of the screen at the last scroll, to save. */
+  let pending: number | null = null;
+  let measuring = false;
+
+  function measure(): void {
+    measuring = false;
+    if (!doc || !article?.isConnected) return;
+    const piece = doc.words[firstBelow(wordElements(article), topOfText())];
+    pending = piece?.words[0]?.sentence ?? null;
+  }
+
+  /** Saves the start of the sentence at the top of the screen. */
+  function savePosition(keepalive: boolean): void {
+    clearTimeout(saveTimer);
+    saveTimer = undefined;
+    const sentence = pending;
+    if (!positions || sentence === null || sentence === savedSentence) return;
+    // While Continue is offered, the saved place stands, unless the reader reads on past it
+    if (resume !== null) {
+      if (sentence <= resume[0]) return;
+      void dropOffer();
+    }
+    const previous = savedSentence;
+    savedSentence = sentence;
+    positions.save([sentence, 0], keepalive).catch(() => {
+      // Offline: try again after the next scroll
+      if (savedSentence === sentence) savedSentence = previous;
+    });
+  }
+
+  function onscroll(): void {
+    if (!restored) return;
+    if (!measuring) {
+      measuring = true;
+      setTimeout(measure, MEASURE_EVERY_MS);
+    }
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => savePosition(false), SAVE_AFTER_MS);
+  }
+
+  // Switching tabs, locking the phone and closing the page all hide it first
+  function onvisibilitychange(): void {
+    if (document.visibilityState === "hidden" && saveTimer !== undefined) savePosition(true);
+  }
+
+  onDestroy(() => {
+    if (saveTimer !== undefined) savePosition(true);
+  });
 </script>
 
-<svelte:window {onkeydown} onhashchange={followLink} />
+<svelte:window {onkeydown} {onscroll} onhashchange={followLink} />
+<svelte:document {onvisibilitychange} />
 
 <div
   class={["reader", { "sheet-open": piece !== undefined, "sentence-open": piece !== undefined && sheet.view === "sentence" }]}
@@ -218,6 +340,16 @@
           <em class="processing">Analysing</em>
         {/if}
       </p>
+      {#if resume !== null}
+        {@const start = reading?.analysis.sentences[resume[0]]?.tokens[resume[1]]?.start}
+        <p class="continue">
+          <Button variant="quiet" small onclick={() => void continueReading()}>Continue reading</Button>
+          {#if reading && start !== undefined}<span class="from">{snippet(reading.text, start)}</span>{/if}
+          <Button variant="icon" aria-label="Close" onclick={() => (resume = null)}>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+          </Button>
+        </p>
+      {/if}
       {#if editing}
         <EditDocument
           {summary}
@@ -240,7 +372,7 @@
     {/if}
 
     {#if doc}
-      <article class="text" lang={reading?.lang}>
+      <article class="text" lang={reading?.lang} bind:this={article}>
         {#each doc.pieces as p, i (i)}
           <!-- Words are spans, not buttons: a button is laid out as an inline block, so a
                line could break between a word and the punctuation after it -->
@@ -262,7 +394,7 @@
         <footer>{reading.bundle.attribution}</footer>
       {/if}
     {:else if plain !== null}
-      <article class="text" lang={summary?.lang}>{plain}</article>
+      <article class="text" lang={summary?.lang} bind:this={article}>{plain}</article>
     {/if}
   </main>
 
@@ -384,6 +516,28 @@
     margin: -0.5rem 0 1rem;
     color: var(--muted);
     font-size: 0.8rem;
+  }
+
+  .continue {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 1rem;
+    padding: 0.4rem 0.4rem 0.4rem 0.5rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+  }
+
+  .from {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 0.85rem;
+    font-style: italic;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .credit span + span::before {

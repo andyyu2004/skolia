@@ -1,6 +1,7 @@
 # Notes for Claude
 
 - Open items and follow-ups go in git-bug (`git bug bug`, `git bug bug new --non-interactive -t … -m …`), as the current identity. Bugs are local refs: don't `git bug push` unless asked. A running `git bug webui` holds the lock; ask rather than stop it.
+- Start each piece of work in a new git worktree, `~/dev/skolia-<name>` beside this checkout (`git worktree add ../skolia-<name> -b <branch> origin/main`), never in this checkout.
 - main moves quickly. Fetch and branch from `origin/main`, and rebase before pushing more work onto an open PR.
 - API tests call the typed client: `client(app, headers)` (src/testing/app.ts) with `body()` and `expectStatus()` (src/testing/responses.ts). `raw()` is only for requests the client can't express, such as malformed JSON.
 - Users have a `type`, `standard` or `system` (migration 0006). System users skip the daily import cap and don't count toward it: `system` is the e2e tests' importer (src/e2e-keys.ts), `curated` the seed's (src/seed-key.ts). Each script replaces only its own API key id.

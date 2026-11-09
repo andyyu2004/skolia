@@ -65,6 +65,13 @@ export const ReviewRequest = z.object({
 });
 
 /** The start of the reader's day, for counting today's new cards in its time zone. */
+const Index = z.number().int().min(0).max(MAX_TEXT_LENGTH);
+
+/** Where a reader was in a text: the word at the top of their screen, by sentence and
+ * token index in its analysis, and when they were there, so an older position doesn't
+ * replace a newer one. */
+export const ReadingPosition = z.object({ sentence: Index, token: Index, at: IsoTime });
+
 export const CountsQuery = z.object({ dayStart: IsoTime });
 export const DueQuery = z.object({ lang: Lang, dayStart: IsoTime });
 

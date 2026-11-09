@@ -25,7 +25,7 @@ import { NO_CONTENT, fail, ok, type Failed, type NoContent, type Ok } from "./re
 /** Most cards one due list has: a session's worth. */
 const MAX_DUE = 200;
 /** How far ahead of the server's clock a review's time may be. */
-const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+export const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 export async function words(deps: Deps, user: User): Promise<Ok<Word[]>> {
   return ok(await deps.users.words(user.id));
