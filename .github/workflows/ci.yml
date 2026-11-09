@@ -3,11 +3,16 @@ name: CI
 # Every push and pull request, and each merge group in main's merge queue: checks and
 # tests (the check job, which the queue requires). Pull requests: a plan per environment,
 # and a preview environment, pr-<number>, deployed and end-to-end tested on each push and torn
-# down when the pull request closes (sweep.yml catches any left); the e2e job gates
-# merging on it.
+# down when the pull request closes (sweep.yml catches any left); the mergeable job
+# gates merging on it.
 # main: deploy staging and end-to-end test it. A v* tag on a commit in main: staging, then production. The ingest
 # images are built once, before any deploy. The steps are just recipes (justfile) and
 # infra/deploy-ingest.sh, so a deploy by hand runs the same commands.
+# A pull request, merge group or push to main that only changes content (curated texts, docs,
+# Markdown; .github/changes.py) skips check, the screenshots, the image builds, the plans and
+# the deploys. If texts changed, it checks they parse (check-texts) and runs just the seed:
+# against staging on a push to main, and against the pull request's preview if an earlier
+# push deployed one. The plans run only when something they read changed.
 
 on:
   push:
@@ -25,8 +30,24 @@ env:
   CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
 
 jobs:
-  mirror-providers:
+  # deploy, texts and infra, from the files the run changes (.github/changes.py)
+  changes:
     if: github.event.action != 'closed'
+    runs-on: ubuntu-24.04
+    outputs:
+      deploy: ${{ steps.changes.outputs.deploy }}
+      texts: ${{ steps.changes.outputs.texts }}
+      infra: ${{ steps.changes.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: changes
+        run: python3 -I .github/changes.py "$GITHUB_EVENT_NAME" "$GITHUB_EVENT_PATH"
+
+  mirror-providers:
+    if: github.event.action != 'closed' && needs.changes.outputs.deploy == 'true'
+    needs: changes
     runs-on: ubuntu-24.04
     concurrency:
       group: mirror-providers
@@ -41,8 +62,8 @@ jobs:
         timeout-minutes: 10
 
   check:
-    if: github.event.action != 'closed'
-    needs: mirror-providers
+    if: github.event.action != 'closed' && needs.changes.outputs.deploy == 'true'
+    needs: [changes, mirror-providers]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -53,8 +74,26 @@ jobs:
   # The reader's pages against their baselines (just screenshot), on arm64 like the
   # Docker image on a Mac that takes them. A failure's expected, actual and diff images
   # are in its screenshots artifact.
+  # In place of check, for a run that only changes content, some of it curated texts: that
+  # they parse (api/src/texts.test.ts), which needs no build. A docs-only run checks nothing.
+  check-texts:
+    if: github.event.action != 'closed' && needs.changes.outputs.deploy == 'false' && needs.changes.outputs.texts == 'true'
+    needs: changes
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: node --test src/texts.test.ts
+        working-directory: api
+
   screenshots:
-    if: github.event.action != 'closed'
+    if: github.event.action != 'closed' && needs.changes.outputs.deploy == 'true'
+    needs: changes
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v7
@@ -75,9 +114,10 @@ jobs:
   # deploy-preview or deploy-staging does.
   build-ingest-image:
     if: >-
+      needs.changes.outputs.deploy == 'true' && (
       (github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository)
-      || (github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
-    needs: check
+      || (github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))))
+    needs: [check, changes]
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -103,9 +143,10 @@ jobs:
         env:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
+  # Only when something a plan reads changed (.github/changes.py)
   plan-infra:
-    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
-    needs: check
+    if: needs.changes.outputs.infra == 'true' && github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [check, changes]
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -128,8 +169,8 @@ jobs:
   # push waits for the last push's deploy instead of cancelling it part way; a pending
   # deploy is replaced by a newer one, or by the teardown.
   deploy-preview:
-    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
-    needs: build-ingest-image
+    if: needs.changes.outputs.deploy == 'true' && github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [changes, build-ingest-image]
     concurrency:
       group: preview-pr-${{ github.event.number }}
       cancel-in-progress: false
@@ -138,19 +179,52 @@ jobs:
       env: pr-${{ github.event.number }}
     secrets: inherit
 
-  # Required by main's ruleset, with check. On a pull request it passes only if the
-  # preview deployed and its end-to-end tests passed. A merge group can't have a preview, and its
-  # pull request's passed to get there, so there it passes. A fork's pull request gets no
-  # preview and skips this, which counts as passing.
-  e2e:
+  # Required by main's ruleset, with check. It fails if check should have run and didn't
+  # pass, or if check-texts failed. On a pull request it also needs the preview deployed
+  # and its end-to-end tests passed, unless the pull request only changes content, which
+  # gets no preview. A merge group can't have a preview, and its pull request's passed to
+  # get there, so there it needs only the checks. A fork's pull request gets no preview and
+  # skips this, which counts as passing; check itself is required too.
+  mergeable:
     if: always() && (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository))
-    needs: deploy-preview
+    needs: [changes, check, check-texts, deploy-preview, seed-preview]
     runs-on: ubuntu-24.04
     steps:
-      - if: github.event_name == 'pull_request' && needs.deploy-preview.result != 'success'
+      - if: needs.check-texts.result == 'failure'
+        run: |
+          echo "a curated text doesn't parse" >&2
+          exit 1
+      - if: github.event_name == 'pull_request' && needs.seed-preview.result == 'failure'
+        run: |
+          echo "seeding the preview failed" >&2
+          exit 1
+      # A skipped check counts as passing, so a run that should check must have
+      - if: needs.changes.result != 'success'
+        run: |
+          echo "couldn't tell what the run changes: ${{ needs.changes.result }}" >&2
+          exit 1
+      - if: needs.changes.outputs.deploy == 'true' && needs.check.result != 'success'
+        run: |
+          echo "check didn't pass: ${{ needs.check.result }}" >&2
+          exit 1
+      - if: github.event_name == 'pull_request' && needs.changes.outputs.deploy == 'true' && needs.deploy-preview.result != 'success'
         run: |
           echo "the preview's deploy or end-to-end tests didn't pass: ${{ needs.deploy-preview.result }}" >&2
           exit 1
+
+  # A pull request that only changes content, some of it curated texts: seeds its preview
+  # if an earlier push deployed one (deploy-preview seeds a preview it deploys)
+  seed-preview:
+    if: needs.changes.outputs.deploy == 'false' && needs.changes.outputs.texts == 'true' && github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [changes, check-texts]
+    concurrency:
+      group: preview-pr-${{ github.event.number }}
+      cancel-in-progress: false
+    uses: ./.github/workflows/seed.yml
+    with:
+      env: pr-${{ github.event.number }}
+      if-deployed: true
+    secrets: inherit
 
   teardown-preview:
     if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
@@ -172,9 +246,19 @@ jobs:
       - run: just teardown pr-${{ github.event.number }}
 
   deploy-staging:
-    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
-    needs: build-ingest-image
+    if: needs.changes.outputs.deploy == 'true' && github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: [changes, build-ingest-image]
     uses: ./.github/workflows/deploy.yml
+    with:
+      env: staging
+    secrets: inherit
+
+  # A push to main that only changes content, some of it curated texts. A tag always
+  # deploys (deploy-staging), which seeds.
+  seed-staging:
+    if: needs.changes.outputs.deploy == 'false' && needs.changes.outputs.texts == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [changes, check-texts]
+    uses: ./.github/workflows/seed.yml
     with:
       env: staging
     secrets: inherit

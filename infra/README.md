@@ -40,7 +40,7 @@ A new environment: add it to the checks in `tf.sh`, `wrangler.sh` and `deploy-in
 
 ### Previews
 
-Each pull request from a branch of this repository gets a preview, `pr-N`, deployed and end-to-end tested on every push (`ci.yml`, job `deploy-preview`). Merging needs it to pass (`ci.yml`, job `e2e`); a fork's pull request gets none and isn't held up. It is on workers.dev only, with no Google client, so only the end-to-end tests' API keys sign in, and it accepts 20 imports a day. Its wrangler configs are made by `infra/preview.py config pr-N` from the `env.staging` blocks, with `-pr-N` names, its workers.dev URL and ingest containers that sleep after 10 s idle; `deploy-infra` makes them after Terraform, and `wrangler.sh` when they're missing. They're gitignored.
+Each pull request from a branch of this repository gets a preview, `pr-N`, deployed and end-to-end tested on every push (`ci.yml`, job `deploy-preview`). Merging needs it to pass (`ci.yml`, job `mergeable`); a fork's pull request gets none and isn't held up, and nor does one that only changes content (curated texts, docs, Markdown; `.github/changes.py`). It is on workers.dev only, with no Google client, so only the end-to-end tests' API keys sign in, and it accepts 20 imports a day. Its wrangler configs are made by `infra/preview.py config pr-N` from the `env.staging` blocks, with `-pr-N` names, its workers.dev URL and ingest containers that sleep after 10 s idle; `deploy-infra` makes them after Terraform, and `wrangler.sh` when they're missing. They're gitignored.
 
 Closing the pull request tears the preview down (`just teardown pr-N`, `infra/teardown.sh`): the queue's consumer, the ingest Worker, its container applications (which `wrangler delete` leaves), the skolia Worker, the bucket's objects, `terraform destroy`, then the state object. Each step skips what's already gone, so it can be run again. Every night `sweep.yml` runs `infra/sweep.sh`, which finds previews by their resources' and state's names, tears down those whose pull request isn't open, and fails if any are left; `infra/sweep.sh -n` lists them without tearing them down.
 
@@ -68,9 +68,24 @@ A push to main deploys staging and runs the end-to-end tests against it (`api/sr
 - in the `staging` and `production` environments, secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (the OAuth clients above)
 - environments `staging`, `production` and `preview` (every pull request's)
 
+Not every change deploys. CI's `changes` job (`.github/changes.py`) sorts a run by the files it changes, into three outputs:
+
+- `deploy`: false only if every file is content, meaning `texts/`, `docs/` or Markdown, none of which goes into a build. CI then skips `check`, the screenshots, image builds, plans and deploys. A tag, a manual run, or a push it can't compare with its parent always deploys.
+- `texts`: true if a curated text in `texts/` changed, a subset of content. With `deploy` false, CI checks only that the texts parse (`check-texts`, `api/src/texts.test.ts`) and runs `just seed` (`.github/workflows/seed.yml`): against staging on a push to main, and against a pull request's preview if an earlier push deployed one. Production gets them at the next tag.
+- `infra`: true if something a Terraform plan reads changed (`infra/`, the flake, the justfile, `.github/`). Pull requests run `plan-infra` only then.
+
+| Change | `deploy` | `texts` | Runs |
+|---|---|---|---|
+| curated texts only | false | true | check-texts, seed |
+| docs or Markdown only | false | false | nothing but `changes` and `mergeable` |
+| texts and code | true | true | everything (the deploy seeds) |
+| code | true | false | everything; `plan-infra` only if `infra` |
+
+`check` is a required check and a skipped job counts as passing, so `mergeable` fails when `check` should have run and didn't pass, or when `check-texts` failed.
+
 CI installs Terraform's providers from the public R2 bucket `skolia-tf-providers` (`infra/providers.tf`, made with production) through `infra/terraformrc`, since the registry sends Terraform to GitHub's releases, which time out for unauthenticated requests at times. CI's `mirror-providers` job (`infra/mirror-providers.py`, also `just mirror-providers`) runs before `check` and adds whatever in `.terraform.lock.hcl` the mirror is missing, downloading GitHub's zips with a token; a zip whose hash isn't in the lock file is refused, and the lock file's hashes check what CI installs.
 
-These, and `main`'s ruleset (pull requests only, through a merge queue that requires CI's `check` and `e2e` jobs), are managed in Terraform in the dotfiles (`~/.dotfiles/terraform/github`), from `pass`.
+These, and `main`'s ruleset (pull requests only, through a merge queue that requires CI's `check` and `mergeable` jobs), are managed in Terraform in the dotfiles (`~/.dotfiles/terraform/github`), from `pass`.
 
 By hand, with the credentials above, the same tasks CI runs:
 
