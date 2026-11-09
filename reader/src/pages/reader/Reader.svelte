@@ -2,16 +2,17 @@
   import type { DocumentSummary, ReadingNames } from "@skolia/shared/api";
   import { LICENCE_INFO } from "@skolia/shared/api";
   import type { Token } from "@skolia/shared/schema";
-  import { getDocument, getText, loadReading, type Reading } from "./lib/api.ts";
+  import { getDocument, getText, loadReading, type Reading } from "../../lib/api.ts";
   import { layout, tokenKey, type Layout } from "@skolia/shared/doc";
-  import { afterPoll, notice as noticeFor, queueText, retryAfter } from "./lib/reading.ts";
+  import { afterPoll, notice as noticeFor, queueText, retryAfter } from "../../lib/reading.ts";
+  import Button from "../../components/Button.svelte";
   import EditDocument from "./EditDocument.svelte";
   import WordSheet from "./WordSheet.svelte";
-  import { sheet } from "./lib/sheet.svelte.ts";
-  import { readLink, writeLink } from "./lib/link.ts";
+  import { sheet } from "../../lib/sheet.svelte.ts";
+  import { readLink, writeLink } from "../../lib/link.ts";
   import { tick, untrack } from "svelte";
-  import type { ReaderMode } from "./lib/mode.ts";
-  import { words as known } from "./lib/words.svelte.ts";
+  import type { ReaderMode } from "../../lib/mode.ts";
+  import { words as known } from "../../lib/words.svelte.ts";
 
   let { id }: { id: string } = $props();
 
@@ -158,12 +159,10 @@
 <svelte:window {onkeydown} onhashchange={followLink} />
 
 <div
-  class="reader"
-  class:sheet-open={piece !== undefined}
-  class:sentence-open={piece !== undefined && sheet.view === "sentence"}
+  class={["reader", { "sheet-open": piece !== undefined, "sentence-open": piece !== undefined && sheet.view === "sentence" }]}
   style:--sheet-width={sheet.width[sheet.view] === null ? undefined : `${sheet.width[sheet.view]}px`}
 >
-  <main class="page">
+  <main>
     {#if summary}
       {@const licence = LICENCE_INFO[summary.licence]}
       <div class="title-row">
@@ -171,9 +170,10 @@
         <div class="title-actions">
           {#if known.byId}
             <div class="mode">
-              <button
-                type="button"
-                class="quiet small with-icon {mode}"
+              <Button
+                variant="quiet"
+                small
+                data-mode={mode}
                 aria-describedby="mode-help"
                 onclick={() => (mode = mode === "reading" ? "learning" : "reading")}
               >
@@ -188,7 +188,7 @@
                   >
                   Learning
                 {/if}
-              </button>
+              </Button>
               <span id="mode-help" role="tooltip" class="tip"
                 >{mode === "reading"
                   ? "Reading: tapping a word only shows it, and its sheet has an Add to cards button. Click for learning, where tapping a word you haven't marked adds it to your cards."
@@ -197,14 +197,14 @@
             </div>
           {/if}
           {#if summary.mine}
-            <button type="button" class="quiet small with-icon" onclick={() => (editing = true)}>
+            <Button variant="quiet" small onclick={() => (editing = true)}>
               <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 2.5 13.5 5 6 12.5 3 13l.5-3z" /></svg>
               Edit
-            </button>
+            </Button>
           {/if}
         </div>
       </div>
-      <p class="credit muted small">
+      <p class="credit">
         {#if summary.author}<span>{summary.author}</span>{/if}
         <span>
           {#if licence.url}<a href={licence.url} rel="license noreferrer">{licence.short}</a>{:else}{licence.short}{/if}
@@ -247,10 +247,7 @@
           {#if p.kind === "gap"}{p.text}{:else if p.punct}<span class="punct">{p.text}</span>{:else}<span
               role="button"
               tabindex="0"
-              class="w"
-              class:selected={p.id === selected}
-              class:head={p.id === headPiece}
-              class:trigger={p.id === triggerPiece}
+              class={["w", { selected: p.id === selected, head: p.id === headPiece, trigger: p.id === triggerPiece }]}
               onclick={() => toggle(p.id)}
               onkeydown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
@@ -262,7 +259,7 @@
         {/each}
       </article>
       {#if reading}
-        <footer class="attribution muted">{reading.bundle.attribution}</footer>
+        <footer>{reading.bundle.attribution}</footer>
       {/if}
     {:else if plain !== null}
       <article class="text" lang={summary?.lang}>{plain}</article>
@@ -283,3 +280,194 @@
     />
   {/if}
 </div>
+
+<!-- Phone first: the word sheet is a bottom sheet; above 900px it's a side panel. -->
+<style>
+  main {
+    max-width: 38rem;
+    margin: 0 auto;
+    padding: var(--gutter);
+  }
+
+  .sheet-open main {
+    /* keep the last lines reachable above the bottom sheet */
+    padding-bottom: 55vh;
+  }
+
+  @media (min-width: 900px) {
+    .reader {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) var(--sheet-width, 24rem);
+    }
+
+    /* A diagram needs more room than a dictionary entry */
+    .sentence-open {
+      grid-template-columns: minmax(0, 1fr) var(--sheet-width, minmax(24rem, 48vw));
+    }
+
+    .sheet-open main {
+      padding-bottom: var(--gutter);
+    }
+  }
+
+  .title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    margin: 0.5rem 0 1rem;
+  }
+
+  h1 {
+    margin: 0;
+  }
+
+  .title-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* Reading or learning: one button naming the mode, which switches it; what it does on hover
+     or keyboard focus */
+  .mode {
+    position: relative;
+  }
+
+  .mode :global(button[data-mode="reading"]) {
+    color: var(--muted);
+  }
+
+  .mode :global(button[data-mode="learning"]),
+  .mode :global(button[data-mode="learning"]:hover:not(:disabled)) {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .tip {
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    left: 0;
+    z-index: 5;
+    width: max-content;
+    max-width: min(16rem, calc(100vw - 2 * var(--gutter)));
+    padding: 0.5rem 0.65rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: var(--card-shadow);
+    color: var(--text);
+    font-size: 0.8rem;
+    line-height: 1.4;
+    pointer-events: none;
+    visibility: hidden;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .mode:hover .tip,
+  .mode:has(:global(button:focus-visible)) .tip {
+    visibility: visible;
+    opacity: 1;
+    transition-delay: 0.3s;
+  }
+
+  .credit {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 0.4rem;
+    margin: -0.5rem 0 1rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  .credit span + span::before {
+    content: "·";
+    margin-right: 0.4rem;
+  }
+
+  .processing {
+    font-style: normal;
+    margin-left: 0.25rem;
+    padding: 0.05rem 0.5rem;
+    border-radius: 99px;
+    background: var(--line);
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .processing::before {
+    content: "";
+    display: inline-block;
+    width: 0.45rem;
+    height: 0.45rem;
+    margin-right: 0.35rem;
+    border-radius: 50%;
+    background: var(--accent);
+    vertical-align: 0.05rem;
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    50% {
+      opacity: 0.3;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .processing::before {
+      animation: none;
+    }
+  }
+
+  .error {
+    color: var(--error);
+  }
+
+  .text {
+    font-family: var(--reading);
+    font-size: 1.2rem;
+    line-height: 1.75;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+
+  .w {
+    cursor: pointer;
+    border-radius: 3px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .w:hover {
+    background: color-mix(in srgb, var(--select) 45%, transparent);
+  }
+
+  .w:focus-visible {
+    outline: 2px solid var(--accent);
+  }
+
+  .w.selected {
+    background: var(--select);
+  }
+
+  .w.head {
+    text-decoration: underline 2px var(--head);
+    text-underline-offset: 4px;
+  }
+
+  .w.trigger {
+    text-decoration: underline 2px dashed var(--trigger);
+    text-underline-offset: 4px;
+  }
+
+  footer {
+    margin-top: 3rem;
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+</style>

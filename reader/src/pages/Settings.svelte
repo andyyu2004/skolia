@@ -1,6 +1,9 @@
 <script lang="ts">
   import { DEFAULT_NEW_PER_DAY, MAX_NEW_PER_DAY, type User } from "@skolia/shared/api";
-  import { getSettings, saveSettings, signIn } from "./lib/api.ts";
+  import { getSettings, saveSettings, signIn } from "../lib/api.ts";
+  import Button from "../components/Button.svelte";
+  import Field from "../components/Field.svelte";
+  import Page from "../components/Page.svelte";
 
   let { user }: { user: User | null | undefined } = $props();
 
@@ -50,16 +53,14 @@
   }
 </script>
 
-<main class="container">
-  <h1>Settings</h1>
+<Page title="Settings">
   {#if user === null}
     <p class="muted">Sign in to change your settings.</p>
-    <button type="button" class="primary" onclick={() => void signIn()}>Sign in</button>
+    <Button variant="primary" onclick={() => void signIn()}>Sign in</Button>
   {:else if user}
-    <form class="settings-form" onsubmit={submit}>
+    <form onsubmit={submit}>
       <h2>Review</h2>
-      <div class="field">
-        <label for="new-per-day">New cards a day</label>
+      <Field label="New cards a day" for="new-per-day">
         <input
           id="new-per-day"
           type="number"
@@ -69,19 +70,46 @@
           step="1"
           required
           disabled={!loaded}
-          aria-describedby="new-per-day-help"
+          aria-describedby="new-per-day-hint"
           bind:value={newPerDay}
           oninput={() => (saved = false)}
         />
-        <span id="new-per-day-help" class="muted"
-          >How many cards you haven't reviewed before come up each day, in each language. The default is {DEFAULT_NEW_PER_DAY}.</span
-        >
-      </div>
+        {#snippet hint()}
+          How many cards you haven't reviewed before come up each day, in each language. The default is {DEFAULT_NEW_PER_DAY}.
+        {/snippet}
+      </Field>
       <div class="actions">
-        <button type="submit" class="primary" disabled={saving || !loaded}>Save</button>
+        <Button type="submit" variant="primary" disabled={saving || !loaded}>Save</Button>
         <span role="status" class="muted">{saved ? "Saved" : ""}</span>
       </div>
       {#if error}<p class="error" role="alert">{error}</p>{/if}
     </form>
   {/if}
-</main>
+</Page>
+
+<style>
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-width: 28rem;
+  }
+
+  input {
+    width: 8rem;
+  }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .muted {
+    color: var(--muted);
+  }
+
+  .error {
+    color: var(--error);
+  }
+</style>

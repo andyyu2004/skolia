@@ -20,7 +20,7 @@
   {#if isList}
     <p {lang} class="form-list">
       {#each table.rows[0]?.cells[0] ?? [] as form, i (i)}
-        {i > 0 ? ", " : ""}<span class:current={form.current}>{form.text}</span>
+        {i > 0 ? ", " : ""}<span class={{ current: form.current }}>{form.text}</span>
       {/each}
     </p>
   {:else}
@@ -39,7 +39,7 @@
             <tr>
               <th scope="row">{row.label}</th>
               {#each row.cells as cell, c (c)}
-                <td class:current={cell.some((f) => f.current)}>
+                <td class={{ current: cell.some((f) => f.current) }}>
                   {cell.map((f) => f.text).join(" / ")}
                 </td>
               {/each}
@@ -62,3 +62,51 @@
     {@render body()}
   </details>
 {/if}
+
+<style>
+  h3,
+  summary {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin: 1rem 0 0.3rem;
+  }
+
+  summary {
+    cursor: pointer;
+  }
+
+  .scroll {
+    overflow-x: auto;
+  }
+
+  table {
+    border-collapse: collapse;
+    font-size: 0.95rem;
+  }
+
+  th,
+  td {
+    padding: 0.2rem 0.6rem 0.2rem 0;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  th {
+    font-weight: 400;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .current {
+    background: var(--current);
+    font-weight: 600;
+    border-radius: 3px;
+    padding-left: 0.3rem;
+  }
+
+  .form-list {
+    margin: 0.2rem 0;
+  }
+</style>

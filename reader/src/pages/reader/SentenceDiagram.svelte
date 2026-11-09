@@ -5,7 +5,7 @@
   import type { Lang } from "@skolia/shared/api";
   import { fitted, layout, type Edge, type Role, type Shape } from "@skolia/shared/diagram";
   import { focusOn, spokenLabel, type Sentence } from "@skolia/shared/tree";
-  import { arrowhead, rounded } from "./lib/path.ts";
+  import { arrowhead, rounded } from "../../lib/path.ts";
 
   let {
     lang,
@@ -112,9 +112,7 @@
     width={diagram.width}
     height={diagram.height}
     viewBox="0 0 {diagram.width} {diagram.height}"
-    class:hanging={shape === "tree"}
-    class:column={diagram.anchor === "start"}
-    class:crowded={sentence.words.length > CROWDED}
+    class={{ hanging: shape === "tree", column: diagram.anchor === "start", crowded: sentence.words.length > CROWDED }}
     role="group"
     aria-label="Sentence structure"
   >
@@ -123,7 +121,7 @@
         <line class="projection" x1={from.x} y1={from.y} x2={to.x} y2={to.y} />
       {/each}
       {#each edges as edge (key(edge))}
-        <g class="arc" class:case={edge.kind === "case"} class:near={near(edge)} class:why={edge.why}>
+        <g class={["arc", { case: edge.kind === "case", near: near(edge), why: edge.why }]}>
           <path d={rounded(edge.points, diagram.corner)} />
           {#if edge.arrow}
             <path class="arrow" d={arrowhead(edge.points)} />
@@ -140,7 +138,7 @@
             <!-- The same as tapping the word's node, which is the keyboard and screen reader's way in -->
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <text
-              class:selected={span.words.some((w) => selected.has(w.index))}
+              class={{ selected: span.words.some((w) => selected.has(w.index)) }}
               x={span.at.x}
               y={span.at.y}
               onclick={() => first && onselect(first.index)}>{span.text}</text
@@ -153,10 +151,7 @@
       {@const word = box.word}
       {@const isSelected = selected.has(word.index)}
       <g
-        class="word"
-        class:selected={isSelected}
-        class:linked={focus.linked.has(word.index)}
-        class:root={word.root}
+        class={["word", { selected: isSelected, linked: focus.linked.has(word.index), root: word.root }]}
         role="button"
         tabindex={isSelected ? 0 : -1}
         aria-current={isSelected ? "true" : undefined}
@@ -172,8 +167,7 @@
         {#each box.lines as line, j (j)}
           <text x={line.at.x} y={line.at.y}
             >{#each line.runs as run, k (k)}<tspan
-                class={CLASS[run.role]}
-                class:why={run.role === "case" && isSelected && focus.chain.length > 0}
+                class={[CLASS[run.role], { why: run.role === "case" && isSelected && focus.chain.length > 0 }]}
                 font-size={SIZE[run.role]}
                 lang={run.role === "form" ? lang : undefined}>{run.text}</tspan
               >{/each}</text
@@ -192,3 +186,188 @@
     {/each}
   </svg>
 </div>
+
+<style>
+  .tree {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    margin: 0 calc(-1 * var(--gutter)) 0.5rem;
+    padding: 0 var(--gutter);
+    /* Lines carry meaning, so about 3:1 against the sheet */
+    --tree-line: color-mix(in srgb, var(--muted) 75%, var(--surface));
+  }
+
+  svg {
+    display: block;
+  }
+
+  text {
+    text-anchor: middle;
+  }
+
+  .column text {
+    text-anchor: start;
+  }
+
+  .arc path {
+    fill: none;
+    stroke: var(--tree-line);
+    stroke-width: 1.5;
+  }
+
+  /* A wide halo, so lines crossing a label stop short of its letters */
+  .arc text {
+    dominant-baseline: central;
+    fill: var(--muted);
+    font-family: var(--ui);
+    paint-order: stroke;
+    stroke: var(--surface);
+    stroke-width: 6px;
+    stroke-linejoin: round;
+  }
+
+  /* In a long sentence the selected word's lines stand out from the rest */
+  .crowded .arc:not(.near):not(.why) {
+    opacity: 0.35;
+  }
+
+  .arc.near:not(.why) path {
+    stroke: var(--head);
+  }
+
+  .arc.near:not(.why) text {
+    fill: var(--head);
+  }
+
+  .hanging .arc.near path {
+    stroke-width: 2;
+  }
+
+  .arc.why path {
+    stroke: var(--trigger);
+    stroke-dasharray: 5 3;
+  }
+
+  .arc.why text {
+    fill: var(--trigger);
+  }
+
+  .arc.case path {
+    stroke: var(--trigger);
+    stroke-dasharray: 4 3;
+  }
+
+  .arc.case path.arrow {
+    stroke-dasharray: none;
+  }
+
+  .arc.case text {
+    fill: var(--trigger);
+  }
+
+  .projection {
+    fill: none;
+    stroke: var(--line);
+    stroke-width: 1;
+    stroke-dasharray: 1 3;
+  }
+
+  .reading-row {
+    fill: var(--muted);
+    font-family: var(--reading);
+    font-size: 13px;
+  }
+
+  .reading-row text {
+    cursor: pointer;
+  }
+
+  .reading-row text:hover {
+    fill: var(--text);
+  }
+
+  .reading-row .selected {
+    fill: var(--text);
+    font-weight: 700;
+  }
+
+  .word {
+    cursor: pointer;
+  }
+
+  .word rect {
+    fill: transparent;
+  }
+
+  .word:focus-visible {
+    outline: none;
+  }
+
+  .word:focus-visible rect {
+    stroke: var(--accent);
+    stroke-width: 2;
+  }
+
+  .word.selected rect {
+    fill: var(--select);
+  }
+
+  .form {
+    fill: var(--text);
+    font-family: var(--reading);
+  }
+
+  .word.linked .form {
+    fill: var(--head);
+  }
+
+  .word.root .form {
+    font-weight: 700;
+  }
+
+  .pos,
+  .case-name {
+    fill: var(--muted);
+    font-family: var(--ui);
+  }
+
+  /* Labels on the yellow selection: muted grey and orange are too faint on it */
+  .word.selected .pos,
+  .word.selected .case-name {
+    fill: var(--text);
+  }
+
+  .case-name.why {
+    font-weight: 700;
+  }
+
+  .dot {
+    fill: var(--muted);
+  }
+
+  .word.linked .dot {
+    fill: var(--head);
+  }
+
+  .word.selected .dot {
+    fill: var(--accent);
+  }
+
+  /* Lines to children cross the labels under a word, so the labels get a halo */
+  .hanging .word text {
+    paint-order: stroke;
+    stroke: var(--surface);
+    stroke-width: 3px;
+    stroke-linejoin: round;
+  }
+
+  .hanging .word.selected text {
+    stroke: var(--select);
+  }
+
+  line.trigger {
+    stroke: var(--trigger);
+    stroke-width: 2;
+    stroke-dasharray: 4 3;
+  }
+</style>

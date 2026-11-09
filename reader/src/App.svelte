@@ -1,13 +1,13 @@
 <script lang="ts">
   import { isLang, type Lang, type User } from "@skolia/shared/api";
-  import Explore from "./Explore.svelte";
+  import Explore from "./pages/Explore.svelte";
   import { currentUser } from "./lib/api.ts";
   import { clearWords, loadWords } from "./lib/words.svelte.ts";
-  import Nav from "./Nav.svelte";
-  import Reader from "./Reader.svelte";
-  import Review from "./Review.svelte";
-  import Settings from "./Settings.svelte";
-  import Upload from "./Upload.svelte";
+  import Nav from "./components/Nav.svelte";
+  import Reader from "./pages/reader/Reader.svelte";
+  import Review from "./pages/Review.svelte";
+  import Settings from "./pages/Settings.svelte";
+  import Upload from "./pages/Upload.svelte";
   import { versionUrl } from "./lib/version.ts";
 
   type Route = { page: "explore" } | { page: "upload" } | { page: "review"; lang: Lang | null } | { page: "settings" } | { page: "reader"; id: string };
@@ -57,7 +57,7 @@
 
 <div class="content">
   {#if error}
-    <p class="error banner">{error}</p>
+    <p class="banner">{error}</p>
   {/if}
 
   {#if route.page === "reader"}
@@ -76,7 +76,27 @@
 </div>
 
 {#if versionLink}
-  <footer class="version muted"><a href={versionLink} rel="noreferrer">{version}</a></footer>
+  <footer><a href={versionLink} rel="noreferrer">{version}</a></footer>
 {:else}
-  <footer class="version muted">{version}</footer>
+  <footer>{version}</footer>
 {/if}
+
+<style>
+  .content {
+    flex: 1;
+  }
+
+  .banner {
+    max-width: 48rem;
+    margin: 0.75rem auto 0;
+    padding: 0 var(--gutter);
+    color: var(--error);
+  }
+
+  footer {
+    padding: 2rem 1rem 1rem;
+    color: var(--muted);
+    font-size: 0.75rem;
+    text-align: center;
+  }
+</style>

@@ -15,13 +15,15 @@
   } from "@skolia/shared/lexicon";
   import type { Recording } from "@skolia/shared/schema";
   import { LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
-  import { setStatus, words as known } from "./lib/words.svelte.ts";
-  import type { ReaderMode } from "./lib/mode.ts";
+  import { setStatus, words as known } from "../../lib/words.svelte.ts";
+  import type { ReaderMode } from "../../lib/mode.ts";
   import { paradigmTables } from "@skolia/shared/paradigm";
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
-  import ParadigmTable from "./ParadigmTable.svelte";
+  import Button from "../../components/Button.svelte";
+  import ParadigmTable from "../../components/ParadigmTable.svelte";
+  import Pronunciations from "../../components/Pronunciations.svelte";
   import SentenceDiagram from "./SentenceDiagram.svelte";
-  import { sheet, type SheetView } from "./lib/sheet.svelte.ts";
+  import { sheet, type SheetView } from "../../lib/sheet.svelte.ts";
   import { clauseOf, parseSentence } from "@skolia/shared/tree";
 
   type WordPiece = Extract<Piece, { kind: "word" }>;
@@ -236,7 +238,7 @@
 
 <svelte:window bind:innerWidth={windowWidth} />
 
-<aside id="word-sheet" class="sheet" class:expanded aria-label="Word details" bind:this={aside} bind:offsetWidth={shown}>
+<aside id="word-sheet" class={["sheet", { expanded }]} aria-label="Word details" bind:this={aside} bind:offsetWidth={shown}>
   <div class="sheet-bar">
     <!-- A focusable separator with a value is a widget in ARIA, which Svelte's check doesn't know -->
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
@@ -302,10 +304,10 @@
         <p class="clause-note muted small">
           {#if sheet.whole}
             All {total} words.
-            <button type="button" class="link" onclick={() => (sheet.whole = false)}>Just this clause</button>
+            <Button variant="link" onclick={() => (sheet.whole = false)}>Just this clause</Button>
           {:else}
             This clause, {[...clause].filter((i) => tokens[i]?.upos !== "PUNCT").length} of {total} words.
-            <button type="button" class="link" onclick={() => (sheet.whole = true)}>Whole sentence</button>
+            <Button variant="link" onclick={() => (sheet.whole = true)}>Whole sentence</Button>
           {/if}
         </p>
       {/if}
@@ -346,12 +348,11 @@
         {#if status === "active"}
           <p class="in-cards muted small">In your cards</p>
         {:else if status === undefined && mode === "reading"}
-          <button
-            type="button"
-            class="quiet small add-card"
-            disabled={adding === word.lemmaId}
-            onclick={() => void add(word.lemmaId)}>Add to cards</button
-          >
+          <div class="add-card">
+            <Button variant="quiet" small disabled={adding === word.lemmaId} onclick={() => void add(word.lemmaId)}
+              >Add to cards</Button
+            >
+          </div>
         {/if}
       {/if}
       {#if word.lemmaId && statusError?.lemmaId === word.lemmaId}
@@ -368,20 +369,11 @@
           >
         {/each}
       {/snippet}
-      {#if word.said.length > 0 || word.lemmaSaid.length > 0}
-        <p class="pronunciation">
-          {#each word.said as p (p.ipa)}
-            <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
-          {/each}
-          {#if word.lemmaSaid.length > 0 && word.entry}
-            <span class="lemma-said"
-              ><span {lang}>{word.entry.lemma}</span>
-              {#each word.lemmaSaid as p (p.ipa)}
-                <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
-              {/each}</span
-            >
-          {/if}
-        </p>
+      {#if word.said.length > 0 || (word.lemmaSaid.length > 0 && word.entry)}
+        <Pronunciations
+          said={word.said}
+          lemma={word.entry ? { text: word.entry.lemma, lang, said: word.lemmaSaid } : undefined}
+        />
       {/if}
       <p class="grammar">
         {[word.partOfWord ?? UPOS_LABEL[token.upos], ...featureWords(token.feats)].join(
@@ -420,7 +412,7 @@
         {#if word.senses.length > 0}
           <ol class="senses">
             {#each allSenses ? word.senses : word.senses.slice(0, SHOWN_SENSES) as { sense, fits }, i (i)}
-              <li class:other={!fits}>
+              <li class={{ other: !fits }}>
                 {sense.gloss}
                 {#if visibleTags(sense.tags).length > 0}
                   <span class="tags">{visibleTags(sense.tags).join(", ")}</span>
@@ -435,9 +427,9 @@
             {/each}
           </ol>
           {#if word.senses.length > SHOWN_SENSES}
-            <button type="button" class="link" onclick={() => (sensesFor = allSenses ? null : piece)}>
+            <Button variant="link" onclick={() => (sensesFor = allSenses ? null : piece)}>
               {allSenses ? "Fewer meanings" : `All ${word.senses.length} meanings`}
-            </button>
+            </Button>
           {/if}
         {:else}
           <p class="muted">No dictionary meaning yet.</p>
@@ -459,7 +451,7 @@
             <h3>Used with</h3>
             <ul {lang}>
               {#each allUses ? word.uses : word.uses.slice(0, SHOWN_USES) as frame, i (i)}
-                <li class:here={frame.here}>
+                <li class={{ here: frame.here }}>
                   {#if frame.here}<span class="here-label" lang="en">in this sentence</span>{/if}
                   <span class="frame-head">{frame.head}</span>
                   {#each patternParts(frame.pattern) as part, j (j)}
@@ -470,9 +462,9 @@
               {/each}
             </ul>
             {#if word.uses.length > SHOWN_USES}
-              <button type="button" class="link" onclick={() => (usesFor = allUses ? null : piece)}>
+              <Button variant="link" onclick={() => (usesFor = allUses ? null : piece)}>
                 {allUses ? "Fewer" : `All ${word.uses.length} uses`}
-              </button>
+              </Button>
             {/if}
           </div>
         {/if}
@@ -482,7 +474,7 @@
             <summary>Idioms ({word.idioms.length})</summary>
             <ul {lang}>
               {#each word.idioms as frame, i (i)}
-                <li class:here={frame.here}>
+                <li class={{ here: frame.here }}>
                   {#if frame.here}<span class="here-label" lang="en">in this sentence</span>{/if}
                   <span class="frame-head">{frame.head}</span>
                   {#each patternParts(frame.pattern) as part, j (j)}
@@ -507,3 +499,389 @@
     </section>
   {/each}
 </aside>
+
+<!-- A bottom sheet on a phone; above 900px a side panel in the reader's grid -->
+<style>
+  .sheet {
+    position: fixed;
+    inset: auto 0 0 0;
+    max-height: 50vh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* Below the sticky tab bar when something in the sheet is scrolled to */
+    scroll-padding-top: 4.5rem;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    border-radius: 14px 14px 0 0;
+    box-shadow: var(--shadow);
+    padding: 0 var(--gutter) calc(var(--gutter) + env(safe-area-inset-bottom));
+    transition: max-height 0.2s ease;
+  }
+
+  .sheet.expanded {
+    max-height: 88vh;
+  }
+
+  .sheet-bar {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding-top: 0.5rem;
+    margin-bottom: 0.5rem;
+    background: var(--surface);
+  }
+
+  .resizer {
+    display: none;
+  }
+
+  /* The tabs, then copy link and close, centred on one row over one rule */
+  .sheet-head {
+    display: flex;
+    align-items: center;
+    flex-basis: 100%;
+    margin-top: 0.15rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .sheet-tabs {
+    display: flex;
+    align-self: stretch;
+    gap: 1.25rem;
+  }
+
+  .sheet-tabs button {
+    border: 0;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    padding: 0.55rem 0.1rem;
+    background: transparent;
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .sheet-tabs button[aria-selected="true"] {
+    border-bottom-color: var(--accent);
+    color: var(--text);
+  }
+
+  .handle {
+    width: 3rem;
+    height: 0.9rem;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .handle::after {
+    content: "";
+    position: absolute;
+    inset: 0.3rem 0;
+    border-radius: 99px;
+    background: var(--line);
+  }
+
+  .sheet-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .share,
+  .close {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  .share:hover,
+  .close:hover {
+    color: var(--text);
+  }
+
+  .share svg,
+  .close svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+  }
+
+  .share-note {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  @media (min-width: 900px) {
+    .sheet {
+      position: sticky;
+      inset: auto;
+      top: var(--nav-height);
+      height: calc(100vh - var(--nav-height));
+      max-height: none;
+      border-top: 0;
+      border-left: 1px solid var(--line);
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    .sheet.expanded {
+      max-height: none;
+    }
+
+    .handle {
+      display: none;
+    }
+
+    /* Down the sheet's left edge: the bar it sits in stays at the top, and the sheet clips it at the bottom */
+    .resizer {
+      display: block;
+      position: absolute;
+      top: 0;
+      left: calc(-1 * var(--gutter));
+      width: 7px;
+      height: calc(100vh - var(--nav-height));
+      cursor: col-resize;
+      touch-action: none;
+    }
+
+    .resizer:hover,
+    .resizer:active,
+    .resizer:focus-visible {
+      background: color-mix(in srgb, var(--accent) 35%, transparent);
+      outline: none;
+    }
+
+    .sheet-head {
+      margin-top: 0;
+    }
+  }
+
+  .diagram-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .clause-note {
+    margin: 0;
+  }
+
+  .layout-switch {
+    margin-left: auto;
+    flex-shrink: 0;
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 99px;
+  }
+
+  .layout-switch button {
+    border: 0;
+    border-radius: 99px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.8rem;
+    padding: 0.35rem 0.75rem;
+    cursor: pointer;
+  }
+
+  .layout-switch button[aria-pressed="true"] {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+  }
+
+  .muted {
+    color: var(--muted);
+  }
+
+  .small {
+    font-size: 0.8rem;
+  }
+
+  .error {
+    color: var(--error);
+  }
+
+  .add-card :global(button) {
+    margin: 0.25rem 0;
+  }
+
+  .in-cards {
+    margin: 0.2rem 0;
+  }
+
+  .word + .word {
+    border-top: 1px solid var(--line);
+    margin-top: 1rem;
+  }
+
+  h2 {
+    font-family: var(--reading);
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin: 0.25rem 0;
+  }
+
+  .lemma {
+    color: var(--muted);
+    font-weight: 400;
+  }
+
+  .speaker {
+    border: none;
+    background: none;
+    padding: 0;
+    font-size: 0.6em;
+    vertical-align: middle;
+    cursor: pointer;
+  }
+
+  .grammar {
+    margin: 0.2rem 0;
+  }
+
+  .role {
+    margin: 0.2rem 0 0.6rem;
+    font-size: 0.9rem;
+  }
+
+  /* A word in the sheet's text that selects it, styled as the text marks it */
+  .word-link {
+    border: 0;
+    padding: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    text-underline-offset: 4px;
+  }
+
+  .mark-head {
+    color: var(--text);
+    text-decoration: underline 2px var(--head);
+  }
+
+  .mark-trigger {
+    text-decoration: underline 2px dashed var(--trigger);
+  }
+
+  .word-link:hover {
+    text-decoration-thickness: 3px;
+  }
+
+  .word-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  .why {
+    margin: 0.4rem 0 0.8rem;
+    padding: 0.5rem 0.7rem;
+    border-left: 3px solid var(--trigger);
+    background: color-mix(in srgb, var(--trigger) 10%, transparent);
+    border-radius: 0 6px 6px 0;
+  }
+
+  .why-label {
+    font-weight: 600;
+    margin-right: 0.3rem;
+  }
+
+  .senses {
+    padding-left: 1.4rem;
+    margin: 0.6rem 0;
+  }
+
+  .senses li {
+    margin-bottom: 0.4rem;
+  }
+
+  .senses li.other {
+    color: var(--muted);
+  }
+
+  .tags {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-left: 0.3rem;
+  }
+
+  .example {
+    font-size: 0.9rem;
+    font-style: italic;
+    margin-top: 0.15rem;
+  }
+
+  .relations {
+    padding-left: 1.2rem;
+    font-size: 0.95rem;
+  }
+
+  .frames h3,
+  .frames summary {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    margin: 1rem 0 0.3rem;
+    cursor: default;
+  }
+
+  .frames summary {
+    cursor: pointer;
+  }
+
+  .frames ul {
+    list-style: none;
+    padding: 0;
+    margin: 0.2rem 0;
+  }
+
+  .frames li {
+    padding: 0.15rem 0;
+    line-height: 1.5;
+  }
+
+  .frames li.here {
+    border-left: 3px solid var(--trigger);
+    padding-left: 0.5rem;
+    background: color-mix(in srgb, var(--trigger) 10%, transparent);
+    border-radius: 0 6px 6px 0;
+  }
+
+  .here-label {
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--trigger);
+  }
+
+  .frame-head {
+    font-weight: 600;
+  }
+
+  .case-label {
+    font-size: 0.75rem;
+    color: var(--accent);
+    margin-left: 0.15rem;
+  }
+</style>
