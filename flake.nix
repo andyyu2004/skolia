@@ -15,6 +15,10 @@
           platform = "linux_amd64";
           hash = "sha256-RjhigFjnGlUhKxxWNxLqwDuQISj0B0Dz3IF03xITUGE=";
         };
+        aarch64-linux = {
+          platform = "linux_arm64";
+          hash = "sha256-mI6VChwjBYCTsOZqstX7U/wYNF7PvVhxrPUduskyXt0=";
+        };
         aarch64-darwin = {
           platform = "darwin_arm64";
           hash = "sha256-seyz/g0KApDBq2+D2WfUPyXaBdC2ce4Ps1UlImjc6Vo=";

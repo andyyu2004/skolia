@@ -50,6 +50,26 @@ jobs:
       - run: just check
       - run: just test
 
+  # The reader's pages against their baselines (just screenshots), on arm64 like the
+  # Docker image on a Mac that takes them. A failure's expected, actual and diff images
+  # are in its screenshots artifact.
+  screenshots:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+      - uses: ./.github/actions/setup
+      - run: just screenshots
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: screenshots
+          path: |
+            reader/playwright-report/
+            reader/test-results/
+
   # Before any deploy, for all of them: the images are named by their inputs, not the
   # environment. Only builds and pushes an image whose inputs changed. Runs wherever
   # deploy-preview or deploy-staging does.
