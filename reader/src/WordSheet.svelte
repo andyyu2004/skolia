@@ -21,7 +21,6 @@
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
   import ParadigmTable from "./ParadigmTable.svelte";
   import SentenceDiagram from "./SentenceDiagram.svelte";
-  import { MediaQuery } from "svelte/reactivity";
   import { sheet, type SheetView } from "./lib/sheet.svelte.ts";
   import { clauseOf, parseSentence } from "@skolia/shared/tree";
 
@@ -60,11 +59,47 @@
     return tags.filter((t) => !language.grammarTags.has(t));
   }
 
+  let aside = $state<HTMLElement | null>(null);
+  /** The text keeps at least this much of the screen */
+  const TEXT_ROOM = 320;
+  const NARROWEST = 288;
+  let windowWidth = $state(0);
+  const widest = $derived(Math.max(NARROWEST, windowWidth - TEXT_ROOM));
+  /** The sheet's width as drawn, dragged or not, for the edge to report */
+  let shown = $state(0);
+  function resize(width: number): void {
+    sheet.width[sheet.view] = Math.round(Math.max(NARROWEST, Math.min(width, widest)));
+  }
+
+  /** On a wide screen the sheet's left edge drags; a double click puts it back. */
+  function ondrag(event: PointerEvent): void {
+    const edge = event.currentTarget;
+    if (!(edge instanceof HTMLElement) || !aside || event.button !== 0) return;
+    event.preventDefault();
+    edge.setPointerCapture(event.pointerId);
+    const right = aside.getBoundingClientRect().right;
+    const move = (e: PointerEvent): void => resize(right - e.clientX);
+    edge.addEventListener("pointermove", move);
+    edge.addEventListener("lostpointercapture", () => edge.removeEventListener("pointermove", move), { once: true });
+  }
+
+  /** The keys of a window splitter (WAI-ARIA authoring practices): the sheet is on the right, so left widens it */
+  const EDGE_KEYS: Record<string, (width: number) => number> = {
+    ArrowLeft: (width) => width + 16,
+    ArrowRight: (width) => width - 16,
+    Home: () => NARROWEST,
+    End: () => widest,
+  };
+  function onedgekey(event: KeyboardEvent): void {
+    const to = EDGE_KEYS[event.key];
+    if (!to) return;
+    event.preventDefault();
+    resize(to(shown));
+  }
+
   /** On a phone the sheet starts at half height; tapping the handle gives it the screen. */
   let expanded = $state(sheet.view === "sentence");
 
-  /** Too narrow for a diagram read left to right: it's turned to read top to bottom */
-  const narrow = new MediaQuery("max-width: 599px");
 
   const VIEWS = [
     ["word", "Word"],
@@ -199,8 +234,27 @@
   }
 </script>
 
-<aside class="sheet" class:expanded aria-label="Word details">
+<svelte:window bind:innerWidth={windowWidth} />
+
+<aside id="word-sheet" class="sheet" class:expanded aria-label="Word details" bind:this={aside} bind:offsetWidth={shown}>
   <div class="sheet-bar">
+    <!-- A focusable separator with a value is a widget in ARIA, which Svelte's check doesn't know -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+    <div
+      class="resizer"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Width of word details"
+      aria-controls="word-sheet"
+      aria-valuenow={shown}
+      aria-valuemin={NARROWEST}
+      aria-valuemax={widest}
+      aria-valuetext="{shown} pixels"
+      tabindex="0"
+      onpointerdown={ondrag}
+      onkeydown={onedgekey}
+      ondblclick={() => (sheet.width[sheet.view] = null)}
+    ></div>
     <button type="button" class="handle" aria-label={expanded ? "Shrink" : "Expand"} onclick={() => (expanded = !expanded)}
     ></button>
     <div class="sheet-head">
@@ -272,7 +326,6 @@
         partOfWord: language.partOfWord,
       })}
       shape={sheet.layout}
-      direction={narrow.current ? "down" : "across"}
       selected={selectedTokens}
       onselect={(index) => onselectToken(sentence, index)}
     />

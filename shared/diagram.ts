@@ -357,6 +357,19 @@ export function layout(sentence: Sentence, options: LayoutOptions): Diagram {
   };
 }
 
+/** How much wider than its space a diagram read across may be, scrolled sideways, before
+ * it is turned to read down: a little scrolling reads better than a long column. */
+const ACROSS_ALLOWANCE = 1.5;
+
+/** The sentence laid out across if that roughly fits `width`, or else down. */
+export function fitted(
+  sentence: Sentence,
+  options: Omit<LayoutOptions, "direction"> & { readonly width: number },
+): Diagram {
+  const across = layout(sentence, { ...options, direction: "across" });
+  return across.width <= options.width * ACROSS_ALLOWANCE ? across : layout(sentence, { ...options, direction: "down" });
+}
+
 /** A word's lines of text. Across, its form with a line each for its part of speech (with
  * arcs, which carry the relation) or relation (in the tree), and case. Down, the relation
  * and case share a line beside the form. */
