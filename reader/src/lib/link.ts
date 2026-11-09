@@ -5,22 +5,23 @@ import type { SentenceLayout, SheetView } from "./sheet.svelte.ts";
 
 export interface WordLink {
   /** Sentence and token index */
-  word: [number, number];
-  view: SheetView;
-  layout: SentenceLayout;
-  whole: boolean;
+  readonly word: readonly [number, number];
+  readonly view: SheetView;
+  readonly layout: SentenceLayout;
+  readonly whole: boolean;
 }
 
 /** The query part of the link, with its "?", or "" for none. */
 export function writeLink(link: WordLink | null): string {
   if (!link) return "";
-  const query = new URLSearchParams({ w: link.word.join(".") });
-  if (link.view === "sentence") {
-    query.set("view", "sentence");
-    if (link.layout === "tree") query.set("draw", "tree");
-    if (link.whole) query.set("whole", "1");
-  }
-  return `?${query.toString()}`;
+  const sentence = link.view === "sentence";
+  const entries: readonly (readonly [string, string])[] = [
+    ["w", link.word.join(".")],
+    ...(sentence ? [["view", "sentence"] as const] : []),
+    ...(sentence && link.layout === "tree" ? [["draw", "tree"] as const] : []),
+    ...(sentence && link.whole ? [["whole", "1"] as const] : []),
+  ];
+  return `?${new URLSearchParams(entries.map(([k, v]) => [k, v])).toString()}`;
 }
 
 /** The word a hash links to, or null when it names none or another text. */

@@ -10,33 +10,28 @@ function toward(from: Point, to: Point, length: number): Point {
 }
 
 /** Straight lines through `points`, each corner rounded by up to `radius`. */
-export function rounded(points: Point[], radius: number): string {
-  const p = points.filter((pt, i) => {
+export function rounded(points: readonly Point[], radius: number): string {
+  const distinct = points.filter((p, i) => {
     const before = points[i - 1];
-    return !before || before.x !== pt.x || before.y !== pt.y;
+    return !before || before.x !== p.x || before.y !== p.y;
   });
-  const first = p[0];
-  if (!first) return "";
-  let d = `M ${first.x} ${first.y}`;
-  p.slice(1).forEach((corner, i) => {
-    const before = p[i] ?? first;
-    const next = p[i + 2];
-    if (!next || radius === 0) {
-      d += ` L ${corner.x} ${corner.y}`;
-      return;
-    }
+  const steps = distinct.flatMap((corner, i) => {
+    const before = distinct[i - 1];
+    const next = distinct[i + 1];
+    if (!before) return [`M ${corner.x} ${corner.y}`];
+    if (!next || radius === 0) return [`L ${corner.x} ${corner.y}`];
     const r = Math.min(radius, distance(before, corner) / 2, distance(corner, next) / 2);
     const a = toward(corner, before, r);
     const b = toward(corner, next, r);
-    d += ` L ${a.x} ${a.y} Q ${corner.x} ${corner.y} ${b.x} ${b.y}`;
+    return [`L ${a.x} ${a.y} Q ${corner.x} ${corner.y} ${b.x} ${b.y}`];
   });
-  return d;
+  return steps.join(" ");
 }
 
 /** An open arrowhead at the last point, pointing the way the last line runs. */
-export function arrowhead(points: Point[], length = 6, half = 3.5): string {
+export function arrowhead(points: readonly Point[], length = 6, half = 3.5): string {
   const tip = points.at(-1);
-  const before = [...points].reverse().find((p) => tip && (p.x !== tip.x || p.y !== tip.y));
+  const before = tip && points.findLast((p) => p.x !== tip.x || p.y !== tip.y);
   if (!tip || !before) return "";
   const back = toward(tip, before, length);
   const ux = (back.x - tip.x) / length;

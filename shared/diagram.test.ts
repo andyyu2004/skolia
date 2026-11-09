@@ -15,8 +15,7 @@ const edge = (d: Diagram, from: string, to: string) =>
 test("an arc is one level above the arcs it spans", () => {
   const sentence = parseSentence(SENTENCE);
   const levels = stack(sentence.dependencies);
-  const level = (raw: string): number | undefined =>
-    [...levels].find(([link]) => link.raw === raw)?.[1].level;
+  const level = (raw: string): number | undefined => levels.find((s) => s.link.raw === raw)?.level;
   assert.equal(level("nsubj"), 1);
   assert.equal(level("amod"), 1);
   assert.equal(level("obj"), 2);
@@ -30,9 +29,11 @@ test("crossing arcs go on different levels", () => {
     token("c", "VERB", null, "root"),
     token("d", "VERB", 2, "conj"),
   ]);
-  const [first, second] = sentence.dependencies.filter((l) => l.raw === "obj");
-  const placed = stack(sentence.dependencies);
-  assert.notEqual(placed.get(first!)?.level, placed.get(second!)?.level);
+  const levels = stack(sentence.dependencies)
+    .filter((s) => s.link.raw === "obj")
+    .map((s) => s.level);
+  assert.equal(levels.length, 2);
+  assert.notEqual(levels[0], levels[1]);
 });
 
 test("at a word, shorter arcs leave nearer their side so longer ones pass outside", () => {
@@ -45,8 +46,8 @@ test("at a word, shorter arcs leave nearer their side so longer ones pass outsid
   ]);
   const placed = stack(sentence.dependencies);
   const rank = (raw: string): number | undefined => {
-    const [link, at] = [...placed].find(([l]) => l.raw === raw) ?? [];
-    return link && at && (link.from.form === "ozdobie" ? at.from.rank : at.to.rank);
+    const at = placed.find((s) => s.link.raw === raw);
+    return at && (at.link.from.form === "ozdobie" ? at.from.rank : at.to.rank);
   };
   // Left to right at ozdobie: całej's arc, w's, then the one from piękność
   assert.deepEqual([rank("amod"), rank("case"), rank("nmod")], [0, 1, 2]);
