@@ -170,19 +170,28 @@
         <div class="title-actions">
           {#if known.byId}
             <div class="mode">
-              <label>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  checked={mode === "learning"}
-                  aria-describedby="mode-help"
-                  onchange={(e) => change(e.currentTarget.checked ? "learning" : "reading")}
-                />
-                Learning mode
-              </label>
+              <button
+                type="button"
+                class="quiet small with-icon {mode}"
+                aria-describedby="mode-help"
+                onclick={() => change(mode === "reading" ? "learning" : "reading")}
+              >
+                {#if mode === "reading"}
+                  <svg viewBox="0 0 16 16" aria-hidden="true"
+                    ><path d="M8 4.5C6.8 3.6 5 3.2 2.5 3.2v9c2.5 0 4.3.4 5.5 1.3 1.2-.9 3-1.3 5.5-1.3v-9c-2.5 0-4.3.4-5.5 1.3zM8 4.5v9" /></svg
+                  >
+                  Reading
+                {:else}
+                  <svg viewBox="0 0 16 16" aria-hidden="true"
+                    ><path d="M3 5.5h7.5v7.5H3zM5.5 3H13v7.5" /></svg
+                  >
+                  Learning
+                {/if}
+              </button>
               <span id="mode-help" role="tooltip" class="tip"
-                >On: tapping a word you haven't marked adds it to your cards. Off: tapping only shows the word, and its
-                sheet has an Add to cards button.</span
+                >{mode === "reading"
+                  ? "Reading: tapping a word only shows it, and its sheet has an Add to cards button. Click for learning, where tapping a word you haven't marked adds it to your cards."
+                  : "Learning: tapping a word you haven't marked adds it to your cards. Click for reading, where tapping only shows the word."}</span
               >
             </div>
           {/if}
