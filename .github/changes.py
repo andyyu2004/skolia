@@ -4,7 +4,7 @@
 usage: changes.py <event name> <event payload path>
 
 Writes deploy, curated and infra, each true or false, to $GITHUB_OUTPUT (or prints them).
-deploy is false only when every changed file is content: a curated text (texts/), a doc
+deploy is false only when every changed file is content: a curated text (curated/), a doc
 (docs/) or Markdown, none of which goes into a build. curated is true when a curated text
 changed, so just sync-curated should run; curated texts are a subset of content, so a docs-only change has
 both false. infra is true when something a Terraform plan reads changed: infra/, the
@@ -22,8 +22,8 @@ from pathlib import Path
 from typing import Any
 
 # fnmatch's * matches / too, so these cover subdirectories
-CONTENT = ("texts/*", "docs/*", "*.md")
-CURATED = ("texts/*",)
+CONTENT = ("curated/*", "docs/*", "*.md")
+CURATED = ("curated/*",)
 INFRA = ("infra/*", "flake.nix", "flake.lock", "justfile", ".github/*")
 NO_COMMIT = "0" * 40
 

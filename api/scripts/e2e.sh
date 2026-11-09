@@ -54,5 +54,5 @@ d1 execute DB --file "$state/sync-curated-key.sql"
 
 # wrangler dev serves version "dev" (define in wrangler.jsonc)
 node src/e2e.ts "http://localhost:$port" dev || { echo "end-to-end tests failed; see api/$log" >&2; exit 1; }
-node src/sync-curated.ts "http://localhost:$port" ../texts || { echo "sync-curated failed; see api/$log" >&2; exit 1; }
-node src/sync-curated.ts "http://localhost:$port" ../texts --check || { echo "sync-curated left changes; see api/$log" >&2; exit 1; }
+node src/sync-curated.ts "http://localhost:$port" ../curated || { echo "sync-curated failed; see api/$log" >&2; exit 1; }
+node src/sync-curated.ts "http://localhost:$port" ../curated --check || { echo "sync-curated left changes; see api/$log" >&2; exit 1; }

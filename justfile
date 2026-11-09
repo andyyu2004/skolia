@@ -38,7 +38,7 @@ build:
     pnpm --dir api exec wrangler deploy --dry-run --outdir dist --env=''
 
 # wrangler dev (both Workers, the ingest container, local D1/R2/queue) and the reader's Vite server,
-# with the curated texts in texts/ synced once the API is up
+# with the curated texts in curated/ synced once the API is up
 [parallel]
 dev: dev-api dev-reader dev-sync-curated
 
@@ -186,7 +186,7 @@ e2e env="local":
     just d1-sql {{ env }} api/src/e2e-keys.ts
     node api/src/e2e.ts "$url" "$(git describe --tags --always --dirty)"
 
-# Make the curated user's documents match texts/ (api/src/sync-curated.ts); with --check, only list what that takes.
+# Make the curated user's documents match curated/ (api/src/sync-curated.ts); with --check, only list what that takes.
 # Writes a new API key for the curated user to the environment's D1 first (api/src/sync-curated-key.ts).
 sync-curated env *flags:
     #!/usr/bin/env bash
@@ -195,7 +195,7 @@ sync-curated env *flags:
     SYNC_CURATED_API_KEY=$(openssl rand -hex 32)
     export SYNC_CURATED_API_KEY
     just d1-sql {{ env }} api/src/sync-curated-key.ts
-    node api/src/sync-curated.ts "$url" texts {{ flags }}
+    node api/src/sync-curated.ts "$url" curated {{ flags }}
 
 # The environment's URL
 [private]

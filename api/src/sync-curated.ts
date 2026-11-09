@@ -1,9 +1,9 @@
-// Makes the curated user's documents match texts/: imports each text there publicly,
+// Makes the curated user's documents match curated/: imports each text there publicly,
 // updates the title, licence, author or source of those already imported, and deletes the
 // curated user's documents that aren't there any more. A document's id is its text's hash,
 // so an edited text is a new document and the old one is deleted. With --check, only
 // lists what it would do, and fails if that's anything.
-// texts/{lang}/{name}.txt: "key: value" lines (title and licence; author and source if
+// curated/{lang}/{name}.txt: "key: value" lines (title and licence; author and source if
 // known), a line "---", then the text.
 // usage: SYNC_CURATED_API_KEY=<key> node src/sync-curated.ts <base url> <texts dir> [--check]
 import { readFile, readdir } from "node:fs/promises";

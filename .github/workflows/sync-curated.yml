@@ -1,6 +1,6 @@
 name: Sync curated
 
-# Only the curated texts in texts/ (just sync-curated), for a run that changes nothing else
+# Only the curated texts in curated/ (just sync-curated), for a run that changes nothing else
 # (.github/changes.py), so it doesn't need a deploy. Shares deploy-web's concurrency group,
 # so it waits for a deploy in progress, which syncs too. With if-deployed, an environment
 # whose Worker isn't there (a pull request that never had a preview) is skipped.

@@ -10,7 +10,7 @@ name: CI
 # infra/deploy-ingest.sh, so a deploy by hand runs the same commands.
 # A pull request, merge group or push to main that only changes content (curated texts, docs,
 # Markdown; .github/changes.py) skips check, the screenshots, the image builds, the plans and
-# the deploys. If texts changed, it checks they parse (check-texts) and runs just sync-curated:
+# the deploys. If texts changed, it checks they parse (check-curated) and runs just sync-curated:
 # against staging on a push to main, and against the pull request's preview if an earlier
 # push deployed one. The plans run only when something they read changed.
 
@@ -75,8 +75,8 @@ jobs:
   # Docker image on a Mac that takes them. A failure's expected, actual and diff images
   # are in its screenshots artifact.
   # In place of check, for a run that only changes content, some of it curated texts: that
-  # they parse (api/src/texts.test.ts), which needs no build. A docs-only run checks nothing.
-  check-texts:
+  # they parse (api/src/curated.test.ts), which needs no build. A docs-only run checks nothing.
+  check-curated:
     if: github.event.action != 'closed' && needs.changes.outputs.deploy == 'false' && needs.changes.outputs.curated == 'true'
     needs: changes
     runs-on: ubuntu-24.04
@@ -88,7 +88,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: node --test src/texts.test.ts
+      - run: node --test src/curated.test.ts
         working-directory: api
 
   screenshots:
@@ -180,17 +180,17 @@ jobs:
     secrets: inherit
 
   # Required by main's ruleset, with check. It fails if check should have run and didn't
-  # pass, or if check-texts failed. On a pull request it also needs the preview deployed
+  # pass, or if check-curated failed. On a pull request it also needs the preview deployed
   # and its end-to-end tests passed, unless the pull request only changes content, which
   # gets no preview. A merge group can't have a preview, and its pull request's passed to
   # get there, so there it needs only the checks. A fork's pull request gets no preview and
   # skips this, which counts as passing; check itself is required too.
   mergeable:
     if: always() && (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository))
-    needs: [changes, check, check-texts, deploy-preview, sync-curated-preview]
+    needs: [changes, check, check-curated, deploy-preview, sync-curated-preview]
     runs-on: ubuntu-24.04
     steps:
-      - if: needs.check-texts.result == 'failure'
+      - if: needs.check-curated.result == 'failure'
         run: |
           echo "a curated text doesn't parse" >&2
           exit 1
@@ -216,7 +216,7 @@ jobs:
   # preview if an earlier push deployed one (deploy-preview syncs a preview it deploys)
   sync-curated-preview:
     if: needs.changes.outputs.deploy == 'false' && needs.changes.outputs.curated == 'true' && github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
-    needs: [changes, check-texts]
+    needs: [changes, check-curated]
     concurrency:
       group: preview-pr-${{ github.event.number }}
       cancel-in-progress: false
@@ -257,7 +257,7 @@ jobs:
   # deploys (deploy-staging), which syncs them.
   sync-curated-staging:
     if: needs.changes.outputs.deploy == 'false' && needs.changes.outputs.curated == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [changes, check-texts]
+    needs: [changes, check-curated]
     uses: ./.github/workflows/sync-curated.yml
     with:
       env: staging
