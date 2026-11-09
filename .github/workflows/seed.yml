@@ -1,7 +1,7 @@
 name: Seed
 
 # Only the curated texts in texts/ (just seed), for a push that changes nothing else
-# (.github/changes.py), so it doesn't need a deploy. Shares deploy-web's concurrency group,
+# (.github/planner.py), so it doesn't need a deploy. Shares deploy-web's concurrency group,
 # so it waits for a deploy in progress, which seeds too.
 
 on:

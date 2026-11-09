@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """What a CI run needs to deploy, from the files it changes.
 
-usage: changes.py <event name> <event payload path>
+usage: planner.py <event name> <event payload path>
 
 Writes deploy=true|false and texts=true|false to $GITHUB_OUTPUT (or prints them).
 deploy is false only when every changed file is content: a curated text (texts/), a doc
