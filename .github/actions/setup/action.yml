@@ -24,3 +24,5 @@ runs:
         extra-conf: ${{ inputs.nix-conf }}
     - run: echo "$(nix build --no-link --print-out-paths .#tools)/bin" >> "$GITHUB_PATH"
       shell: bash
+    - run: echo "TF_CLI_CONFIG_FILE=$GITHUB_WORKSPACE/infra/terraformrc" >> "$GITHUB_ENV"
+      shell: bash
