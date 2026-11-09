@@ -1,5 +1,5 @@
 # The tools the justfile needs beyond pnpm and uv: terraform and just, and for just dev,
-# sops and age. nix develop puts them on PATH; CI adds only packages.tools to PATH
+# sops and age, and git-lfs for the reader's screenshots. nix develop puts them on PATH; CI adds only packages.tools to PATH
 # (.github/actions/setup).
 {
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -14,6 +14,10 @@
         x86_64-linux = {
           platform = "linux_amd64";
           hash = "sha256-RjhigFjnGlUhKxxWNxLqwDuQISj0B0Dz3IF03xITUGE=";
+        };
+        aarch64-linux = {
+          platform = "linux_arm64";
+          hash = "sha256-mI6VChwjBYCTsOZqstX7U/wYNF7PvVhxrPUduskyXt0=";
         };
         aarch64-darwin = {
           platform = "darwin_arm64";
@@ -52,6 +56,7 @@
               tools
               pkgs.sops
               pkgs.age
+              pkgs.git-lfs
             ];
           };
         };
