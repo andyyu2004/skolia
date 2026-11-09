@@ -68,6 +68,18 @@
     ["sentence", "Sentence"],
   ] as const;
 
+  /** "Link copied" for a moment after sharing; the address already names the word (lib/link.ts). */
+  let shared = $state("");
+  async function share(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(location.href);
+      shared = "Link copied";
+    } catch {
+      shared = "Couldn't copy: the address bar has the link";
+    }
+    setTimeout(() => (shared = ""), 2000);
+  }
+
   function show(view: SheetView): void {
     sheet.view = view;
     // A diagram needs the height on a phone
@@ -180,6 +192,12 @@
   <div class="sheet-bar">
     <button type="button" class="handle" aria-label={expanded ? "Shrink" : "Expand"} onclick={() => (expanded = !expanded)}
     ></button>
+    <button type="button" class="share" aria-label="Copy a link to this word" title="Copy link" onclick={share}
+      ><svg viewBox="0 0 16 16" aria-hidden="true"
+        ><path d="M6.5 9.5a3 3 0 0 0 4.2 0l2.1-2.1a3 3 0 0 0-4.2-4.2l-.9.9M9.5 6.5a3 3 0 0 0-4.2 0L3.2 8.6a3 3 0 0 0 4.2 4.2l.9-.9" /></svg
+      ></button
+    >
+    <span class="share-note" role="status">{shared}</span>
     <button type="button" class="close" aria-label="Close" onclick={onclose}>×</button>
     <div class="sheet-tabs" role="tablist" aria-label="Show">
       {#each VIEWS as [view, label] (view)}

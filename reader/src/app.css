@@ -1055,6 +1055,35 @@ label.check {
   color: var(--muted);
 }
 
+.share {
+  position: absolute;
+  right: 2rem;
+  top: 0.1rem;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.35rem;
+  cursor: pointer;
+}
+
+.share svg {
+  display: block;
+  width: 1.1rem;
+  height: 1.1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+.share-note {
+  position: absolute;
+  right: 4.25rem;
+  top: 0.45rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 @media (min-width: 900px) {
   .reader {
     display: grid;
@@ -1090,10 +1119,10 @@ label.check {
     display: none;
   }
 
-  /* Tabs at the top, clear of the close button */
+  /* Tabs at the top, clear of the share and close buttons */
   .sheet-tabs {
     margin-top: 0;
-    padding-right: 2rem;
+    padding-right: 4.5rem;
   }
 }
 

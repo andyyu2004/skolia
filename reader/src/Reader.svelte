@@ -8,6 +8,8 @@
   import EditDocument from "./EditDocument.svelte";
   import WordSheet from "./WordSheet.svelte";
   import { sheet } from "./lib/sheet.svelte.ts";
+  import { readLink, writeLink } from "./lib/link.ts";
+  import { tick, untrack } from "svelte";
 
   let { id }: { id: string } = $props();
 
@@ -113,9 +115,43 @@
     const id = doc?.pieceOf.get(tokenKey(sentence, index));
     return id === undefined ? null : (doc?.words[id]?.text ?? null);
   }
+
+  /** Whether the link's word has been looked for: once the text is in, and on each new link. */
+  let linked = $state(false);
+
+  /** Opens the word the address links to, with its sheet as the link has it, and scrolls to it. */
+  function followLink(): void {
+    const link = readLink(location.hash, id);
+    const found = link && doc?.pieceOf.get(tokenKey(...link.word));
+    if (!link || found === undefined || found === null) return;
+    selected = found;
+    sheet.view = link.view;
+    sheet.layout = link.layout;
+    sheet.whole = link.whole;
+    void tick().then(() => document.querySelector(".text .w.selected")?.scrollIntoView({ block: "center" }));
+  }
+
+  $effect(() => {
+    if (!doc || linked) return;
+    untrack(followLink);
+    linked = true;
+  });
+
+  // The address follows the selection, so it can be shared; replaced, not added to the history
+  $effect(() => {
+    if (!doc || !linked || !location.hash.startsWith(`#/doc/${id}`)) return;
+    const word = piece?.words.find((w) => w.token.upos !== "PUNCT") ?? piece?.words[0];
+    const query = writeLink(
+      word
+        ? { word: [word.sentence, word.index], view: sheet.view, layout: sheet.layout, whole: sheet.whole }
+        : null,
+    );
+    const hash = `#/doc/${id}${query}`;
+    if (hash !== location.hash) history.replaceState(history.state, "", hash);
+  });
 </script>
 
-<svelte:window {onkeydown} />
+<svelte:window {onkeydown} onhashchange={followLink} />
 
 <div class="reader" class:sheet-open={piece !== undefined} class:sentence-open={piece !== undefined && sheet.view === "sentence"}>
   <main class="page">
