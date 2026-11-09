@@ -2,17 +2,17 @@
   import type { DocumentSummary, ReadingNames } from "@skolia/shared/api";
   import { LICENCE_INFO } from "@skolia/shared/api";
   import type { Token } from "@skolia/shared/schema";
-  import { getDocument, getText, loadReading, type Reading } from "./lib/api.ts";
+  import { getDocument, getText, loadReading, type Reading } from "../../lib/api.ts";
   import { layout, tokenKey, type Layout } from "@skolia/shared/doc";
-  import { afterPoll, notice as noticeFor, queueText, retryAfter } from "./lib/reading.ts";
-  import Button from "./Button.svelte";
+  import { afterPoll, notice as noticeFor, queueText, retryAfter } from "../../lib/reading.ts";
+  import Button from "../../components/Button.svelte";
   import EditDocument from "./EditDocument.svelte";
   import WordSheet from "./WordSheet.svelte";
-  import { sheet } from "./lib/sheet.svelte.ts";
-  import { readLink, writeLink } from "./lib/link.ts";
+  import { sheet } from "../../lib/sheet.svelte.ts";
+  import { readLink, writeLink } from "../../lib/link.ts";
   import { tick, untrack } from "svelte";
-  import type { ReaderMode } from "./lib/mode.ts";
-  import { words as known } from "./lib/words.svelte.ts";
+  import type { ReaderMode } from "../../lib/mode.ts";
+  import { words as known } from "../../lib/words.svelte.ts";
 
   let { id }: { id: string } = $props();
 

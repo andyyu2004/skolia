@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { User } from "@skolia/shared/api";
-  import { signIn, signOut } from "./lib/api.ts";
+  import { signIn, signOut } from "../lib/api.ts";
   import Button from "./Button.svelte";
 
   let {

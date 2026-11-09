@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { DocumentSummary, Lang, User } from "@skolia/shared/api";
   import { LANGS, LANGUAGE_INFO, LICENCE_INFO } from "@skolia/shared/api";
-  import { listDocuments } from "./lib/api.ts";
-  import { badge } from "./lib/reading.ts";
-  import Page from "./Page.svelte";
+  import { listDocuments } from "../lib/api.ts";
+  import { badge } from "../lib/reading.ts";
+  import Page from "../components/Page.svelte";
 
   let { user }: { user: User | null | undefined } = $props();
 

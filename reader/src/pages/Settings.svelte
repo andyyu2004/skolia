@@ -1,9 +1,9 @@
 <script lang="ts">
   import { DEFAULT_NEW_PER_DAY, MAX_NEW_PER_DAY, type User } from "@skolia/shared/api";
-  import { getSettings, saveSettings, signIn } from "./lib/api.ts";
-  import Button from "./Button.svelte";
-  import Field from "./Field.svelte";
-  import Page from "./Page.svelte";
+  import { getSettings, saveSettings, signIn } from "../lib/api.ts";
+  import Button from "../components/Button.svelte";
+  import Field from "../components/Field.svelte";
+  import Page from "../components/Page.svelte";
 
   let { user }: { user: User | null | undefined } = $props();
 

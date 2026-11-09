@@ -2,10 +2,10 @@
   import { untrack } from "svelte";
   import type { DocumentSummary, Licence } from "@skolia/shared/api";
   import { MAX_TITLE_LENGTH, isShareable } from "@skolia/shared/api";
-  import { deleteDocument, updateDocument } from "./lib/api.ts";
-  import Button from "./Button.svelte";
-  import Field from "./Field.svelte";
-  import SourceFields from "./SourceFields.svelte";
+  import { deleteDocument, updateDocument } from "../../lib/api.ts";
+  import Button from "../../components/Button.svelte";
+  import Field from "../../components/Field.svelte";
+  import SourceFields from "../../components/SourceFields.svelte";
 
   /** The importer changes a text's title, licence, author, source and whether it's
    * shared, or deletes it, in a modal dialog. */

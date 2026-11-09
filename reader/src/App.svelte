@@ -1,13 +1,13 @@
 <script lang="ts">
   import { isLang, type Lang, type User } from "@skolia/shared/api";
-  import Explore from "./Explore.svelte";
+  import Explore from "./pages/Explore.svelte";
   import { currentUser } from "./lib/api.ts";
   import { clearWords, loadWords } from "./lib/words.svelte.ts";
-  import Nav from "./Nav.svelte";
-  import Reader from "./Reader.svelte";
-  import Review from "./Review.svelte";
-  import Settings from "./Settings.svelte";
-  import Upload from "./Upload.svelte";
+  import Nav from "./components/Nav.svelte";
+  import Reader from "./pages/reader/Reader.svelte";
+  import Review from "./pages/Review.svelte";
+  import Settings from "./pages/Settings.svelte";
+  import Upload from "./pages/Upload.svelte";
   import { versionUrl } from "./lib/version.ts";
 
   type Route = { page: "explore" } | { page: "upload" } | { page: "review"; lang: Lang | null } | { page: "settings" } | { page: "reader"; id: string };

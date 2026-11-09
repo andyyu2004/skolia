@@ -4,13 +4,13 @@
   import { LANGUAGES } from "@skolia/shared/lang";
   import { lemmaTables, type Table } from "@skolia/shared/paradigm";
   import { UPOS_LABEL } from "@skolia/shared/ud";
-  import Button from "./Button.svelte";
-  import Page from "./Page.svelte";
-  import ParadigmTable from "./ParadigmTable.svelte";
-  import Pronunciations from "./Pronunciations.svelte";
-  import { cardCounts, dueCards, review, signIn } from "./lib/api.ts";
-  import { clue, keyTarget, shortcut } from "./lib/review.ts";
-  import { setStatus } from "./lib/words.svelte.ts";
+  import Button from "../components/Button.svelte";
+  import Page from "../components/Page.svelte";
+  import ParadigmTable from "../components/ParadigmTable.svelte";
+  import Pronunciations from "../components/Pronunciations.svelte";
+  import { cardCounts, dueCards, review, signIn } from "../lib/api.ts";
+  import { clue, keyTarget, shortcut } from "../lib/review.ts";
+  import { setStatus } from "../lib/words.svelte.ts";
 
   /** lang is the URL's (#/review/pl); without one, the language with the most to review. */
   let { user, lang }: { user: User | null | undefined; lang: Lang | null } = $props();

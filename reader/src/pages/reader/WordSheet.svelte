@@ -15,15 +15,15 @@
   } from "@skolia/shared/lexicon";
   import type { Recording } from "@skolia/shared/schema";
   import { LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
-  import { setStatus, words as known } from "./lib/words.svelte.ts";
-  import type { ReaderMode } from "./lib/mode.ts";
+  import { setStatus, words as known } from "../../lib/words.svelte.ts";
+  import type { ReaderMode } from "../../lib/mode.ts";
   import { paradigmTables } from "@skolia/shared/paradigm";
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
-  import Button from "./Button.svelte";
-  import ParadigmTable from "./ParadigmTable.svelte";
-  import Pronunciations from "./Pronunciations.svelte";
+  import Button from "../../components/Button.svelte";
+  import ParadigmTable from "../../components/ParadigmTable.svelte";
+  import Pronunciations from "../../components/Pronunciations.svelte";
   import SentenceDiagram from "./SentenceDiagram.svelte";
-  import { sheet, type SheetView } from "./lib/sheet.svelte.ts";
+  import { sheet, type SheetView } from "../../lib/sheet.svelte.ts";
   import { clauseOf, parseSentence } from "@skolia/shared/tree";
 
   type WordPiece = Extract<Piece, { kind: "word" }>;

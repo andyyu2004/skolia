@@ -1,11 +1,11 @@
 <script lang="ts">
   import type { Lang, Licence, User } from "@skolia/shared/api";
   import { LANGS, LANGUAGE_INFO, MAX_TEXT_LENGTH, isShareable } from "@skolia/shared/api";
-  import { importDocument, signIn } from "./lib/api.ts";
-  import Button from "./Button.svelte";
-  import Field from "./Field.svelte";
-  import Page from "./Page.svelte";
-  import SourceFields from "./SourceFields.svelte";
+  import { importDocument, signIn } from "../lib/api.ts";
+  import Button from "../components/Button.svelte";
+  import Field from "../components/Field.svelte";
+  import Page from "../components/Page.svelte";
+  import SourceFields from "../components/SourceFields.svelte";
 
   let { user }: { user: User | null | undefined } = $props();
 

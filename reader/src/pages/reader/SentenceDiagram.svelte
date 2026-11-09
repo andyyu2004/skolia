@@ -5,7 +5,7 @@
   import type { Lang } from "@skolia/shared/api";
   import { fitted, layout, type Edge, type Role, type Shape } from "@skolia/shared/diagram";
   import { focusOn, spokenLabel, type Sentence } from "@skolia/shared/tree";
-  import { arrowhead, rounded } from "./lib/path.ts";
+  import { arrowhead, rounded } from "../../lib/path.ts";
 
   let {
     lang,
