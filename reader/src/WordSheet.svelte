@@ -60,8 +60,12 @@
   /** The text keeps at least this much of the screen */
   const TEXT_ROOM = 320;
   const NARROWEST = 288;
+  let windowWidth = $state(0);
+  const widest = $derived(Math.max(NARROWEST, windowWidth - TEXT_ROOM));
+  /** The sheet's width as drawn, dragged or not, for the edge to report */
+  let shown = $state(0);
   function resize(width: number): void {
-    sheet.width[sheet.view] = Math.round(Math.max(NARROWEST, Math.min(width, window.innerWidth - TEXT_ROOM)));
+    sheet.width[sheet.view] = Math.round(Math.max(NARROWEST, Math.min(width, widest)));
   }
 
   /** On a wide screen the sheet's left edge drags; a double click puts it back. */
@@ -76,11 +80,18 @@
     edge.addEventListener("lostpointercapture", () => edge.removeEventListener("pointermove", move), { once: true });
   }
 
+  /** The keys of a window splitter (WAI-ARIA authoring practices): the sheet is on the right, so left widens it */
+  const EDGE_KEYS: Record<string, (width: number) => number> = {
+    ArrowLeft: (width) => width + 16,
+    ArrowRight: (width) => width - 16,
+    Home: () => NARROWEST,
+    End: () => widest,
+  };
   function onedgekey(event: KeyboardEvent): void {
-    const step = event.key === "ArrowLeft" ? 16 : event.key === "ArrowRight" ? -16 : 0;
-    if (step === 0 || !aside) return;
+    const to = EDGE_KEYS[event.key];
+    if (!to) return;
     event.preventDefault();
-    resize(aside.getBoundingClientRect().width + step);
+    resize(to(shown));
   }
 
   /** On a phone the sheet starts at half height; tapping the handle gives it the screen. */
@@ -212,14 +223,22 @@
   }
 </script>
 
-<aside class="sheet" class:expanded aria-label="Word details" bind:this={aside}>
+<svelte:window bind:innerWidth={windowWidth} />
+
+<aside id="word-sheet" class="sheet" class:expanded aria-label="Word details" bind:this={aside} bind:offsetWidth={shown}>
   <div class="sheet-bar">
+    <!-- A focusable separator with a value is a widget in ARIA, which Svelte's check doesn't know -->
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
     <div
       class="resizer"
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize"
+      aria-label="Width of word details"
+      aria-controls="word-sheet"
+      aria-valuenow={shown}
+      aria-valuemin={NARROWEST}
+      aria-valuemax={widest}
+      aria-valuetext="{shown} pixels"
       tabindex="0"
       onpointerdown={ondrag}
       onkeydown={onedgekey}
