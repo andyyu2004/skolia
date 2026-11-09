@@ -40,9 +40,13 @@ A new environment: add it to the checks in `tf.sh`, `wrangler.sh` and `deploy-in
 
 ### Previews
 
-Each pull request from a branch of this repository gets a preview, `pr-N`, deployed and end-to-end tested on every push (`ci.yml`, job `deploy-preview`). Merging needs it to pass (`ci.yml`, job `e2e`); a fork's pull request gets none and isn't held up. It is on workers.dev only, with no Google client, so only the end-to-end tests' API keys sign in, and it accepts 20 imports a day. Its wrangler configs are made by `infra/preview.py config pr-N` from the `env.staging` blocks, with `-pr-N` names and its workers.dev URL; `deploy-infra` makes them after Terraform, and `wrangler.sh` when they're missing. They're gitignored.
+Each pull request from a branch of this repository gets a preview, `pr-N`, deployed and end-to-end tested on every push (`ci.yml`, job `deploy-preview`). Merging needs it to pass (`ci.yml`, job `e2e`); a fork's pull request gets none and isn't held up. It is on workers.dev only, with no Google client, so only the end-to-end tests' API keys sign in, and it accepts 20 imports a day. Its wrangler configs are made by `infra/preview.py config pr-N` from the `env.staging` blocks, with `-pr-N` names, its workers.dev URL and ingest containers that sleep after 10 s idle; `deploy-infra` makes them after Terraform, and `wrangler.sh` when they're missing. They're gitignored.
 
 Closing the pull request tears the preview down (`just teardown pr-N`, `infra/teardown.sh`): the queue's consumer, the ingest Worker, its container applications (which `wrangler delete` leaves), the skolia Worker, the bucket's objects, `terraform destroy`, then the state object. Each step skips what's already gone, so it can be run again. Every night `sweep.yml` runs `infra/sweep.sh`, which finds previews by their resources' and state's names, tears down those whose pull request isn't open, and fails if any are left; `infra/sweep.sh -n` lists them without tearing them down.
+
+### Container usage
+
+`infra/container-usage.py [--since DATE] [--until DATE]` prints the containers' memory use (GiB-seconds, what Cloudflare bills; 25 GiB-hours a month are free) per environment and per day, by default for this month. Torn-down previews show as `deleted`. Most of it is deploys': each one's end-to-end tests and seed start a container per language, which stays up `SLEEP_AFTER` (`api/src/worker/ingest.ts`) once idle.
 
 ## Credentials
 

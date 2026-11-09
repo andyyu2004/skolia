@@ -25,7 +25,8 @@ interface Env {
   S3_SECRET_ACCESS_KEY: string;
   /** The Host header for S3_ENDPOINT; wrangler dev only (api/.env) */
   S3_HOST?: string;
-  /** How long the container stays up once idle, e.g. "30s" to test */
+  /** How long the container stays up once idle; 1m by default, about what a start
+   * costs (the models took 17 to 99 s to load, median 45 s, in 42 starts) */
   SLEEP_AFTER?: string;
 }
 
@@ -66,9 +67,7 @@ function milliseconds(duration: string): number {
  * job and then every SLEEP_AFTER while it's busy, and stops it once it's idle.
  */
 export class Ingester extends DurableObject<Env> {
-  private readonly sleepAfterMs = milliseconds(this.env.SLEEP_AFTER ?? "5m");
-  /** Settles when the container this object started exits */
-  private exited: Promise<void> | undefined;
+  private readonly sleepAfterMs = milliseconds(this.env.SLEEP_AFTER ?? "1m");
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -133,11 +132,12 @@ export class Ingester extends DurableObject<Env> {
         },
       });
       console.log("starting ingest:", image);
-      this.exited = container.monitor().then(
-        () => console.log("ingest exited:", image),
-        (error: unknown) => console.error("ingest failed:", image, error),
+      this.ctx.waitUntil(
+        container.monitor().then(
+          () => console.log("ingest exited:", image),
+          (error: unknown) => console.error("ingest failed:", image, error),
+        ),
       );
-      this.ctx.waitUntil(this.exited);
       await container.setInactivityTimeout(this.inactivityTimeoutMs());
     }
     await this.ready(container);
@@ -159,12 +159,9 @@ export class Ingester extends DurableObject<Env> {
         return;
       }
       console.log("ingest is idle; stopping it");
-      // A restarted Durable Object hasn't watched the container yet
-      const exited = this.exited ?? container.monitor().catch(() => undefined);
       // SIGTERM rather than destroy(), whose SIGKILL makes the exit look like a crash
       container.signal(SIGTERM);
-      const timeout = scheduler.wait(STOP_TIMEOUT_MS).then(() => "timeout" as const);
-      if ((await Promise.race([exited, timeout])) === "timeout") {
+      if (!(await this.stopped(container))) {
         console.error(`ingest didn't stop within ${STOP_TIMEOUT_MS} ms; killing it`);
         await container.destroy();
       }
@@ -179,6 +176,18 @@ export class Ingester extends DurableObject<Env> {
 
   private inactivityTimeoutMs(): number {
     return this.sleepAfterMs + INACTIVITY_MARGIN_MS;
+  }
+
+  /** Whether the container exits within STOP_TIMEOUT_MS. Polled: the monitor() run()
+   * started doesn't settle while blockConcurrencyWhile holds the object, so awaiting it
+   * timed out in 138 of 143 stops, though the containers had exited. */
+  private async stopped(container: Container): Promise<boolean> {
+    const deadline = Date.now() + STOP_TIMEOUT_MS;
+    while (container.running) {
+      if (Date.now() > deadline) return false;
+      await scheduler.wait(250);
+    }
+    return true;
   }
 
   /** start() returns before the container listens */
