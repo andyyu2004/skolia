@@ -13,6 +13,7 @@ import type { PART_ENCODING } from "@skolia/shared/keys";
 import * as schemas from "@skolia/shared/schemas";
 import * as cards from "./controllers/cards.ts";
 import * as documents from "./controllers/documents.ts";
+import * as positions from "./controllers/positions.ts";
 import { fail, ok, type BlobResult, type Failed, type Result } from "./controllers/result.ts";
 import { log } from "./log.ts";
 import type { Deps, StoredBlob } from "./ports.ts";
@@ -22,6 +23,7 @@ const logger = log("api");
 // A character is at most 6 bytes in JSON (\uXXXX), plus room for the title. The exact
 // character limit is checked after parsing.
 const MAX_BODY_BYTES = MAX_TEXT_LENGTH * 6 + 4 * 1024;
+const DOCUMENT_ID_MESSAGE = "document id must be 64 lowercase hex characters";
 const LEMMA_ID_MESSAGE = `lemma id must be {lang}:{lemma}:{upos}, lang one of ${LANGS.join(", ")}`;
 
 export type AppType = ReturnType<typeof createApp>;
@@ -66,6 +68,15 @@ export function createApp(deps: Deps) {
     })
     .post("/api/me/reviews", zValidator("json", schemas.ReviewRequest, badRequest()), (c) =>
       signedIn(c, (user) => cards.review(deps, user, c.req.valid("json"))),
+    )
+    .get("/api/me/positions/:id", zValidator("param", z.object({ id: schemas.DocumentId }), badRequest(DOCUMENT_ID_MESSAGE)), (c) =>
+      signedIn(c, (user) => positions.get(deps, user, c.req.valid("param").id)),
+    )
+    .put(
+      "/api/me/positions/:id",
+      zValidator("param", z.object({ id: schemas.DocumentId }), badRequest(DOCUMENT_ID_MESSAGE)),
+      zValidator("json", schemas.ReadingPosition, badRequest()),
+      (c) => signedIn(c, (user) => positions.set(deps, user, c.req.valid("param").id, c.req.valid("json"))),
     )
     .get("/api/me/documents", (c) => signedIn(c, (user) => documents.mine(deps, user)))
     .get("/api/me/settings", (c) => signedIn(c, (user) => cards.settings(deps, user)))

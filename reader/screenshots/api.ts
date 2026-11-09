@@ -114,6 +114,8 @@ function deps(signedIn: boolean): Deps {
       setSettings: async (_userId, next) => {
         settings = next;
       },
+      position: async () => null,
+      setPosition: async () => {},
     },
     lexicon: {
       entries: async (ids) => ({ entries: ids.flatMap((id) => entry(id) ?? []), featureSets: { pl: featureSets } }),

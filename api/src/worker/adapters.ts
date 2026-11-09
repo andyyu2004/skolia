@@ -29,6 +29,7 @@ import type {
   Sharing,
   StoredBlob,
   StoredDocument,
+  StoredPosition,
   UserData,
 } from "../ports.ts";
 import { log } from "../log.ts";
@@ -69,6 +70,14 @@ export class DurableObjectUsers implements UserData {
 
   async setSettings(userId: UserId, settings: Settings): Promise<void> {
     await this.users.getByName(userId).setSettings(settings);
+  }
+
+  async position(userId: UserId, documentId: DocumentId): Promise<StoredPosition | null> {
+    return this.users.getByName(userId).position(documentId);
+  }
+
+  async setPosition(userId: UserId, documentId: DocumentId, position: StoredPosition): Promise<void> {
+    await this.users.getByName(userId).setPosition(documentId, position);
   }
 }
 

@@ -15,6 +15,7 @@ import {
   type Lang,
   type LemmaId,
   type Rating,
+  type ReadingPosition,
   type ReadingNames,
   type Reviewed,
   type Settings,
@@ -169,5 +170,19 @@ export async function getSettings(): Promise<Settings> {
 
 export async function saveSettings(settings: Settings): Promise<void> {
   const response = await api.me.settings.$put({ json: settings });
+  if (!response.ok) throw await failure(response);
+}
+
+/** Where the user was in the text, null if nowhere yet, or undefined when signed out. */
+export async function getPosition(id: string): Promise<ReadingPosition | null | undefined> {
+  const response = await api.me.positions[":id"].$get({ param: { id } });
+  if (response.status === 401) return undefined;
+  if (!response.ok) throw await failure(response);
+  return (await response.json()).position;
+}
+
+/** keepalive: the request outlives the page, for a save as it's hidden or closed. */
+export async function putPosition(id: string, position: ReadingPosition, keepalive = false): Promise<void> {
+  const response = await api.me.positions[":id"].$put({ param: { id }, json: position }, { init: { keepalive } });
   if (!response.ok) throw await failure(response);
 }

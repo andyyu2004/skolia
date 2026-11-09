@@ -10,6 +10,7 @@ import type {
   LemmaId,
   Lookup,
   Licence,
+  ReadingPosition,
   Reviewed,
   ReviewRequest,
   ScheduledCard,
@@ -109,7 +110,12 @@ export interface UserData {
   review(userId: UserId, request: ReviewRequest, now: Timestamp): Promise<ReviewOutcome>;
   settings(userId: UserId): Promise<Settings>;
   setSettings(userId: UserId, settings: Settings): Promise<void>;
+  position(userId: UserId, documentId: DocumentId): Promise<StoredPosition | null>;
+  /** Keeps the stored position if it's as new as this one or newer. */
+  setPosition(userId: UserId, documentId: DocumentId, position: StoredPosition): Promise<void>;
 }
+
+export type StoredPosition = Omit<ReadingPosition, "at"> & { at: Timestamp };
 
 /** The lexicon, with the feature sets its entries' paradigms use. Ids it doesn't have are left out. */
 export interface Lexicon {

@@ -232,6 +232,8 @@ export type Word = z.output<typeof schemas.Word>;
 
 export type Settings = z.output<typeof schemas.Settings>;
 
+export type ReadingPosition = z.output<typeof schemas.ReadingPosition>;
+
 export type ReviewRequest = z.output<typeof schemas.ReviewRequest>;
 /** What the reader sends: the same, before the API's validation brands its ids. */
 export type ReviewRequestInput = z.input<typeof schemas.ReviewRequest>;

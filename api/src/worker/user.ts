@@ -1,8 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
-import { CARD_KINDS, LANGS, MATURE_DAYS, timestamp, type CardCounts, type Timestamp, type Lang, type LemmaId, type ReviewRequest, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
+import { CARD_KINDS, LANGS, MATURE_DAYS, timestamp, type CardCounts, type DocumentId, type Timestamp, type Lang, type LemmaId, type ReviewRequest, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
 import * as schemas from "@skolia/shared/schemas";
 import { CardId } from "@skolia/shared/schemas";
-import type { DueCards, ReviewOutcome } from "../ports.ts";
+import type { DueCards, ReviewOutcome, StoredPosition } from "../ports.ts";
 import { fromJson, fsrs, newCard, review, toJson } from "./scheduler.ts";
 import { MIGRATIONS } from "../user/migrations/index.ts";
 import { LogEntry, MigrationError, applied, plan, problems, withChecksums, type Checksummed } from "../user/migrator.ts";
@@ -155,6 +155,21 @@ export class User extends DurableObject<object> {
 
   setSettings({ newPerDay }: Settings): void {
     this.sql.exec(`UPDATE settings SET new_per_day = ? WHERE id = 1`, newPerDay);
+  }
+
+  position(documentId: DocumentId): StoredPosition | null {
+    const row = this.sql.exec(`SELECT "offset", at FROM reading_position WHERE document_id = ?`, documentId).toArray()[0];
+    return row === undefined ? null : { offset: Number(row["offset"]), at: schemas.Timestamp.parse(row["at"]) };
+  }
+
+  setPosition(documentId: DocumentId, { offset, at }: StoredPosition): void {
+    this.sql.exec(
+      `INSERT INTO reading_position (document_id, "offset", at) VALUES (?, ?, ?)
+       ON CONFLICT (document_id) DO UPDATE SET "offset" = excluded."offset", at = excluded.at WHERE excluded.at > reading_position.at`,
+      documentId,
+      offset,
+      at,
+    );
   }
 
   async #migrate(target: number): Promise<void> {
