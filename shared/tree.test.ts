@@ -19,7 +19,7 @@ test("leaves out punctuation and builds the tree from the main word", () => {
     ["je"],
   );
   assert.deepEqual(
-    sentence.words[1]?.children.map((w) => w.form),
+    sentence.children.get(sentence.words[1]!)?.map((w) => w.form),
     ["Kot", "rybę"],
   );
   assert.equal(sentence.words[2]?.head?.form, "rybę");

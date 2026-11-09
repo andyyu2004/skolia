@@ -5,44 +5,45 @@ import { CASE_NAME, UPOS_LABEL } from "./ud.ts";
 
 export interface Word {
   /** The token's index in the sentence, which selections refer to. */
-  index: number;
-  token: Token;
+  readonly index: number;
+  readonly token: Token;
   /** As drawn: "-ś" for a person ending fused to the word before. */
-  form: string;
+  readonly form: string;
   /** Joins the word before it in the text (powróciła + ś). */
-  ending: boolean;
+  readonly ending: boolean;
   /** Its part of speech, or the language's label for part of a word. */
-  pos: string;
+  readonly pos: string;
   /** The relation to its head as a noun ("subject"), "main word" for the root. */
-  relation: string;
+  readonly relation: string;
   /** "genitive", for words with a case in languages that show them. */
-  caseName: string | null;
-  root: boolean;
-  head: Word | null;
-  /** Dependents in sentence order. */
-  children: Word[];
-  /** Steps from the top of what is drawn. */
-  depth: number;
+  readonly caseName: string | null;
+  readonly root: boolean;
+  /** Null for a top: the main word, or the top of a clause. */
+  readonly head: Word | null;
+  /** Steps from its top. */
+  readonly depth: number;
   /** Position among the drawn words. */
-  order: number;
+  readonly order: number;
 }
 
 /** A dependency (head to dependent), or a case reason (the word causing it to the word with it). */
 export interface Link {
-  from: Word;
-  to: Word;
-  label: string;
+  readonly from: Word;
+  readonly to: Word;
+  readonly label: string;
   /** The UD relation or case rule the label stands for. */
-  raw: string;
+  readonly raw: string;
 }
 
 export interface Sentence {
   /** In sentence order. */
-  words: Word[];
+  readonly words: readonly Word[];
   /** Words drawn without a head: the main word, or the top of a clause. */
-  tops: Word[];
-  dependencies: Link[];
-  cases: Link[];
+  readonly tops: readonly Word[];
+  /** Each word's dependents, in sentence order. */
+  readonly children: ReadonlyMap<Word, readonly Word[]>;
+  readonly dependencies: readonly Link[];
+  readonly cases: readonly Link[];
 }
 
 export interface SentenceOptions {
@@ -57,10 +58,21 @@ export interface SentenceOptions {
 /** Punctuation is left out: its links carry nothing a learner needs and crowd the rest. */
 export function parseSentence(tokens: Token[], options: SentenceOptions = {}): Sentence {
   const { keep, cases: withCases = true, partOfWord } = options;
-  const words: Word[] = [];
+  const drawn = tokens
+    .map((token, index) => ({ token, index }))
+    .filter(({ token, index }) => token.upos !== "PUNCT" && (!keep || keep.has(index)))
+    .map((d, order) => ({ ...d, order }));
+  const headOf = drawnHeads(
+    tokens,
+    drawn.map((d) => d.index),
+  );
+  const dependentsOf = (index: number | null): typeof drawn => drawn.filter((d) => headOf.get(d.index) === index);
+
+  // Top-down, so each word's head, and so its depth, exists when the word is made
   const byIndex = new Map<number, Word>();
-  tokens.forEach((token, index) => {
-    if (token.upos === "PUNCT" || (keep && !keep.has(index))) return;
+  const queue: [(typeof drawn)[number], Word | null][] = dependentsOf(null).map((d) => [d, null]);
+  for (let next = queue.shift(); next; next = queue.shift()) {
+    const [{ token, index, order }, head] = next;
     const ending = isEnding(tokens, index);
     const value = token.feats.Case;
     const word: Word = {
@@ -72,63 +84,50 @@ export function parseSentence(tokens: Token[], options: SentenceOptions = {}): S
       relation: token.head === null ? "main word" : relationName(token.deprel),
       caseName: withCases && value ? CASE_NAME[value] : null,
       root: token.head === null,
-      head: null,
-      children: [],
-      depth: 0,
-      order: words.length,
+      head,
+      depth: head ? head.depth + 1 : 0,
+      order,
     };
-    words.push(word);
     byIndex.set(index, word);
-  });
-
-  for (const word of words) {
-    const head = word.token.head === null ? undefined : byIndex.get(word.token.head);
-    if (head && head !== word) {
-      word.head = head;
-      head.children.push(word);
-    }
+    for (const dependent of dependentsOf(index)) queue.push([dependent, word]);
   }
-  const tops = depths(words);
 
-  const dependencies: Link[] = [];
-  const cases: Link[] = [];
-  for (const word of words) {
-    if (word.head) dependencies.push({ from: word.head, to: word, label: word.relation, raw: word.token.deprel ?? "" });
+  // Every drawn token has a top to reach once loops are cut, so each was made
+  const words = drawn.map((d) => must(byIndex.get(d.index), `a word for token ${d.index}`));
+  const children = new Map(words.map((w) => [w, words.filter((d) => d.head === w)]));
+  const dependencies = words.flatMap((word): Link[] =>
+    word.head ? [{ from: word.head, to: word, label: word.relation, raw: word.token.deprel ?? "" }] : [],
+  );
+  const cases = words.flatMap((word): Link[] => {
     const reason = word.token.case_reason;
     const cause = reason?.trigger === undefined ? undefined : byIndex.get(reason.trigger);
-    if (reason && cause && cause !== word) cases.push({ from: cause, to: word, label: RULE[reason.rule], raw: reason.rule });
-  }
-  return { words, tops, dependencies, cases };
+    return reason && cause && cause !== word ? [{ from: cause, to: word, label: RULE[reason.rule], raw: reason.rule }] : [];
+  });
+  return { words, tops: words.filter((w) => w.head === null), children, dependencies, cases };
 }
 
-/** Sets each word's depth from the tops down, and returns the tops. A head chain that
- * loops has no top: it is cut at its first word, which becomes one. */
-function depths(words: Word[]): Word[] {
-  const tops = words.filter((w) => w.head === null);
-  const seen = new Set<Word>();
-  const walk = (top: Word): void => {
-    const queue: Word[] = [top];
-    top.depth = 0;
-    seen.add(top);
-    for (let word = queue.shift(); word; word = queue.shift()) {
-      for (const child of word.children) {
-        if (seen.has(child)) continue;
-        child.depth = word.depth + 1;
-        seen.add(child);
-        queue.push(child);
-      }
+/** Each drawn token's head among the drawn tokens, or null for a top. A head chain that
+ * loops would never reach a top, so it is cut where the loop closes. */
+function drawnHeads(tokens: Token[], drawn: number[]): Map<number, number | null> {
+  const inside = new Set(drawn);
+  const headOf = new Map(
+    drawn.map((index) => {
+      const head = tokens[index]?.head ?? null;
+      return [index, head !== null && head !== index && inside.has(head) ? head : null];
+    }),
+  );
+  const settled = new Set<number>();
+  for (const start of drawn) {
+    const path = new Set<number>();
+    let at: number | null = start;
+    while (at !== null && !settled.has(at) && !path.has(at)) {
+      path.add(at);
+      at = headOf.get(at) ?? null;
     }
-  };
-  tops.forEach(walk);
-  for (const word of words) {
-    if (seen.has(word)) continue;
-    const head = word.head;
-    if (head) head.children = head.children.filter((c) => c !== word);
-    word.head = null;
-    tops.push(word);
-    walk(word);
+    if (at !== null && path.has(at)) headOf.set(at, null);
+    for (const index of path) settled.add(index);
   }
-  return tops.sort((a, b) => a.order - b.order);
+  return headOf;
 }
 
 /** A token sharing its characters with the one before is the end of a fused word (-em). */
@@ -293,3 +292,9 @@ const RULE: Record<CaseRule, string> = {
   "verbal-noun": "verbal noun",
   instrumental: "instrumental",
 };
+
+/** `value`, which the caller knows is there; a missing one is a bug, not something to draw. */
+export function must<T>(value: T | undefined, what: string): T {
+  if (value === undefined) throw new Error(`Expected ${what}`);
+  return value;
+}
