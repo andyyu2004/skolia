@@ -23,6 +23,14 @@ test: build
     pnpm test
     cd analysis && uv run pytest -q
 
+# Screenshots of the reader's pages (reader/screenshots) in Playwright's Linux image, so they come
+# out the same on a Mac and in CI. --update-snapshots accepts what changed.
+screenshots *args:
+    pnpm --filter @skolia/reader build
+    docker run --rm --ipc=host -e CI -v "$PWD:$PWD" -w "$PWD/reader" \
+        mcr.microsoft.com/playwright:v$(node -p 'require("./reader/package.json").devDependencies["@playwright/test"]')-noble \
+        node_modules/.bin/playwright test {{ args }}
+
 # The reader and the API bundle (api/dist, for the workerd tests)
 build:
     pnpm --filter @skolia/reader build

@@ -6,8 +6,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "svelte-check --fail-on-warnings",
-    "test": "node --test \"src/**/*.test.ts\""
+    "check": "svelte-check --fail-on-warnings && tsc -p screenshots",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "screenshots": "playwright test"
   },
   "dependencies": {
     "@skolia/shared": "workspace:*",
@@ -15,6 +16,7 @@
     "svelte": "5.57.2"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@skolia/api": "workspace:*",
     "@sveltejs/vite-plugin-svelte": "7.3.1",
     "@types/node": "26.6.5",
