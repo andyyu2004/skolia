@@ -61,7 +61,7 @@
 
   const VIEWS = [
     ["word", "Word"],
-    ["sentence", "Sentence structure"],
+    ["sentence", "Sentence"],
   ] as const;
 
   function show(view: SheetView): void {
