@@ -153,7 +153,12 @@
 
 <svelte:window {onkeydown} onhashchange={followLink} />
 
-<div class="reader" class:sheet-open={piece !== undefined} class:sentence-open={piece !== undefined && sheet.view === "sentence"}>
+<div
+  class="reader"
+  class:sheet-open={piece !== undefined}
+  class:sentence-open={piece !== undefined && sheet.view === "sentence"}
+  style:--sheet-width={sheet.width[sheet.view] === null ? undefined : `${sheet.width[sheet.view]}px`}
+>
   <main class="page">
     {#if summary}
       {@const licence = LICENCE_INFO[summary.licence]}

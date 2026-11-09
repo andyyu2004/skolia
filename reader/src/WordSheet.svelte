@@ -20,7 +20,6 @@
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
   import ParadigmTable from "./ParadigmTable.svelte";
   import SentenceDiagram from "./SentenceDiagram.svelte";
-  import { MediaQuery } from "svelte/reactivity";
   import { sheet, type SheetView } from "./lib/sheet.svelte.ts";
   import { clauseOf, parseSentence } from "@skolia/shared/tree";
 
@@ -57,11 +56,36 @@
     return tags.filter((t) => !language.grammarTags.has(t));
   }
 
+  let aside = $state<HTMLElement | null>(null);
+  /** The text keeps at least this much of the screen */
+  const TEXT_ROOM = 320;
+  const NARROWEST = 288;
+  function resize(width: number): void {
+    sheet.width[sheet.view] = Math.round(Math.max(NARROWEST, Math.min(width, window.innerWidth - TEXT_ROOM)));
+  }
+
+  /** On a wide screen the sheet's left edge drags; a double click puts it back. */
+  function ondrag(event: PointerEvent): void {
+    const edge = event.currentTarget;
+    if (!(edge instanceof HTMLElement) || !aside || event.button !== 0) return;
+    event.preventDefault();
+    edge.setPointerCapture(event.pointerId);
+    const right = aside.getBoundingClientRect().right;
+    const move = (e: PointerEvent): void => resize(right - e.clientX);
+    edge.addEventListener("pointermove", move);
+    edge.addEventListener("lostpointercapture", () => edge.removeEventListener("pointermove", move), { once: true });
+  }
+
+  function onedgekey(event: KeyboardEvent): void {
+    const step = event.key === "ArrowLeft" ? 16 : event.key === "ArrowRight" ? -16 : 0;
+    if (step === 0 || !aside) return;
+    event.preventDefault();
+    resize(aside.getBoundingClientRect().width + step);
+  }
+
   /** On a phone the sheet starts at half height; tapping the handle gives it the screen. */
   let expanded = $state(sheet.view === "sentence");
 
-  /** Too narrow for a diagram read left to right: it's turned to read top to bottom */
-  const narrow = new MediaQuery("max-width: 599px");
 
   const VIEWS = [
     ["word", "Word"],
@@ -188,8 +212,19 @@
   }
 </script>
 
-<aside class="sheet" class:expanded aria-label="Word details">
+<aside class="sheet" class:expanded aria-label="Word details" bind:this={aside}>
   <div class="sheet-bar">
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+    <div
+      class="resizer"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize"
+      tabindex="0"
+      onpointerdown={ondrag}
+      onkeydown={onedgekey}
+      ondblclick={() => (sheet.width[sheet.view] = null)}
+    ></div>
     <button type="button" class="handle" aria-label={expanded ? "Shrink" : "Expand"} onclick={() => (expanded = !expanded)}
     ></button>
     <div class="sheet-head">
@@ -261,7 +296,6 @@
         partOfWord: language.partOfWord,
       })}
       shape={sheet.layout}
-      direction={narrow.current ? "down" : "across"}
       selected={selectedTokens}
       onselect={(index) => onselectToken(sentence, index)}
     />

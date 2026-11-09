@@ -977,6 +977,8 @@ label.check {
   max-height: 50vh;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* Below the sticky tab bar when something in the sheet is scrolled to */
+  scroll-padding-top: 4.5rem;
   background: var(--surface);
   border-top: 1px solid var(--line);
   border-radius: 14px 14px 0 0;
@@ -1002,6 +1004,10 @@ label.check {
 }
 
 /* The tabs, then copy link and close, centred on one row over one rule */
+.resizer {
+  display: none;
+}
+
 .sheet-head {
   display: flex;
   align-items: center;
@@ -1095,12 +1101,12 @@ label.check {
 @media (min-width: 900px) {
   .reader {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 24rem;
+    grid-template-columns: minmax(0, 1fr) var(--sheet-width, 24rem);
   }
 
   /* A diagram needs more room than a dictionary entry */
   .reader.sentence-open {
-    grid-template-columns: minmax(0, 1fr) minmax(24rem, 48vw);
+    grid-template-columns: minmax(0, 1fr) var(--sheet-width, minmax(24rem, 48vw));
   }
 
   .reader.sheet-open .page {
@@ -1125,6 +1131,25 @@ label.check {
 
   .handle {
     display: none;
+  }
+
+  /* Down the sheet's left edge: the bar it sits in stays at the top, and the sheet clips it at the bottom */
+  .resizer {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: calc(-1 * var(--gutter));
+    width: 7px;
+    height: calc(100vh - var(--nav-height));
+    cursor: col-resize;
+    touch-action: none;
+  }
+
+  .resizer:hover,
+  .resizer:active,
+  .resizer:focus-visible {
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
+    outline: none;
   }
 
   .sheet-head {

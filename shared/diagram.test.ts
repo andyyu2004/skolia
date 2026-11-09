@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { layout, stack, type Diagram, type LayoutOptions, type Point } from "./diagram.ts";
+import { fitted, layout, stack, type Diagram, type LayoutOptions, type Point } from "./diagram.ts";
 import { caseChain, parseSentence, type Sentence } from "./tree.ts";
 import { SENTENCE, token } from "./tree.fixtures.ts";
 
@@ -152,4 +152,14 @@ test("the size takes in everything drawn", () => {
       }
     }
   }
+});
+
+test("a sentence reads across when it roughly fits its space, and down when it's far too wide", () => {
+  const sentence = parseSentence(SENTENCE);
+  const across = draw(sentence);
+  const fit = (width: number): Diagram => fitted(sentence, { shape: "arcs", measure, width });
+  assert.equal(fit(across.width).anchor, "middle");
+  // A little sideways scrolling is fine
+  assert.equal(fit(across.width / 1.4).anchor, "middle");
+  assert.equal(fit(across.width / 2).anchor, "start");
 });

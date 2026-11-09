@@ -10,9 +10,12 @@ export const sheet = $state<{
   whole: boolean;
   /** Paradigm tables unfolded, by title */
   forms: Record<string, boolean>;
+  /** The sheet's width on a wide screen once dragged, in pixels, for each view; null is the stylesheet's */
+  width: Record<SheetView, number | null>;
 }>({
   view: "word",
   layout: "arcs",
   whole: false,
   forms: {},
+  width: { word: null, sentence: null },
 });

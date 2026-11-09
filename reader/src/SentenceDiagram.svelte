@@ -3,7 +3,7 @@
   // layout is worked out in shared; this only turns it into SVG and handles selection.
   import { tick } from "svelte";
   import type { Lang } from "@skolia/shared/api";
-  import { layout, type Direction, type Edge, type Role, type Shape } from "@skolia/shared/diagram";
+  import { fitted, layout, type Edge, type Role, type Shape } from "@skolia/shared/diagram";
   import { focusOn, spokenLabel, type Sentence } from "@skolia/shared/tree";
   import { arrowhead, rounded } from "./lib/path.ts";
 
@@ -11,7 +11,6 @@
     lang,
     sentence,
     shape,
-    direction,
     selected,
     onselect,
   }: {
@@ -19,8 +18,6 @@
     sentence: Sentence;
     /** Arcs over the words in reading order, or a tree hanging from the main word. */
     shape: Shape;
-    /** Left to right, or top to bottom on a narrow screen. */
-    direction: Direction;
     /** Token indices of the selected word: one, or several for a fused word. */
     selected: ReadonlySet<number>;
     onselect: (index: number) => void;
@@ -48,7 +45,13 @@
   }
 
   const focus = $derived(focusOn(sentence, selected));
-  const diagram = $derived(layout(sentence, { shape, direction, measure, cases: focus.chain }));
+  /** The room the diagram has: it reads left to right if that roughly fits, else top to bottom */
+  let available = $state(0);
+  const diagram = $derived(
+    available > 0
+      ? fitted(sentence, { shape, measure, cases: focus.chain, width: available })
+      : layout(sentence, { shape, direction: "across", measure, cases: focus.chain }),
+  );
   const near = (e: Edge): boolean =>
     e.kind === "dependency" && (selected.has(e.link.from.index) || selected.has(e.link.to.index));
   /** Highlighted lines after the rest, so where lines share a stretch the highlight shows */
@@ -66,7 +69,7 @@
   $effect(() => {
     const box = diagram.boxes.find((b) => selected.has(b.word.index));
     const view = scroller;
-    const picture = `${shape} ${direction} ${sentence.words.map((w) => w.index).join(",")}`;
+    const picture = `${shape} ${diagram.anchor} ${sentence.words.map((w) => w.index).join(",")}`;
     if (!view || !box) return;
     const glide = drawn === picture;
     drawn = picture;
@@ -75,10 +78,26 @@
       view.scrollTo({ left, behavior: glide ? "smooth" : "instant" });
       const node = svg?.querySelector<SVGGElement>(".word.selected");
       // Arrow keys move the selection; keep focus on it if it was in the diagram
-      if (node && svg?.contains(document.activeElement)) node.focus({ preventScroll: true });
-      node?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: glide ? "smooth" : "instant" });
+      if (node && svg?.contains(document.activeElement)) {
+        moving = true;
+        node.focus({ preventScroll: true });
+        moving = false;
+      }
+      if (node) reveal(node, glide ? "smooth" : "instant");
     });
   });
+
+  /**
+   * Scrolls a word's box into view. The box, not the word's group: Firefox scrolls a group's
+   * scroller back to the start, and doesn't scroll to one that gets focus
+   * (https://bugzilla.mozilla.org/show_bug.cgi?id=1589164). The sheet's scroll-padding
+   * keeps it below the tabs.
+   */
+  function reveal(node: Element, behavior: ScrollBehavior): void {
+    node.querySelector("rect")?.scrollIntoView({ block: "nearest", inline: "nearest", behavior });
+  }
+  /** Set while the selection moves focus, which scrolls on its own */
+  let moving = false;
 
   function onkeydown(event: KeyboardEvent, index: number): void {
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -87,7 +106,7 @@
   }
 </script>
 
-<div class="tree" bind:this={scroller}>
+<div class="tree" bind:this={scroller} bind:clientWidth={available}>
   <svg
     bind:this={svg}
     width={diagram.width}
@@ -144,6 +163,7 @@
         aria-label={spokenLabel(word)}
         onclick={() => onselect(word.index)}
         onkeydown={(event) => onkeydown(event, word.index)}
+        onfocus={(event) => moving || reveal(event.currentTarget, "instant")}
       >
         <rect x={box.x} y={box.y} width={box.width} height={box.height} rx="5" />
         {#if box.dot}
