@@ -739,6 +739,67 @@ label.check {
   flex-shrink: 0;
 }
 
+.title-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Reading or learning: one button naming the mode, which switches it; what it does on hover
+   or keyboard focus */
+.mode {
+  position: relative;
+}
+
+.mode button.reading {
+  color: var(--muted);
+}
+
+.mode button.learning,
+.mode button.learning:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.mode .tip {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  z-index: 5;
+  width: max-content;
+  max-width: min(16rem, calc(100vw - 2 * var(--gutter)));
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--card-shadow);
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.mode:hover .tip,
+.mode:has(button:focus-visible) .tip {
+  visibility: visible;
+  opacity: 1;
+  transition-delay: 0.3s;
+}
+
+.word .add-card {
+  margin: 0.25rem 0;
+}
+
+.word .in-cards {
+  margin: 0.2rem 0;
+}
+
 .modal {
   width: min(34rem, calc(100vw - 2 * var(--gutter)));
   max-height: calc(100dvh - 2 * var(--gutter));

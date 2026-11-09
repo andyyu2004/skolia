@@ -10,6 +10,8 @@
   import { sheet } from "./lib/sheet.svelte.ts";
   import { readLink, writeLink } from "./lib/link.ts";
   import { tick, untrack } from "svelte";
+  import type { ReaderMode } from "./lib/mode.ts";
+  import { words as known } from "./lib/words.svelte.ts";
 
   let { id }: { id: string } = $props();
 
@@ -20,6 +22,7 @@
   let error = $state<string | null>(null);
   let selected = $state<number | null>(null);
   let editing = $state(false);
+  let mode = $state<ReaderMode>("reading");
 
   const notice = $derived(noticeFor(summary, reading !== null, error));
 
@@ -111,6 +114,7 @@
     event.preventDefault();
   }
 
+
   function headText(sentence: number, index: number): string | null {
     const id = doc?.pieceOf.get(tokenKey(sentence, index));
     return id === undefined ? null : (doc?.words[id]?.text ?? null);
@@ -159,12 +163,41 @@
       {@const licence = LICENCE_INFO[summary.licence]}
       <div class="title-row">
         <h1>{summary.title}</h1>
-        {#if summary.mine}
-          <button type="button" class="quiet small with-icon" onclick={() => (editing = true)}>
-            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 2.5 13.5 5 6 12.5 3 13l.5-3z" /></svg>
-            Edit
-          </button>
-        {/if}
+        <div class="title-actions">
+          {#if known.byId}
+            <div class="mode">
+              <button
+                type="button"
+                class="quiet small with-icon {mode}"
+                aria-describedby="mode-help"
+                onclick={() => (mode = mode === "reading" ? "learning" : "reading")}
+              >
+                {#if mode === "reading"}
+                  <svg viewBox="0 0 16 16" aria-hidden="true"
+                    ><path d="M8 4.5C6.8 3.6 5 3.2 2.5 3.2v9c2.5 0 4.3.4 5.5 1.3 1.2-.9 3-1.3 5.5-1.3v-9c-2.5 0-4.3.4-5.5 1.3zM8 4.5v9" /></svg
+                  >
+                  Reading
+                {:else}
+                  <svg viewBox="0 0 16 16" aria-hidden="true"
+                    ><path d="M3 5.5h7.5v7.5H3zM5.5 3H13v7.5" /></svg
+                  >
+                  Learning
+                {/if}
+              </button>
+              <span id="mode-help" role="tooltip" class="tip"
+                >{mode === "reading"
+                  ? "Reading: tapping a word only shows it, and its sheet has an Add to cards button. Click for learning, where tapping a word you haven't marked adds it to your cards."
+                  : "Learning: tapping a word you haven't marked adds it to your cards. Click for reading, where tapping only shows the word."}</span
+              >
+            </div>
+          {/if}
+          {#if summary.mine}
+            <button type="button" class="quiet small with-icon" onclick={() => (editing = true)}>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M11 2.5 13.5 5 6 12.5 3 13l.5-3z" /></svg>
+              Edit
+            </button>
+          {/if}
+        </div>
       </div>
       <p class="credit muted small">
         {#if summary.author}<span>{summary.author}</span>{/if}
@@ -237,6 +270,7 @@
       lang={reading.lang}
       bundle={reading.bundle}
       {piece}
+      {mode}
       {headText}
       {sentenceTokens}
       onselectToken={(sentence, index) => (selected = doc?.pieceOf.get(tokenKey(sentence, index)) ?? selected)}
