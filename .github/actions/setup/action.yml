@@ -1,5 +1,5 @@
 name: Setup
-description: pnpm, Node and the JS dependencies, uv, and Nix with terraform and just (flake.nix)
+description: Nix with flake.nix's packages.ci (terraform, just, Node, pnpm and uv), and the JS dependencies
 inputs:
   nix-conf:
     description: Extra nix.conf lines for the Nix install
@@ -7,22 +7,28 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: pnpm/action-setup@v6
-    - uses: actions/setup-node@v7
-      with:
-        node-version: 24
-        cache: pnpm
-    - run: pnpm install --frozen-lockfile
-      shell: bash
-    # setup-uv publishes no moving major tag
-    - uses: astral-sh/setup-uv@v10.3.3
-      with:
-        working-directory: analysis
-        enable-cache: true
     - uses: DeterminateSystems/determinate-nix-action@v3
       with:
         extra-conf: ${{ inputs.nix-conf }}
-    - run: echo "$(nix build --no-link --print-out-paths .#tools)/bin" >> "$GITHUB_PATH"
+    # Fetched in the background while the caches are restored; the build below waits for it
+    - run: nohup nix build --no-link .#ci >"$RUNNER_TEMP/nix-ci.log" 2>&1 &
+      shell: bash
+    - uses: actions/cache@v6.1.0
+      with:
+        path: |
+          ~/.local/share/pnpm
+          ~/.cache/uv
+          ~/.local/share/uv/python
+        key: setup-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'analysis/uv.lock') }}
+        restore-keys: setup-${{ runner.os }}-
+    - run: |
+        if ! out=$(nix build --no-link --print-out-paths .#ci); then
+          cat "$RUNNER_TEMP/nix-ci.log"
+          exit 1
+        fi
+        echo "$out/bin" >> "$GITHUB_PATH"
+      shell: bash
+    - run: pnpm install --frozen-lockfile --store-dir ~/.local/share/pnpm/store
       shell: bash
     - run: echo "TF_CLI_CONFIG_FILE=$GITHUB_WORKSPACE/infra/terraformrc" >> "$GITHUB_ENV"
       shell: bash
