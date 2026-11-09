@@ -144,6 +144,7 @@ export function publish(v: string): Promise<void> {
   return putJson(versionsKey("pl"), { analyzer: `pl/${v}`, lexicon: "lex/1", analysis: `s2-a${v}`, bundle: `b1-a${v}-l1` });
 }
 
-export async function summaryOf(app: App, id: string): Promise<DocumentSummary> {
-  return (await (await app.request(`/api/documents/${id}`)).json()) as DocumentSummary;
+/** The summary as the importer sees it, since a private document is only theirs to see. */
+export async function summaryOf(app: App, id: string, headers: HeadersInit = importer): Promise<DocumentSummary> {
+  return (await (await app.request(`/api/documents/${id}`, { headers })).json()) as DocumentSummary;
 }

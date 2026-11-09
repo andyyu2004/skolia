@@ -9,7 +9,7 @@ useLocal();
 
 test("brotli blobs are sent as stored when accepted, refused otherwise, cached forever", async () => {
   const app = setup();
-  await importText(app);
+  await importText(app, TEXT, { visibility: "public", licence: "cc0" });
   const id = await docId("pl", TEXT);
   await readyAt(id, "1");
   const url = `/api/documents/${id}/bundle/b1-a1-l1`;

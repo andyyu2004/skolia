@@ -35,8 +35,8 @@ export type ImportRequest = z.input<typeof schemas.ImportRequest>;
  * importer. A field left out stays as it is; null clears author or source. */
 export type DocumentUpdate = z.input<typeof schemas.DocumentUpdate>;
 
-/** A document's. private: left out of other users' libraries, though anyone with its id
- * can open it. A public import of the same text, with a shareable licence, makes it public. */
+/** A user's entry for a text. private: only that user sees it. A text no entry makes
+ * public is unknown (404) to everyone else. */
 export const VISIBILITIES = ["public", "private"] as const;
 export type Visibility = (typeof VISIBILITIES)[number];
 
@@ -121,8 +121,10 @@ export function timestamp(date: Date): Timestamp {
   return date.toISOString() as Timestamp;
 }
 
+/** One user's entry for a text: the viewer's own, or someone's public one. Its title,
+ * visibility, licence, author and source are that user's. */
 export interface DocumentSummary {
-  /** The same text imported twice in one language is one document. */
+  /** The text's: the same text imported twice in one language is one document. */
   id: DocumentId;
   title: string;
   lang: Lang;
@@ -134,9 +136,9 @@ export interface DocumentSummary {
   author: string | null;
   /** An http(s) URL of where the text is from. */
   source: string | null;
-  /** The display name of the user who first imported it. */
+  /** The display name of the entry's user. */
   importerName: string;
-  /** Whether the viewer imported it, so can change or delete it. */
+  /** Whether it's the viewer's entry, so they can change or delete it. */
   mine: boolean;
   /** Where it is in its language's analysis queue: for the viewer's own document, while
    * it's queued or analysing, when it's asked for on its own. */

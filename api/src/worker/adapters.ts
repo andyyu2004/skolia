@@ -19,14 +19,15 @@ import type { BundleParadigm, IngestJob, Pronunciation, Relation, Sense } from "
 import { DocumentRow, LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
 import type {
   BlobStore,
-  DocumentRecord,
+  DocumentContent,
+  DocumentEntry,
   DocumentStore,
   DueCards,
+  EntryFields,
   IngestJobs,
   JobQueue,
   Lexicon,
   ReviewOutcome,
-  Sharing,
   StoredBlob,
   StoredDocument,
   StoredPosition,
@@ -170,7 +171,31 @@ export class D1Lexicon implements Lexicon {
   }
 }
 
-const SELECT_DOCUMENT = `SELECT document.*, "user"."name" AS importerName FROM document JOIN "user" ON "user"."id" = document.importer`;
+const SELECT_DOCUMENT = `SELECT entry.document_id AS id, entry.user_id AS "user", entry.title, entry.imported, entry.visibility,
+    entry.licence, entry.author, entry.source, content.lang, content.words, "user"."name" AS importerName
+  FROM user_document AS entry
+  JOIN document_content AS content ON content.id = entry.document_id
+  JOIN "user" ON "user"."id" = entry.user_id`;
+
+/** D1Documents' queries, exported for the test that checks each one uses an index. */
+export const DOCUMENT_QUERIES = {
+  // A UNION rather than an OR, so each half searches its own index
+  list: `${SELECT_DOCUMENT} WHERE entry.visibility = 'public'
+    UNION ALL ${SELECT_DOCUMENT} WHERE entry.user_id = ?1 AND entry.visibility = 'private'
+    ORDER BY imported DESC`,
+  importedBy: `${SELECT_DOCUMENT} WHERE entry.user_id = ?1 ORDER BY entry.imported DESC`,
+  visible: `${SELECT_DOCUMENT} WHERE entry.document_id = ?1 AND (entry.user_id = ?2 OR entry.visibility = 'public')
+    ORDER BY entry.user_id IS ?2 DESC, entry.imported LIMIT 1`,
+  has: "SELECT 1 FROM document_content WHERE id = ?1",
+  addContent: "INSERT OR IGNORE INTO document_content (id, lang, words, added, added_by) VALUES (?1, ?2, ?3, ?4, ?5)",
+  addEntry: `INSERT OR IGNORE INTO user_document (user_id, document_id, title, imported, visibility, licence, author, source)
+    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
+  update: "UPDATE user_document SET title = ?3, visibility = ?4, licence = ?5, author = ?6, source = ?7 WHERE document_id = ?1 AND user_id = ?2",
+  removeEntry: "DELETE FROM user_document WHERE document_id = ?1 AND user_id = ?2",
+  removeOrphan: "DELETE FROM document_content WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM user_document WHERE document_id = ?1) RETURNING id",
+  countAddedSince: `SELECT COUNT(*) AS n FROM document_content AS content JOIN "user" ON "user"."id" = content.added_by
+    WHERE content.added >= ?1 AND "user"."type" != 'system'`,
+} as const;
 
 export class D1Documents implements DocumentStore {
   private readonly db: D1Database;
@@ -179,63 +204,46 @@ export class D1Documents implements DocumentStore {
     this.db = db;
   }
 
-  async list(viewer: UserId | null): Promise<StoredDocument[]> {
-    const { results } = await this.db
-      .prepare(`${SELECT_DOCUMENT} WHERE document.visibility = 'public' OR document.importer = ? ORDER BY document.imported DESC`)
-      .bind(viewer)
-      .all();
+  async list(viewer: UserId | null): Promise<readonly StoredDocument[]> {
+    const { results } = await this.db.prepare(DOCUMENT_QUERIES.list).bind(viewer).all();
     return results.map((row) => DocumentRow.parse(row));
   }
 
-  async get(id: DocumentId): Promise<StoredDocument | null> {
-    const row = await this.db.prepare(`${SELECT_DOCUMENT} WHERE document.id = ?`).bind(id).first();
+  async importedBy(user: UserId): Promise<readonly StoredDocument[]> {
+    const { results } = await this.db.prepare(DOCUMENT_QUERIES.importedBy).bind(user).all();
+    return results.map((row) => DocumentRow.parse(row));
+  }
+
+  async visible(id: DocumentId, viewer: UserId | null): Promise<StoredDocument | null> {
+    const row = await this.db.prepare(DOCUMENT_QUERIES.visible).bind(id, viewer).first();
     return row ? DocumentRow.parse(row) : null;
   }
 
-  async add(r: DocumentRecord): Promise<void> {
-    await this.db
-      .prepare(
-        "INSERT OR IGNORE INTO document (id, title, lang, imported, words, importer, visibility, licence, author, source, licensor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      )
-      .bind(r.id, r.title, r.lang, r.imported, r.words, r.importer, r.visibility, r.licence, r.author, r.source, r.licensor)
-      .run();
+  async has(id: DocumentId): Promise<boolean> {
+    return (await this.db.prepare(DOCUMENT_QUERIES.has).bind(id).first()) !== null;
   }
 
-  async share(id: DocumentId, { licence, author, source, licensor }: Sharing): Promise<void> {
-    await this.db
-      .prepare("UPDATE document SET visibility = 'public', licence = ?, author = ?, source = ?, licensor = ? WHERE id = ?")
-      .bind(licence, author, source, licensor, id)
-      .run();
+  async add(c: DocumentContent, e: DocumentEntry): Promise<void> {
+    await this.db.batch([
+      this.db.prepare(DOCUMENT_QUERIES.addContent).bind(c.id, c.lang, c.words, c.added, c.addedBy),
+      this.db.prepare(DOCUMENT_QUERIES.addEntry).bind(e.user, e.id, e.title, e.imported, e.visibility, e.licence, e.author, e.source),
+    ]);
   }
 
-  async importedBy(importer: UserId): Promise<StoredDocument[]> {
-    const { results } = await this.db
-      .prepare(`${SELECT_DOCUMENT} WHERE document.importer = ? ORDER BY document.imported DESC`)
-      .bind(importer)
-      .all();
-    return results.map((row) => DocumentRow.parse(row));
+  async update(id: DocumentId, user: UserId, { title, visibility, licence, author, source }: EntryFields): Promise<void> {
+    await this.db.prepare(DOCUMENT_QUERIES.update).bind(id, user, title, visibility, licence, author, source).run();
   }
 
-  async update(
-    id: DocumentId,
-    { title, licence, author, source, visibility, licensor }: Pick<DocumentRecord, "title" | "licence" | "author" | "source" | "visibility" | "licensor">,
-  ): Promise<void> {
-    await this.db
-      .prepare("UPDATE document SET title = ?, licence = ?, author = ?, source = ?, visibility = ?, licensor = ? WHERE id = ?")
-      .bind(title, licence, author, source, visibility, licensor, id)
-      .run();
+  async remove(id: DocumentId, user: UserId): Promise<boolean> {
+    const [, orphan] = await this.db.batch([
+      this.db.prepare(DOCUMENT_QUERIES.removeEntry).bind(id, user),
+      this.db.prepare(DOCUMENT_QUERIES.removeOrphan).bind(id),
+    ]);
+    return (orphan?.results.length ?? 0) > 0;
   }
 
-  async delete(id: DocumentId): Promise<void> {
-    await this.db.prepare("DELETE FROM document WHERE id = ?").bind(id).run();
-  }
-
-  async countImportedSince(since: Timestamp): Promise<number> {
-    const row = await this.db
-      .prepare(`SELECT COUNT(*) AS n FROM document JOIN "user" ON "user"."id" = document.importer
-                WHERE document.imported >= ? AND "user"."type" != 'system'`)
-      .bind(since)
-      .first();
+  async countAddedSince(since: Timestamp): Promise<number> {
+    const row = await this.db.prepare(DOCUMENT_QUERIES.countAddedSince).bind(since).first();
     return z.object({ n: z.number() }).parse(row).n;
   }
 }

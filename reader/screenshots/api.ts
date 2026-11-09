@@ -44,21 +44,20 @@ const lalka: StoredDocument = {
   lang: "pl",
   imported: Timestamp.parse("2026-11-07T09:58:00.000Z"),
   words: 72,
-  importer: user.id,
+  user: user.id,
   importerName: user.name,
   visibility: "public",
   licence: "public-domain",
   author: "Bolesław Prus",
   source: "https://wolnelektury.pl/katalog/lektura/lalka-tom-pierwszy.html",
-  licensor: user.id,
 };
 
 function stored(n: number, fields: Partial<StoredDocument>): StoredDocument {
-  return { ...lalka, id: DocumentId.parse(String(n).repeat(64)), importer: SKOLIA, importerName: "skolia", licensor: SKOLIA, ...fields };
+  return { ...lalka, id: DocumentId.parse(String(n).repeat(64)), user: SKOLIA, importerName: "skolia", ...fields };
 }
 
 const PETIT_PRINCE = stored(1, { title: "Le Petit Prince, chapitre I", lang: "fr", licence: "cc-by-sa", author: "Antoine de Saint-Exupéry", words: 412 });
-const NOTATKI = stored(2, { title: "Notatki", visibility: "private", licence: "cc-by", author: null, importer: user.id, importerName: user.name, licensor: user.id, words: 38 });
+const NOTATKI = stored(2, { title: "Notatki", visibility: "private", licence: "cc-by", author: null, user: user.id, importerName: user.name, words: 38 });
 const PETER_RABBIT = stored(3, { title: "The Tale of Peter Rabbit", lang: "en", author: "Beatrix Potter", words: 951 });
 
 /** Explore's list: one of each badge and licence the listing shows. */
@@ -97,7 +96,7 @@ const cards: readonly ScheduledCard[] = [
 /** The API's ports, in memory, for one test. Writes the pages make are accepted and
  * forgotten, except settings. */
 function deps(signedIn: boolean): Deps {
-  const visible = (viewer: UserIdType | null) => documents.filter((d) => d.visibility === "public" || d.importer === viewer);
+  const visible = (viewer: UserIdType | null) => documents.filter((d) => d.visibility === "public" || d.user === viewer);
   let settings: Settings = { newPerDay: 10 };
   return {
     auth: {
@@ -122,13 +121,13 @@ function deps(signedIn: boolean): Deps {
     },
     documents: {
       list: async (viewer) => visible(viewer),
-      get: async (id) => documents.find((d) => d.id === id) ?? null,
+      importedBy: async (userId) => documents.filter((d) => d.user === userId),
+      visible: async (id, viewer) => visible(viewer).find((d) => d.id === id) ?? null,
+      has: async (id) => documents.some((d) => d.id === id),
       add: async () => {},
-      share: async () => {},
-      importedBy: async (importer) => documents.filter((d) => d.importer === importer),
       update: async () => {},
-      delete: async () => {},
-      countImportedSince: async () => 0,
+      remove: async () => false,
+      countAddedSince: async () => 0,
     },
     blobs: {
       get: async (key) => blobs.get(key) ?? null,

@@ -22,45 +22,56 @@ import type {
 } from "@skolia/shared/api";
 import type { IngestJob } from "@skolia/shared/schema";
 
-/** A document's metadata, owned by the API. Its state lives in the status blob. */
-export interface DocumentRecord {
-  id: DocumentId;
-  title: string;
-  lang: Lang;
-  imported: Timestamp;
-  words: number;
-  /** The user who first imported it. */
-  importer: UserId;
-  visibility: Visibility;
-  licence: Licence;
-  author: string | null;
-  source: string | null;
-  /** The user who claimed the licence: the importer, or whoever made it public. */
-  licensor: UserId;
+/** A text, stored once however many users import it. Its state lives in the status blob. */
+export interface DocumentContent {
+  readonly id: DocumentId;
+  readonly lang: Lang;
+  readonly words: number;
+  readonly added: Timestamp;
+  /** The user who first imported it, whose import the daily cap counts. */
+  readonly addedBy: UserId;
 }
 
-/** A licence claim, which makes a private document public. */
-export type Sharing = Pick<DocumentRecord, "licence" | "author" | "source" | "licensor">;
+/** What a user says about a text they imported. The licence is their claim. */
+export interface EntryFields {
+  readonly title: string;
+  readonly visibility: Visibility;
+  readonly licence: Licence;
+  readonly author: string | null;
+  readonly source: string | null;
+}
 
-/** A stored document, with its importer's name. */
-export interface StoredDocument extends DocumentRecord {
-  importerName: string;
+/** A user's entry for a text they imported. */
+export interface DocumentEntry extends EntryFields {
+  readonly id: DocumentId;
+  readonly user: UserId;
+  readonly imported: Timestamp;
+}
+
+/** An entry with its text's language and word count, and its user's name. */
+export interface StoredDocument extends DocumentEntry {
+  readonly lang: Lang;
+  readonly words: number;
+  readonly importerName: string;
 }
 
 export interface DocumentStore {
-  /** Public documents, and the viewer's own private ones. */
-  list(viewer: UserId | null): Promise<StoredDocument[]>;
-  get(id: DocumentId): Promise<StoredDocument | null>;
-  /** Insert, or keep the existing record if the id is already there. */
-  add(record: DocumentRecord): Promise<void>;
-  /** Make it public under this licence claim. */
-  share(id: DocumentId, sharing: Sharing): Promise<void>;
-  /** The documents this user imported, public or private. */
-  importedBy(importer: UserId): Promise<StoredDocument[]>;
-  update(id: DocumentId, fields: Pick<DocumentRecord, "title" | "licence" | "author" | "source" | "visibility" | "licensor">): Promise<void>;
-  delete(id: DocumentId): Promise<void>;
-  /** How many documents were imported at or after this time, by users who aren't system users. */
-  countImportedSince(since: Timestamp): Promise<number>;
+  /** Every public entry, and the viewer's private ones, newest first. */
+  list(viewer: UserId | null): Promise<readonly StoredDocument[]>;
+  /** This user's entries, public or private, newest first. */
+  importedBy(user: UserId): Promise<readonly StoredDocument[]>;
+  /** The entry the viewer sees for a text: their own, else its earliest public one. Null
+   * for a text that's unknown or private to others. */
+  visible(id: DocumentId, viewer: UserId | null): Promise<StoredDocument | null>;
+  /** Whether the text is stored, whoever imported it. */
+  has(id: DocumentId): Promise<boolean>;
+  /** Insert the entry, and the content unless it's already there. An existing entry is kept. */
+  add(content: DocumentContent, entry: DocumentEntry): Promise<void>;
+  update(id: DocumentId, user: UserId, fields: EntryFields): Promise<void>;
+  /** Delete the user's entry, and the content once no entry is left. True if the content went. */
+  remove(id: DocumentId, user: UserId): Promise<boolean>;
+  /** How many texts were first imported at or after this time, by users who aren't system users. */
+  countAddedSince(since: Timestamp): Promise<number>;
 }
 
 export interface StoredBlob {

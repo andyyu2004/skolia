@@ -38,9 +38,10 @@ function client(base: string, key?: string): Api {
   return hc<AppType>(base, key === undefined ? {} : { headers: { [API_KEY_HEADER]: key } }).api;
 }
 
-/** A URL the typed client doesn't describe (text and blobs, which aren't JSON). */
-async function fetchOk(what: string, url: string): Promise<Response> {
-  const response = await fetch(url);
+/** A URL the typed client doesn't describe (text and blobs, which aren't JSON), as the
+ * key's user if given. */
+async function fetchOk(what: string, url: string, key?: string): Promise<Response> {
+  const response = await fetch(url, key === undefined ? {} : { headers: { [API_KEY_HEADER]: key } });
   if (!response.ok) throw new Error(`${what}: ${response.status}: ${await response.text()}`);
   return response;
 }
@@ -92,10 +93,11 @@ async function documents(base: string, key: string, lang: Lang): Promise<void> {
     if (summary.state === "failed") throw new Error(`${lang} analysis failed: ${summary.error ?? ""}`);
     if (summary.state === "ready") {
       if (!summary.reading) throw new Error(`${lang}: ready without analysis and bundle names`);
-      const text = await (await fetchOk(`${lang} text`, `${base}/api/documents/${id}/text`)).text();
+      const text = await (await fetchOk(`${lang} text`, `${base}/api/documents/${id}/text`, key)).text();
       assert.equal(text, request.text, `${lang}: the text isn't the one imported`);
+      assert.equal((await fetch(`${base}/api/documents/${id}/text`)).status, 404, `${lang}: a private text is readable signed out`);
       for (const [part, name] of Object.entries(summary.reading)) {
-        const blob = await fetchOk(`${lang} ${part}`, `${base}/api/documents/${id}/${part}/${name}`);
+        const blob = await fetchOk(`${lang} ${part}`, `${base}/api/documents/${id}/${part}/${name}`, key);
         console.log(`${lang}: ${part} ${name}: ${(await blob.arrayBuffer()).byteLength} bytes`);
       }
       return;

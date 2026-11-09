@@ -97,11 +97,15 @@ export function createApp(deps: Deps) {
       signedIn(c, (user) => documents.update(deps, user, c.req.param("id"), c.req.valid("json"))),
     )
     .delete("/api/documents/:id", (c) => signedIn(c, (user) => documents.remove(deps, user, c.req.param("id"))))
-    .get("/api/documents/:id/text", async (c) => send(c, await documents.text(deps, c.req.param("id"))))
-    .get("/api/documents/:id/analysis/:name", async (c) =>
-      send(c, await documents.part(deps, c.req.param("id"), "analysis", c.req.param("name"))),
+    .get("/api/documents/:id/text", async (c) =>
+      send(c, await documents.text(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers))),
     )
-    .get("/api/documents/:id/bundle/:name", async (c) => send(c, await documents.part(deps, c.req.param("id"), "bundle", c.req.param("name"))));
+    .get("/api/documents/:id/analysis/:name", async (c) =>
+      send(c, await documents.part(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers), "analysis", c.req.param("name"))),
+    )
+    .get("/api/documents/:id/bundle/:name", async (c) =>
+      send(c, await documents.part(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers), "bundle", c.req.param("name"))),
+    );
 
   return app;
 }
