@@ -68,7 +68,7 @@ A push to main deploys staging and runs the end-to-end tests against it (`api/sr
 - in the `staging` and `production` environments, secrets `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (the OAuth clients above)
 - environments `staging`, `production` and `preview` (every pull request's)
 
-CI installs Terraform's providers from the public R2 bucket `skolia-tf-providers` (`infra/providers.tf`, made with production) through `infra/terraformrc`, since the registry sends Terraform to GitHub's releases, which time out for unauthenticated requests at times. After `.terraform.lock.hcl` changes, `just mirror-providers` refills it; the lock file's hashes check what CI downloads.
+CI installs Terraform's providers from the public R2 bucket `skolia-tf-providers` (`infra/providers.tf`, made with production) through `infra/terraformrc`, since the registry sends Terraform to GitHub's releases, which time out for unauthenticated requests at times. CI's `mirror-providers` job (`infra/mirror-providers.py`, also `just mirror-providers`) runs before `check` and adds whatever in `.terraform.lock.hcl` the mirror is missing, downloading GitHub's zips with a token; a zip whose hash isn't in the lock file is refused, and the lock file's hashes check what CI installs.
 
 These, and `main`'s ruleset (pull requests only, through a merge queue that requires CI's `check` and `e2e` jobs), are managed in Terraform in the dotfiles (`~/.dotfiles/terraform/github`), from `pass`.
 

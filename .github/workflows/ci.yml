@@ -25,8 +25,24 @@ env:
   CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
 
 jobs:
+  mirror-providers:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: mirror-providers
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.3
+      - run: infra/mirror-providers.py
+        timeout-minutes: 10
+
   check:
     if: github.event.action != 'closed'
+    needs: mirror-providers
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
