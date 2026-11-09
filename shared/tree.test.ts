@@ -137,6 +137,22 @@ test("ends at a word are ordered by where the arc's other end is", () => {
   assert.deepEqual(at("obj"), [1, 2]);
 });
 
+test("at a word, shorter arcs leave nearer their side so longer ones pass outside", () => {
+  // Dziś piękność twą w całej ozdobie: ozdobie heads w and całej, and piękność heads it
+  const tree = sentenceTree([
+    token("piękność", "NOUN", null, "root"),
+    token("w", "ADP", 3, "case"),
+    token("całej", "ADJ", 3, "amod"),
+    token("ozdobie", "NOUN", 0, "nmod"),
+  ]);
+  const rank = (raw: string): number | undefined => {
+    const arc = tree.arcs.find((a) => a.raw === raw);
+    return arc && (arc.from === 3 ? arc.fromSlot.rank : arc.toSlot.rank);
+  };
+  // Left to right at ozdobie: całej's arc, w's, then the one from piękność
+  assert.deepEqual([rank("amod"), rank("case"), rank("nmod")], [0, 1, 2]);
+});
+
 test("case arcs go from the word causing the case to the word with it", () => {
   const tree = sentenceTree(SENTENCE);
   assert.deepEqual(

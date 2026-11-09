@@ -5,6 +5,7 @@
   import { caseChain, sentenceTree, type Arc, type Slot } from "@skolia/shared/tree";
   import { UPOS_LABEL } from "@skolia/shared/ud";
   import type { SentenceLayout } from "./lib/sheet.svelte.ts";
+  import { isEnding as isEndingOf, textWidth } from "./lib/measure.ts";
 
   let {
     lang,
@@ -47,27 +48,11 @@
   const tree = $derived(sentenceTree(tokens, keep));
   const crowded = $derived(tree.words.length > CROWDED);
 
-  let measure: CanvasRenderingContext2D | null = null;
-  function width(text: string, size: number, family: string): number {
-    measure ??= document.createElement("canvas").getContext("2d");
-    if (!measure) return text.length * size * 0.6;
-    measure.font = `${size}px ${family}`;
-    return measure.measureText(text).width;
-  }
-
-  /** A token sharing its characters with the one before is the end of a fused word (-em) */
-  function isEnding(index: number): boolean {
-    const token = tokens[index];
-    const before = tokens[index - 1];
-    return token !== undefined && before !== undefined && token.start === before.start && token.end === before.end;
-  }
+  const isEnding = (index: number): boolean => isEndingOf(tokens, index);
 
   /** Columns in reading order, wide enough for each word's labels and its arcs' labels. */
   const columns = $derived.by(() => {
-    const style = getComputedStyle(document.documentElement);
-    const reading = style.getPropertyValue("--reading") || "serif";
-    const ui = style.getPropertyValue("--ui") || "sans-serif";
-    const label = (text: string): number => width(text, LABEL_SIZE, ui);
+    const label = (text: string): number => textWidth(text, LABEL_SIZE, "--ui");
 
     const sized = tree.words.map((w) => {
       const part = partOfWord(w.token);
@@ -76,7 +61,7 @@
       const second = shape === "arcs" ? pos : w.root ? "main word" : w.relation;
       const form = isEnding(w.index) ? `-${w.token.text}` : w.token.text;
       const caseName = showCases ? w.caseName : null;
-      const wide = Math.max(width(form, WORD_SIZE, reading), label(second), caseName ? label(caseName) : 0);
+      const wide = Math.max(textWidth(form, WORD_SIZE, "--reading"), label(second), caseName ? label(caseName) : 0);
       return { ...w, pos, second, form, caseName, width: wide };
     });
     const need = sized.map(() => 0);
@@ -211,7 +196,11 @@
 
   /** The words the selection is linked to: its head and its dependents. */
   const linked = $derived(
-    new Set(tree.arcs.flatMap((a) => (selected.has(a.to) ? [a.from] : selected.has(a.from) ? [a.to] : []))),
+    new Set(
+      tree.arcs
+        .flatMap((a) => (selected.has(a.to) ? [a.from] : selected.has(a.from) ? [a.to] : []))
+        .filter((i) => !selected.has(i)),
+    ),
   );
   /** The word causing the selected word's case, as the text marks it. */
   const trigger = $derived(tree.cases.find((a) => selected.has(a.to))?.from ?? null);

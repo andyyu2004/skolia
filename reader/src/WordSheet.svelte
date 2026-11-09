@@ -20,6 +20,8 @@
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
   import ParadigmTable from "./ParadigmTable.svelte";
   import SentenceTree from "./SentenceTree.svelte";
+  import SentenceColumn from "./SentenceColumn.svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import { sheet, type SheetView } from "./lib/sheet.svelte.ts";
   import { clauseOf } from "@skolia/shared/tree";
 
@@ -58,6 +60,10 @@
 
   /** On a phone the sheet starts at half height; tapping the handle gives it the screen. */
   let expanded = $state(sheet.view === "sentence");
+
+  /** Too narrow for a diagram read left to right: it's turned to read top to bottom */
+  const narrow = new MediaQuery("max-width: 599px");
+  const Diagram = $derived(narrow.current ? SentenceColumn : SentenceTree);
 
   const VIEWS = [
     ["word", "Word"],
@@ -223,7 +229,7 @@
         >
       </div>
     </div>
-    <SentenceTree
+    <Diagram
       {lang}
       layout={sheet.layout}
       {tokens}

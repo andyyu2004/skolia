@@ -170,23 +170,26 @@ function stack(spans: Span[]): Arc[] {
     levelled.push({ ...s, level: below + 1 });
   }
 
-  // At each word, order the arcs' ends by where their other end is. Higher arcs reach
-  // further, so they sit outside the lower ones and no two cross at the word.
-  const ends = new Map<number, { arc: number; other: number }[]>();
+  // At each word, arcs to the left leave on its left and arcs to the right on its right,
+  // and the shorter an arc the nearer its side it leaves, so the longer, higher arcs pass
+  // outside it and no two cross at the word.
+  const ends = new Map<number, { arc: number; other: number; leftward: boolean }[]>();
   levelled.forEach((arc, i) => {
     // Token order is word order, so the other end is the far side of the span
     const [fromOther, toOther] = arc.from < arc.to ? [arc.right, arc.left] : [arc.left, arc.right];
-    for (const [at, other] of [
-      [arc.from, fromOther],
-      [arc.to, toOther],
+    for (const [at, other, leftward] of [
+      [arc.from, fromOther, arc.to < arc.from],
+      [arc.to, toOther, arc.from < arc.to],
     ] as const) {
       const list = ends.get(at) ?? [];
-      list.push({ arc: i, other });
+      list.push({ arc: i, other, leftward });
       ends.set(at, list);
     }
   });
   const slot = (at: number, arc: number): Slot => {
-    const list = [...(ends.get(at) ?? [])].sort((a, b) => a.other - b.other);
+    const list = [...(ends.get(at) ?? [])].sort(
+      (a, b) => Number(b.leftward) - Number(a.leftward) || b.other - a.other,
+    );
     return { rank: list.findIndex((e) => e.arc === arc), count: list.length };
   };
   return levelled.map((arc, i) => ({ ...arc, fromSlot: slot(arc.from, i), toSlot: slot(arc.to, i) }));

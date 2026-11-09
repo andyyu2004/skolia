@@ -1252,6 +1252,10 @@ label.check {
   text-anchor: middle;
 }
 
+.tree svg.column text {
+  text-anchor: start;
+}
+
 .tree .arc path {
   fill: none;
   stroke: var(--tree-line);
