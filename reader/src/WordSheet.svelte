@@ -20,7 +20,7 @@
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
   import ParadigmTable from "./ParadigmTable.svelte";
   import SentenceTree from "./SentenceTree.svelte";
-  import { sheet } from "./lib/sheet.svelte.ts";
+  import { sheet, type SheetView } from "./lib/sheet.svelte.ts";
   import { clauseOf } from "@skolia/shared/tree";
 
   type WordPiece = Extract<Piece, { kind: "word" }>;
@@ -58,6 +58,17 @@
 
   /** On a phone the sheet starts at half height; tapping the handle gives it the screen. */
   let expanded = $state(sheet.view === "sentence");
+
+  const VIEWS = [
+    ["word", "Word"],
+    ["sentence", "Sentence structure"],
+  ] as const;
+
+  function show(view: SheetView): void {
+    sheet.view = view;
+    // A diagram needs the height on a phone
+    if (view === "sentence") expanded = true;
+  }
   /** The word whose full lists are shown: another word starts with them folded. */
   let sensesFor = $state<WordPiece | null>(null);
   let usesFor = $state<WordPiece | null>(null);
@@ -165,26 +176,44 @@
   <div class="sheet-bar">
     <button type="button" class="handle" aria-label={expanded ? "Shrink" : "Expand"} onclick={() => (expanded = !expanded)}
     ></button>
-    <button
-      type="button"
-      class="view-toggle"
-      aria-pressed={sheet.view === "sentence"}
-      onclick={() => {
-        sheet.view = sheet.view === "sentence" ? "word" : "sentence";
-        // A diagram needs the height on a phone
-        if (sheet.view === "sentence") expanded = true;
-      }}
-    >
-      <svg viewBox="0 0 16 16" aria-hidden="true"
-        ><path d="M3 11V7h10v4M8 3v4" /><circle cx="3" cy="12.5" r="1.5" /><circle cx="13" cy="12.5" r="1.5" /><circle
-          cx="8"
-          cy="2.5"
-          r="1.5"
-        /></svg
-      >
-      Sentence
-    </button>
-    {#if sheet.view === "sentence"}
+    <button type="button" class="close" aria-label="Close" onclick={onclose}>×</button>
+    <div class="sheet-tabs" role="tablist" aria-label="Show">
+      {#each VIEWS as [view, label] (view)}
+        <button
+          type="button"
+          role="tab"
+          id="sheet-tab-{view}"
+          aria-selected={sheet.view === view}
+          tabindex={sheet.view === view ? 0 : -1}
+          onclick={() => show(view)}
+          onkeydown={(event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            event.preventDefault();
+            const other = sheet.view === "word" ? "sentence" : "word";
+            show(other);
+            document.getElementById(`sheet-tab-${other}`)?.focus();
+          }}>{label}</button
+        >
+      {/each}
+    </div>
+  </div>
+
+  {#if sheet.view === "sentence"}
+    {@const tokens = sentenceTokens(sentence)}
+    {@const total = tokens.filter((t) => t.upos !== "PUNCT").length}
+    {@const clause = total > LONG_SENTENCE ? clauseOf(tokens, piece.words[0]?.index ?? 0) : null}
+    <div class="diagram-bar">
+      {#if clause}
+        <p class="clause-note muted small">
+          {#if sheet.whole}
+            All {total} words.
+            <button type="button" class="link" onclick={() => (sheet.whole = false)}>Just this clause</button>
+          {:else}
+            This clause, {[...clause].filter((i) => tokens[i]?.upos !== "PUNCT").length} of {total} words.
+            <button type="button" class="link" onclick={() => (sheet.whole = true)}>Whole sentence</button>
+          {/if}
+        </p>
+      {/if}
       <div class="layout-switch" role="group" aria-label="Draw the sentence as">
         <button type="button" aria-pressed={sheet.layout === "arcs"} onclick={() => (sheet.layout = "arcs")}
           >Arcs</button
@@ -193,25 +222,7 @@
           >Tree</button
         >
       </div>
-    {/if}
-    <button type="button" class="close" aria-label="Close" onclick={onclose}>×</button>
-  </div>
-
-  {#if sheet.view === "sentence"}
-    {@const tokens = sentenceTokens(sentence)}
-    {@const total = tokens.filter((t) => t.upos !== "PUNCT").length}
-    {@const clause = total > LONG_SENTENCE ? clauseOf(tokens, piece.words[0]?.index ?? 0) : null}
-    {#if clause}
-      <p class="clause-note muted small">
-        {#if sheet.whole}
-          All {total} words.
-          <button type="button" class="link" onclick={() => (sheet.whole = false)}>Just this clause</button>
-        {:else}
-          This clause, {[...clause].filter((i) => tokens[i]?.upos !== "PUNCT").length} of {total} words.
-          <button type="button" class="link" onclick={() => (sheet.whole = true)}>Whole sentence</button>
-        {/if}
-      </p>
-    {/if}
+    </div>
     <SentenceTree
       {lang}
       layout={sheet.layout}

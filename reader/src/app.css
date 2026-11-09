@@ -968,10 +968,38 @@ label.check {
 .sheet-bar {
   position: sticky;
   top: 0;
+  z-index: 1;
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  padding: 0.5rem 0;
+  padding-top: 0.5rem;
+  margin-bottom: 0.5rem;
   background: var(--surface);
+}
+
+.sheet-tabs {
+  display: flex;
+  flex-basis: 100%;
+  gap: 1.25rem;
+  margin-top: 0.15rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.sheet-tabs button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  padding: 0.55rem 0.1rem;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.sheet-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--text);
 }
 
 .handle {
@@ -1035,7 +1063,13 @@ label.check {
   }
 
   .handle {
-    visibility: hidden;
+    display: none;
+  }
+
+  /* Tabs at the top, clear of the close button */
+  .sheet-tabs {
+    margin-top: 0;
+    padding-right: 2rem;
   }
 }
 
@@ -1176,36 +1210,6 @@ label.check {
   font-weight: 600;
 }
 
-.view-toggle {
-  position: absolute;
-  left: 0;
-  top: 0.3rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  border: 1px solid var(--line);
-  border-radius: 99px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.8rem;
-  padding: 0.35rem 0.7rem;
-  cursor: pointer;
-}
-
-.view-toggle svg {
-  width: 0.9rem;
-  height: 0.9rem;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-}
-
-.view-toggle[aria-pressed="true"] {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  color: var(--accent);
-}
-
 .tree {
   overflow-x: auto;
   overscroll-behavior-x: contain;
@@ -1219,8 +1223,15 @@ label.check {
   display: block;
 }
 
+.diagram-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
 .clause-note {
-  margin: 0 0 0.4rem;
+  margin: 0;
 }
 
 /* In a long sentence the selected word's lines stand out from the rest */
@@ -1374,11 +1385,9 @@ label.check {
   stroke: var(--select);
 }
 
-/* Beside the close button, on the same row as Sentence */
 .layout-switch {
-  position: absolute;
-  right: 2.25rem;
-  top: 0.3rem;
+  margin-left: auto;
+  flex-shrink: 0;
   display: inline-flex;
   border: 1px solid var(--line);
   border-radius: 99px;
