@@ -24,7 +24,8 @@ test: build
     cd analysis && uv run pytest -q
 
 # Screenshots of the reader's pages (reader/screenshots) in Playwright's Linux image, so they come
-# out the same on a Mac and in CI. --update-snapshots accepts what changed.
+# out the same on a Mac and in CI. --update-snapshots accepts what changed. --ipc=host, as
+# https://playwright.dev/docs/docker recommends for Chromium, which runs out of memory otherwise.
 screenshots *args:
     pnpm --filter @skolia/reader build
     docker run --rm --ipc=host -e CI -v "$PWD:$PWD" -w "$PWD/reader" \
