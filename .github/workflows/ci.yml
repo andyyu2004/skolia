@@ -9,7 +9,7 @@ name: CI
 # images are built once, before any deploy. The steps are just recipes (justfile) and
 # infra/deploy-ingest.sh, so a deploy by hand runs the same commands.
 # A pull request, merge group or push to main that only changes content (curated texts, docs,
-# Markdown; .github/planner.py) skips the screenshots, the image builds, the plans and the
+# Markdown; .github/changes.py) skips the screenshots, the image builds, the plans and the
 # deploys. If texts changed, it runs just the seed: against staging on a push to main, and
 # against the pull request's preview if an earlier push deployed one.
 
@@ -29,7 +29,7 @@ env:
   CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
 
 jobs:
-  # deploy and texts, from the files the run changes (.github/planner.py)
+  # deploy and texts, from the files the run changes (.github/changes.py)
   changes:
     if: github.event.action != 'closed'
     runs-on: ubuntu-24.04
@@ -41,7 +41,7 @@ jobs:
         with:
           fetch-depth: 0
       - id: changes
-        run: python3 -I .github/planner.py "$GITHUB_EVENT_NAME" "$GITHUB_EVENT_PATH"
+        run: python3 -I .github/changes.py "$GITHUB_EVENT_NAME" "$GITHUB_EVENT_PATH"
 
   mirror-providers:
     if: github.event.action != 'closed'

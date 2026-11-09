@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """What a CI run needs to deploy, from the files it changes.
 
-usage: planner.py <event name> <event payload path>
+usage: changes.py <event name> <event payload path>
 
 Writes deploy=true|false and texts=true|false to $GITHUB_OUTPUT (or prints them).
 deploy is false only when every changed file is content: a curated text (texts/), a doc
 (docs/) or Markdown, none of which goes into a build. texts is true when a curated text
-changed, so the seed should run. Anything it can't be sure of (a tag, a manual run, a push
-with no parent to compare with, a git error) deploys.
+changed, so the seed should run; texts are a subset of content, so a docs-only change has
+both false. Anything it can't be sure of (a tag, a manual run, a push with no parent to
+compare with, a git error) deploys. infra/README.md (Deploy) has a table of the cases.
 """
 
 import json
