@@ -14,7 +14,10 @@ import * as schemas from "@skolia/shared/schemas";
 import * as cards from "./controllers/cards.ts";
 import * as documents from "./controllers/documents.ts";
 import { fail, ok, type BlobResult, type Failed, type Result } from "./controllers/result.ts";
+import { log } from "./log.ts";
 import type { Deps, StoredBlob } from "./ports.ts";
+
+const logger = log("api");
 
 // A character is at most 6 bytes in JSON (\uXXXX), plus room for the title. The exact
 // character limit is checked after parsing.
@@ -41,7 +44,7 @@ export function createApp(deps: Deps) {
       if (error instanceof HTTPException && error.status < 500) {
         return c.json({ error: error.message } satisfies ApiError, error.status);
       }
-      console.error(error);
+      logger.error("request failed", { method: c.req.method, path: c.req.path, error });
       return c.json({ error: "internal error" } satisfies ApiError, 500);
     })
     .get("/api/version", (c) => c.json({ version: deps.version } satisfies Version, 200))

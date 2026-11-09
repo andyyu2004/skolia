@@ -3,12 +3,15 @@
 import type { IngestJob } from "@skolia/shared/schema";
 import { createApp, parseImportCap } from "../app.ts";
 import { NO_AUTH, createAuth } from "../auth.ts";
+import { log } from "../log.ts";
 import type { Auth } from "../ports.ts";
 import { CloudflareQueue, D1Documents, D1Lexicon, DurableObjectUsers, R2Blobs, lexiconsOf, type LexiconBindings } from "./adapters.ts";
 import type { Ingester } from "./ingest.ts";
 import type { User } from "./user.ts";
 
 export { User } from "./user.ts";
+
+const logger = log("api");
 
 /** Replaced at build time (wrangler.jsonc define, justfile deploy-web) */
 declare const VERSION: string;
@@ -36,7 +39,7 @@ let warned = false;
 function warnOnce(message: string): void {
   if (warned) return;
   warned = true;
-  console.error(message);
+  logger.warn(message);
 }
 
 function authFor(env: Env): Auth {
@@ -53,7 +56,7 @@ function authFor(env: Env): Auth {
 export default {
   fetch(request, env, ctx) {
     const maxImportsPerDay = parseImportCap(env.MAX_IMPORTS_PER_DAY);
-    if (maxImportsPerDay === null) console.error("MAX_IMPORTS_PER_DAY isn't set; refusing imports");
+    if (maxImportsPerDay === null) logger.error("MAX_IMPORTS_PER_DAY isn't set; refusing imports");
     const app = createApp({
       auth: authFor(env),
       users: new DurableObjectUsers(env.USER),

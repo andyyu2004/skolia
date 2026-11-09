@@ -15,8 +15,11 @@ import {
 import { PART_ENCODING, docId, docPrefix, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { Status, Versions } from "@skolia/shared/schema";
 import * as schemas from "@skolia/shared/schemas";
+import { log } from "../log.ts";
 import type { BlobStore, Deps, DocumentRecord, IngestJobs, Sharing, StoredDocument } from "../ports.ts";
 import { NO_CONTENT, fail, ok, type BlobResult, type Failed, type Json, type NoContent, type Ok } from "./result.ts";
+
+const logger = log("documents");
 
 const NAME = /^[a-z0-9-]{1,64}$/;
 const JSON_TYPE = "application/json";
@@ -70,7 +73,7 @@ export async function importText(
   }
   const record = existing ?? (await deps.documents.get(id));
   if (!record) throw new Error(`document ${id} vanished after insert`);
-  const queued = await requeue(deps, record, await readStatus(deps.blobs, id), deps.now());
+  const queued = await requeue(deps, record, await readStatus(deps.blobs, id), deps.now(), existing ? "reimported" : "imported");
   return { status: 202, body: summarize(record, queued, user) };
 }
 
@@ -171,14 +174,18 @@ async function findDocument(deps: Deps, id: string): Promise<StoredDocument | nu
 async function current(deps: Deps, record: StoredDocument, versions: VersionsOf, viewer: User | null): Promise<DocumentSummary> {
   const status = await readStatus(deps.blobs, record.id);
   const now = deps.now();
-  if (status !== null && (isStuck(status, now) || isOutdated(status, await versions(record.lang)))) {
-    return summarize(record, await requeue(deps, record, status, now), viewer);
+  if (status !== null) {
+    const reason = isStuck(status, now) ? "stuck" : isOutdated(status, await versions(record.lang)) ? "outdated" : null;
+    if (reason !== null) return summarize(record, await requeue(deps, record, status, now, reason), viewer);
   }
   return summarize(record, status, viewer);
 }
 
+type RequeueReason = "imported" | "reimported" | "stuck" | "outdated";
+
 /** Queue the document, keeping the last analysis readable until the new one is ready. */
-async function requeue(deps: Deps, record: DocumentRecord, status: Status | null, at: Date): Promise<Status> {
+async function requeue(deps: Deps, record: DocumentRecord, status: Status | null, at: Date, reason: RequeueReason): Promise<Status> {
+  logger.info("queueing document", { doc: record.id, lang: record.lang, reason, previous: status?.state ?? null, since: status?.updated ?? null });
   const queued: Status = { state: "queued", updated: timestamp(at) };
   for (const key of ["analyzer", "lexicon", "analysis", "bundle"] as const) {
     const value = status?.[key];

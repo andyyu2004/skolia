@@ -31,7 +31,10 @@ import type {
   StoredDocument,
   UserData,
 } from "../ports.ts";
+import { log } from "../log.ts";
 import type { User } from "./user.ts";
+
+const logger = log("adapters");
 
 export class DurableObjectUsers implements UserData {
   private readonly users: DurableObjectNamespace<User>;
@@ -274,7 +277,12 @@ export class CloudflareQueue implements JobQueue {
   async send(job: IngestJob): Promise<void> {
     // JSON, not the default Workers-only "v8" format, so a message can be read outside a
     // Worker (the dashboard, wrangler)
-    await this.queue.send(job, { contentType: "json" });
+    try {
+      await this.queue.send(job, { contentType: "json" });
+    } catch (error: unknown) {
+      logger.error("sending job to the ingest queue failed", { doc: job.doc, lang: job.lang, error });
+      throw error;
+    }
   }
 
   async jobs(lang: Lang): Promise<IngestJobs | null> {
@@ -282,7 +290,7 @@ export class CloudflareQueue implements JobQueue {
       return await this.jobsOf(lang);
     } catch (error: unknown) {
       // The ingest Worker not deployed or not answering: a summary without its place
-      console.error("asking ingest for its jobs failed:", error);
+      logger.error("asking ingest for its jobs failed", { lang, error });
       return null;
     }
   }
