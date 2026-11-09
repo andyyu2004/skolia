@@ -1,6 +1,6 @@
 # The tools the justfile needs beyond pnpm and uv: terraform and just, and for just dev,
-# sops and age, and git-lfs for the reader's screenshots. nix develop puts them on PATH; CI adds only packages.tools to PATH
-# (.github/actions/setup).
+# sops and age, and git-lfs for the reader's screenshots. nix develop puts them on PATH. CI adds
+# packages.ci to PATH (.github/actions/setup): tools with Node, pnpm and uv, fetched in one build.
 {
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -51,6 +51,15 @@
         in
         {
           packages.tools = tools;
+          packages.ci = pkgs.buildEnv {
+            name = "skolia-ci";
+            paths = [
+              tools
+              pkgs.nodejs_24
+              pkgs.pnpm_11
+              pkgs.uv
+            ];
+          };
           devShells.default = pkgs.mkShellNoCC {
             packages = [
               tools
