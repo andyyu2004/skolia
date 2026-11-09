@@ -208,18 +208,9 @@ d1-sql env script:
       infra/wrangler.sh {{ env }} d1 execute DB --remote --yes --file "$dir/keys.sql" >/dev/null
     fi
 
-# Copy Terraform's providers from the registry to skolia-tf-providers, which CI installs them from (infra/terraformrc).
-# Run it after infra/.terraform.lock.hcl changes.
+# Add infra/.terraform.lock.hcl's providers to skolia-tf-providers, which CI installs them from (infra/terraformrc)
 mirror-providers:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    dir=$(mktemp -d)
-    trap 'rm -rf "$dir"' EXIT
-    TF_CLI_CONFIG_FILE=/dev/null terraform -chdir=infra providers mirror -platform=linux_amd64 -platform=darwin_arm64 "$dir"
-    (cd "$dir" && find . -type f | sed 's|^\./||') | while read -r key; do
-      case $key in *.json) type=application/json ;; *) type=application/zip ;; esac
-      pnpm --dir api exec wrangler r2 object put "skolia-tf-providers/$key" --file "$dir/$key" --content-type "$type" --remote
-    done
+    infra/mirror-providers.py
 
 # Delete a preview (pr-<N>): its Workers, container applications, storage, queue and Terraform state
 teardown env:
