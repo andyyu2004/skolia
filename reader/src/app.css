@@ -922,6 +922,30 @@ label.check {
   text-underline-offset: 4px;
 }
 
+/* A word in the sheet's text that selects it, styled as the text marks it */
+.word-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.word-link.mark-head {
+  color: var(--text);
+}
+
+.word-link:hover {
+  text-decoration-thickness: 3px;
+}
+
+.word-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
 .w:focus-visible {
   outline: 2px solid var(--accent);
 }
@@ -1363,6 +1387,14 @@ label.check {
   fill: var(--muted);
   font-family: var(--reading);
   font-size: 13px;
+}
+
+.tree .reading-row text {
+  cursor: pointer;
+}
+
+.tree .reading-row text:hover {
+  fill: var(--text);
 }
 
 .tree .reading-row .selected {

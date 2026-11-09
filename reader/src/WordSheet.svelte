@@ -285,14 +285,29 @@
           " · ",
         )}
       </p>
-      {#if word.role}
-        <p class="role muted">{word.role.role} <span {lang} class="mark-head">{word.role.head}</span></p>
+      {#if word.role && token.head !== null}
+        {@const head = token.head}
+        <p class="role muted">
+          {word.role.role}
+          <button
+            type="button"
+            {lang}
+            class="word-link mark-head"
+            title="Show {word.role.head}"
+            onclick={() => onselectToken(word.ref.sentence, head)}>{word.role.head}</button
+          >
+        </p>
       {/if}
       {#if word.caseWhy && token.feats.Case}
+        {@const trigger = word.caseWhy.trigger}
         <p class="why">
           <span class="why-label">Why {CASE_NAME[token.feats.Case]}?</span>
           <span {lang}
-            >{#each word.caseWhy.parts as part, j (j)}{#if part.trigger}<span class="mark-trigger">{part.text}</span
+            >{#each word.caseWhy.parts as part, j (j)}{#if part.trigger && trigger !== null}<button
+                  type="button"
+                  class="word-link mark-trigger"
+                  title="Show {part.text}"
+                  onclick={() => onselectToken(word.ref.sentence, trigger)}>{part.text}</button
                 >{:else}{part.text}{/if}{/each}</span
           >
         </p>

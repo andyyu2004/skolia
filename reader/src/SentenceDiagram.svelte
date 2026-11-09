@@ -117,8 +117,14 @@
       {#if diagram.reading.length > 0}
         <g class="reading-row" {lang}>
           {#each diagram.reading as span (span.words[0]?.index)}
-            <text class:selected={span.words.some((w) => selected.has(w.index))} x={span.at.x} y={span.at.y}
-              >{span.text}</text
+            {@const first = span.words[0]}
+            <!-- The same as tapping the word's node, which is the keyboard and screen reader's way in -->
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+            <text
+              class:selected={span.words.some((w) => selected.has(w.index))}
+              x={span.at.x}
+              y={span.at.y}
+              onclick={() => first && onselect(first.index)}>{span.text}</text
             >
           {/each}
         </g>
