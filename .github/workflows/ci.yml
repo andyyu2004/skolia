@@ -10,7 +10,8 @@ name: CI
 # infra/deploy-ingest.sh, so a deploy by hand runs the same commands.
 # A pull request, merge group or push to main that only changes content (curated texts, docs,
 # Markdown; .github/planner.py) skips the screenshots, the image builds, the plans and the
-# deploys; a push to main of that kind runs just the seed against staging if texts changed.
+# deploys. If texts changed, it runs just the seed: against staging on a push to main, and
+# against the pull request's preview if an earlier push deployed one.
 
 on:
   push:
@@ -164,9 +165,13 @@ jobs:
   # preview and skips this, which counts as passing.
   mergeable:
     if: always() && (github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository))
-    needs: [changes, deploy-preview]
+    needs: [changes, deploy-preview, seed-preview]
     runs-on: ubuntu-24.04
     steps:
+      - if: github.event_name == 'pull_request' && needs.seed-preview.result == 'failure'
+        run: |
+          echo "seeding the preview failed" >&2
+          exit 1
       - if: github.event_name == 'pull_request' && needs.changes.result != 'success'
         run: |
           echo "couldn't tell what the pull request changes: ${{ needs.changes.result }}" >&2
@@ -175,6 +180,20 @@ jobs:
         run: |
           echo "the preview's deploy or end-to-end tests didn't pass: ${{ needs.deploy-preview.result }}" >&2
           exit 1
+
+  # A pull request that only changes content, some of it curated texts: seeds its preview
+  # if an earlier push deployed one (deploy-preview seeds a preview it deploys)
+  seed-preview:
+    if: needs.changes.outputs.deploy == 'false' && needs.changes.outputs.texts == 'true' && github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [changes, check]
+    concurrency:
+      group: preview-pr-${{ github.event.number }}
+      cancel-in-progress: false
+    uses: ./.github/workflows/seed.yml
+    with:
+      env: pr-${{ github.event.number }}
+      if-deployed: true
+    secrets: inherit
 
   teardown-preview:
     if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository

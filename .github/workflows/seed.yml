@@ -1,8 +1,9 @@
 name: Seed
 
-# Only the curated texts in texts/ (just seed), for a push that changes nothing else
+# Only the curated texts in texts/ (just seed), for a run that changes nothing else
 # (.github/planner.py), so it doesn't need a deploy. Shares deploy-web's concurrency group,
-# so it waits for a deploy in progress, which seeds too.
+# so it waits for a deploy in progress, which seeds too. With if-deployed, an environment
+# whose Worker isn't there (a pull request that never had a preview) is skipped.
 
 on:
   workflow_call:
@@ -10,6 +11,9 @@ on:
       env:
         type: string
         required: true
+      if-deployed:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,11 +25,28 @@ env:
 jobs:
   seed:
     runs-on: ubuntu-24.04
-    environment: ${{ inputs.env }}
+    environment: ${{ startsWith(inputs.env, 'pr-') && 'preview' || inputs.env }}
     concurrency:
       group: deploy-web-${{ inputs.env }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup
-      - run: just seed ${{ inputs.env }}
+      # The skolia Worker of a preview is skolia-pr-<N> (infra/preview.py)
+      - id: deployed
+        run: |
+          if [ "${{ inputs.if-deployed }}" != true ]; then
+            echo "yes=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          status=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/skolia-${{ inputs.env }}/settings")
+          case $status in
+            200) echo "yes=true" >> "$GITHUB_OUTPUT" ;;
+            404) echo "yes=false" >> "$GITHUB_OUTPUT"; echo "no skolia-${{ inputs.env }} Worker, so nothing to seed" ;;
+            *) echo "couldn't tell whether skolia-${{ inputs.env }} is deployed: HTTP $status" >&2; exit 1 ;;
+          esac
+      - if: steps.deployed.outputs.yes == 'true'
+        uses: actions/checkout@v7
+      - if: steps.deployed.outputs.yes == 'true'
+        uses: ./.github/actions/setup
+      - if: steps.deployed.outputs.yes == 'true'
+        run: just seed ${{ inputs.env }}
