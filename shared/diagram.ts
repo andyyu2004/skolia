@@ -372,15 +372,15 @@ export function fitted(
 
 /** A word's lines of text. Across, its form with a line each for its part of speech (with
  * arcs, which carry the relation) or relation (in the tree), and case. Down, the relation
- * and case share a line beside the form. */
+ * and case share a line beside the form. The root has no relation, so it shows its part of speech. */
 export function labels(word: Word, shape: Shape, direction: Direction): Lines {
   const form: readonly Run[] = [{ text: word.form, role: "form" }];
   const caseRun: readonly Run[] = word.caseName ? [{ text: word.caseName, role: "case" }] : [];
   if (direction === "down") {
     const between: readonly Run[] = word.caseName ? [{ text: " · ", role: "detail" }] : [];
-    return [form, [{ text: word.relation, role: "detail" }, ...between, ...caseRun]];
+    return [form, [{ text: word.relation ?? word.pos, role: "detail" }, ...between, ...caseRun]];
   }
-  const detail: readonly Run[] = [{ text: shape === "arcs" ? word.pos : word.relation, role: "detail" }];
+  const detail: readonly Run[] = [{ text: shape === "arcs" ? word.pos : (word.relation ?? word.pos), role: "detail" }];
   return caseRun.length > 0 ? [form, detail, caseRun] : [form, detail];
 }
 

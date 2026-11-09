@@ -13,8 +13,8 @@ export interface Word {
   readonly ending: boolean;
   /** Its part of speech, or the language's label for part of a word. */
   readonly pos: string;
-  /** The relation to its head as a noun ("subject"), "main word" for the root. */
-  readonly relation: string;
+  /** The relation to its head as a noun ("subject"); none for the root, which isn't related to anything. */
+  readonly relation: string | null;
   /** "genitive", for words with a case in languages that show them. */
   readonly caseName: string | null;
   readonly root: boolean;
@@ -79,7 +79,7 @@ export function parseSentence(tokens: readonly Token[], options: SentenceOptions
       form: ending ? `-${token.text}` : token.text,
       ending,
       pos: partOfWord?.(token) ?? UPOS_LABEL[token.upos],
-      relation: token.head === null ? "main word" : relationName(token.deprel),
+      relation: token.head === null ? null : relationName(token.deprel),
       caseName: withCases && value ? CASE_NAME[value] : null,
       root: token.head === null,
       head,
@@ -94,7 +94,7 @@ export function parseSentence(tokens: readonly Token[], options: SentenceOptions
   const byIndex = new Map(words.map((w) => [w.index, w]));
   const children = new Map(words.map((w) => [w, words.filter((d) => d.head === w)]));
   const dependencies = words.flatMap((word): Link[] =>
-    word.head ? [{ from: word.head, to: word, label: word.relation, raw: word.token.deprel ?? "" }] : [],
+    word.head && word.relation !== null ? [{ from: word.head, to: word, label: word.relation, raw: word.token.deprel ?? "" }] : [],
   );
   const cases = words.flatMap((word): Link[] => {
     const reason = word.token.case_reason;
@@ -165,7 +165,7 @@ export function focusOn(sentence: Sentence, selected: ReadonlySet<number>): Focu
   };
 }
 
-/** A word as a screen reader says it: "cię, pronoun, object of cenić, accusative". */
+/** A word as a screen reader says it: "cię, pronoun, object of cenić, accusative", or "je, verb" for the root. */
 export function spokenLabel(word: Word): string {
   const role = word.head ? `${word.relation} of ${word.head.token.text}` : word.relation;
   return [word.token.text, word.pos, role, word.caseName].filter(Boolean).join(", ");
