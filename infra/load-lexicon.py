@@ -4,14 +4,17 @@
 # dependencies = ["wordfreq==3.1.1"]
 # ///
 """Loads a language's lexicon into its D1 database (LEXICON_{LANG} in api/wrangler.jsonc):
-  load-lexicon.py <staging|production|pr-N|local> <sqlite> [--sample N] [--persist-to DIR]
+  load-lexicon.py <staging|production|pr-N|local> <sqlite> [--sample N] [--persist-to DIR] [--built-from OUT]
+  load-lexicon.py <staging|production|pr-N|local> --lang LANG --built-from OUT [--sample N] [--persist-to DIR]
 sqlite is analysis's {lang}.cards.sqlite (skolia-build-cards, or the Nix output
 analysis#cards-lexicon-{lang}); its meta table gives the language and version. Skipped if D1
 already serves that version. The new version's rows go in beside the old ones, then
 loaded points at it and the old rows are deleted in batches (api/lexicon-migrations), so a
 load that stops part way leaves the old version serving and can be run again. local is wrangler
 dev's database, or with --persist-to, the one in DIR (api/scripts/e2e.sh). --sample loads only the entries for wordfreq's N most common words, for
-previews, and their version ends in +sampleN. Needs the credentials infra/wrangler.sh needs.
+previews, and their version ends in +sampleN. --built-from OUT, the Nix output sqlite is in, is
+recorded in loaded once the old rows are deleted; without sqlite, it prints current if D1 last
+loaded OUT, else stale (just load-lexicon, to skip the build). Needs the credentials infra/wrangler.sh needs.
 """
 
 import argparse
@@ -76,11 +79,33 @@ def meta(db: sqlite3.Connection) -> tuple[str, str]:
     return lang, version
 
 
-def serving(target: Target) -> str | None:
-    out = wrangler(target, "--json", "--command", "SELECT version FROM loaded")
-    results = cast(list[dict[str, list[dict[str, str]]]], json.loads(out))
+@dataclass(frozen=True)
+class Loaded:
+    version: str
+    built_from: str | None
+
+
+def serving(target: Target) -> Loaded | None:
+    out = wrangler(target, "--json", "--command", "SELECT version, built_from FROM loaded")
+    results = cast(list[dict[str, list[dict[str, str | None]]]], json.loads(out))
     rows = results[0]["results"] if results else []
-    return rows[0]["version"] if rows else None
+    if not rows:
+        return None
+    version = rows[0]["version"]
+    assert version is not None
+    return Loaded(version, rows[0]["built_from"])
+
+
+def built_from_key(built_from: str, sample: int | None) -> str:
+    return built_from if sample is None else f"{built_from}+sample{sample}"
+
+
+def record_built_from(target: Target, version: str, key: str) -> None:
+    wrangler(
+        target,
+        "--command",
+        f"UPDATE loaded SET built_from = {quote(key)} WHERE version = {quote(version)}",
+    )
 
 
 def selection(lang: str, sample: int | None) -> str:
@@ -113,8 +138,8 @@ def statements(
         numeric=frozenset({1}),
     )
     out.append(
-        f"INSERT INTO loaded (id, version) VALUES (1, {quote(version)}) "
-        "ON CONFLICT (id) DO UPDATE SET version = excluded.version;"
+        f"INSERT INTO loaded (id, version, built_from) VALUES (1, {quote(version)}, NULL) "
+        "ON CONFLICT (id) DO UPDATE SET version = excluded.version, built_from = NULL;"
     )
     return out
 
@@ -165,36 +190,53 @@ def remaining(target: Target, count: str) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Loads a language's lexicon into its D1 database.")
     parser.add_argument("env", help="staging, production, pr-N or local")
-    parser.add_argument("sqlite", type=Path, help="analysis's {lang}.cards.sqlite")
+    parser.add_argument("sqlite", type=Path, nargs="?", help="analysis's {lang}.cards.sqlite")
     parser.add_argument("--sample", type=int, help="only wordfreq's N most common words")
     parser.add_argument("--persist-to", type=Path, help="wrangler dev's state directory (local)")
+    parser.add_argument(
+        "--built-from",
+        help="the Nix output sqlite is in; without sqlite, prints current if D1 serves it, else stale",
+    )
+    parser.add_argument("--lang", help="the language, when there's no sqlite")
     args = parser.parse_args()
     env = cast(str, args.env)
-    path = cast(Path, args.sqlite)
+    path = cast(Path | None, args.sqlite)
     sample = cast(int | None, args.sample)
     persist_to = cast(Path | None, args.persist_to)
+    built_from = cast(str | None, args.built_from)
     if not re.fullmatch(r"staging|production|pr-[0-9]+|local", env):
         parser.error("env must be staging, production, pr-N or local")
     if persist_to is not None and env != "local":
         parser.error("--persist-to is for local")
+    key = None if built_from is None else built_from_key(built_from, sample)
+    if path is None:
+        lang = cast(str | None, args.lang)
+        if key is None or lang is None or not re.fullmatch(r"[a-z]+", lang):
+            parser.error("without sqlite, give --built-from and --lang")
+        loaded = serving(Target(env, lang, persist_to))
+        print("current" if loaded is not None and loaded.built_from == key else "stale")
+        return
     db = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     lang, version = meta(db)
     target = Target(env, lang, persist_to)
     if sample is not None:
         version = f"{version}+sample{sample}"
-    if serving(target) == version:
+    loaded = serving(target)
+    if loaded is not None and loaded.version == version:
         print(f"{env}: {lang} already serves {version}")
-        clean(target, version)
-        return
-    with tempfile.TemporaryDirectory() as scratch:
-        sql = Path(scratch) / f"lexicon-{lang}.sql"
-        sql.write_text("\n".join(statements(db, lang, version, sample)) + "\n")
-        print(f"{env}: loading {lang} {version} ({sql.stat().st_size / 1e6:.0f} MB of SQL)")
-        wrangler(target, "--yes", "--file", str(sql))
-    if serving(target) != version:
-        raise SystemExit(f"{env}: {lang} doesn't serve {version} after loading it")
-    print(f"{env}: {lang} serves {version}")
+    else:
+        with tempfile.TemporaryDirectory() as scratch:
+            sql = Path(scratch) / f"lexicon-{lang}.sql"
+            sql.write_text("\n".join(statements(db, lang, version, sample)) + "\n")
+            print(f"{env}: loading {lang} {version} ({sql.stat().st_size / 1e6:.0f} MB of SQL)")
+            wrangler(target, "--yes", "--file", str(sql))
+        loaded = serving(target)
+        if loaded is None or loaded.version != version:
+            raise SystemExit(f"{env}: {lang} doesn't serve {version} after loading it")
+        print(f"{env}: {lang} serves {version}")
     clean(target, version)
+    if key is not None:
+        record_built_from(target, version, key)
 
 if __name__ == "__main__":
     main()
