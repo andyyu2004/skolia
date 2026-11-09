@@ -114,11 +114,6 @@
     event.preventDefault();
   }
 
-  const MODES: { mode: ReaderMode; label: string; help: string }[] = [
-    { mode: "reading", label: "Reading", help: "Tapping a word shows it; add it to your cards from its sheet" },
-    { mode: "learning", label: "Learning", help: "Tapping a word you haven't marked adds it to your cards" },
-  ];
-
   function change(next: ReaderMode): void {
     mode = next;
     rememberMode(next);
@@ -174,12 +169,21 @@
         <h1>{summary.title}</h1>
         <div class="title-actions">
           {#if known.byId}
-            <div class="mode" role="group" aria-label="Mode">
-              {#each MODES as m (m.mode)}
-                <button type="button" aria-pressed={mode === m.mode} title={m.help} onclick={() => change(m.mode)}
-                  >{m.label}</button
-                >
-              {/each}
+            <div class="mode">
+              <label>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={mode === "learning"}
+                  aria-describedby="mode-help"
+                  onchange={(e) => change(e.currentTarget.checked ? "learning" : "reading")}
+                />
+                Learning mode
+              </label>
+              <span id="mode-help" role="tooltip" class="tip"
+                >On: tapping a word you haven't marked adds it to your cards. Off: tapping only shows the word, and its
+                sheet has an Add to cards button.</span
+              >
             </div>
           {/if}
           {#if summary.mine}
