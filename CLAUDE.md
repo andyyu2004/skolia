@@ -7,4 +7,5 @@
 - Curated texts live in `texts/{lang}/*.txt` (header lines, `---`, text) and every deploy seeds them (`just seed <env>`, src/seed.ts). An edited text is a new document; the old one is deleted.
 - Two different things are called `Ingester`: the Durable Object in api/src/worker/ingest.ts, which starts the container and hands it jobs, and the job loop in analysis/src/skolia_analysis/ingest/worker.py.
 - The API binds the ingest Worker's `Ingester` (`INGESTER`, `script_name`) to ask where a document is in the queue. The workerd test harness has no ingest Worker, so src/testing/ingest-recorder is named `skolia-ingest` and has a stub `Ingester`.
+- TypeScript leans readonly and functional where it costs little: `readonly` fields and collections, values built with `map`/`flatMap`/`reduce` rather than filled in later, and objects whole when they're created rather than holding placeholders. A plain loop is fine when it reads better.
 - api/src/bundle.test.ts caps the gzipped Worker bundle. CI's gzip came out about 1 KiB bigger than a local macOS build, so leave some room when raising it.

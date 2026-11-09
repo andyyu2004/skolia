@@ -19,6 +19,10 @@
   import { paradigmTables } from "@skolia/shared/paradigm";
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
   import ParadigmTable from "./ParadigmTable.svelte";
+  import SentenceDiagram from "./SentenceDiagram.svelte";
+  import { MediaQuery } from "svelte/reactivity";
+  import { sheet, type SheetView } from "./lib/sheet.svelte.ts";
+  import { clauseOf, parseSentence } from "@skolia/shared/tree";
 
   type WordPiece = Extract<Piece, { kind: "word" }>;
 
@@ -28,6 +32,7 @@
     piece,
     headText,
     sentenceTokens,
+    onselectToken,
     onclose,
   }: {
     /** The document's language, also for the lang attribute of its text */
@@ -36,8 +41,14 @@
     piece: WordPiece;
     headText: (sentence: number, index: number) => string | null;
     sentenceTokens: (sentence: number) => Token[];
+    onselectToken: (sentence: number, index: number) => void;
     onclose: () => void;
   } = $props();
+
+  /** Longer sentences start with the clause around the word, not all of it */
+  const LONG_SENTENCE = 15;
+  const sentence = $derived(piece.words[0]?.sentence ?? 0);
+  const selectedTokens = $derived(new Set(piece.words.map((w) => w.index)));
   const language = $derived(LANGUAGES[lang]);
 
   const SHOWN_SENSES = 3;
@@ -47,9 +58,38 @@
   }
 
   /** On a phone the sheet starts at half height; tapping the handle gives it the screen. */
-  let expanded = $state(false);
-  let allSenses = $state(false);
-  let allUses = $state(false);
+  let expanded = $state(sheet.view === "sentence");
+
+  /** Too narrow for a diagram read left to right: it's turned to read top to bottom */
+  const narrow = new MediaQuery("max-width: 599px");
+
+  const VIEWS = [
+    ["word", "Word"],
+    ["sentence", "Sentence"],
+  ] as const;
+
+  /** "Link copied" for a moment after sharing; the address already names the word (lib/link.ts). */
+  let shared = $state("");
+  async function share(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(location.href);
+      shared = "Link copied";
+    } catch {
+      shared = "Couldn't copy: the address bar has the link";
+    }
+    setTimeout(() => (shared = ""), 2000);
+  }
+
+  function show(view: SheetView): void {
+    sheet.view = view;
+    // A diagram needs the height on a phone
+    if (view === "sentence") expanded = true;
+  }
+  /** The word whose full lists are shown: another word starts with them folded. */
+  let sensesFor = $state<WordPiece | null>(null);
+  let usesFor = $state<WordPiece | null>(null);
+  const allSenses = $derived(sensesFor === piece);
+  const allUses = $derived(usesFor === piece);
   const SHOWN_USES = 5;
 
   /** "kogoś/czegoś [gen.]" -> the words, and the bracketed labels to style apart. */
@@ -152,8 +192,80 @@
   <div class="sheet-bar">
     <button type="button" class="handle" aria-label={expanded ? "Shrink" : "Expand"} onclick={() => (expanded = !expanded)}
     ></button>
-    <button type="button" class="close" aria-label="Close" onclick={onclose}>×</button>
+    <div class="sheet-head">
+      <div class="sheet-tabs" role="tablist" aria-label="Show">
+      {#each VIEWS as [view, label] (view)}
+        <button
+          type="button"
+          role="tab"
+          id="sheet-tab-{view}"
+          aria-selected={sheet.view === view}
+          tabindex={sheet.view === view ? 0 : -1}
+          onclick={() => show(view)}
+          onkeydown={(event) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            event.preventDefault();
+            const other = sheet.view === "word" ? "sentence" : "word";
+            show(other);
+            document.getElementById(`sheet-tab-${other}`)?.focus();
+          }}>{label}</button
+        >
+      {/each}
+      </div>
+      <div class="sheet-actions">
+        <span class="share-note" role="status">{shared}</span>
+        <button type="button" class="share" aria-label="Copy a link to this word" title="Copy link" onclick={share}
+          ><svg viewBox="0 0 16 16" aria-hidden="true"
+            ><path
+              d="M6.5 9.5a3 3 0 0 0 4.2 0l2.1-2.1a3 3 0 0 0-4.2-4.2l-.9.9M9.5 6.5a3 3 0 0 0-4.2 0L3.2 8.6a3 3 0 0 0 4.2 4.2l.9-.9"
+            /></svg
+          ></button
+        >
+        <button type="button" class="close" aria-label="Close" onclick={onclose}
+          ><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg></button
+        >
+      </div>
+    </div>
   </div>
+
+  {#if sheet.view === "sentence"}
+    {@const tokens = sentenceTokens(sentence)}
+    {@const total = tokens.filter((t) => t.upos !== "PUNCT").length}
+    {@const clause = total > LONG_SENTENCE ? clauseOf(tokens, piece.words[0]?.index ?? 0) : null}
+    <div class="diagram-bar">
+      {#if clause}
+        <p class="clause-note muted small">
+          {#if sheet.whole}
+            All {total} words.
+            <button type="button" class="link" onclick={() => (sheet.whole = false)}>Just this clause</button>
+          {:else}
+            This clause, {[...clause].filter((i) => tokens[i]?.upos !== "PUNCT").length} of {total} words.
+            <button type="button" class="link" onclick={() => (sheet.whole = true)}>Whole sentence</button>
+          {/if}
+        </p>
+      {/if}
+      <div class="layout-switch" role="group" aria-label="Draw the sentence as">
+        <button type="button" aria-pressed={sheet.layout === "arcs"} onclick={() => (sheet.layout = "arcs")}
+          >Arcs</button
+        >
+        <button type="button" aria-pressed={sheet.layout === "tree"} onclick={() => (sheet.layout = "tree")}
+          >Tree</button
+        >
+      </div>
+    </div>
+    <SentenceDiagram
+      {lang}
+      sentence={parseSentence(tokens, {
+        keep: clause && !sheet.whole ? clause : undefined,
+        cases: language.cases,
+        partOfWord: language.partOfWord,
+      })}
+      shape={sheet.layout}
+      direction={narrow.current ? "down" : "across"}
+      selected={selectedTokens}
+      onselect={(index) => onselectToken(sentence, index)}
+    />
+  {/if}
 
   {#each words as word (word.ref.index)}
     {@const token = word.ref.token}
@@ -199,14 +311,29 @@
           " · ",
         )}
       </p>
-      {#if word.role}
-        <p class="role muted">{word.role.role} <span {lang} class="mark-head">{word.role.head}</span></p>
+      {#if word.role && token.head !== null}
+        {@const head = token.head}
+        <p class="role muted">
+          {word.role.role}
+          <button
+            type="button"
+            {lang}
+            class="word-link mark-head"
+            title="Show {word.role.head}"
+            onclick={() => onselectToken(word.ref.sentence, head)}>{word.role.head}</button
+          >
+        </p>
       {/if}
       {#if word.caseWhy && token.feats.Case}
+        {@const trigger = word.caseWhy.trigger}
         <p class="why">
           <span class="why-label">Why {CASE_NAME[token.feats.Case]}?</span>
           <span {lang}
-            >{#each word.caseWhy.parts as part, j (j)}{#if part.trigger}<span class="mark-trigger">{part.text}</span
+            >{#each word.caseWhy.parts as part, j (j)}{#if part.trigger && trigger !== null}<button
+                  type="button"
+                  class="word-link mark-trigger"
+                  title="Show {part.text}"
+                  onclick={() => onselectToken(word.ref.sentence, trigger)}>{part.text}</button
                 >{:else}{part.text}{/if}{/each}</span
           >
         </p>
@@ -231,7 +358,7 @@
             {/each}
           </ol>
           {#if word.senses.length > SHOWN_SENSES}
-            <button type="button" class="link" onclick={() => (allSenses = !allSenses)}>
+            <button type="button" class="link" onclick={() => (sensesFor = allSenses ? null : piece)}>
               {allSenses ? "Fewer meanings" : `All ${word.senses.length} meanings`}
             </button>
           {/if}
@@ -266,7 +393,7 @@
               {/each}
             </ul>
             {#if word.uses.length > SHOWN_USES}
-              <button type="button" class="link" onclick={() => (allUses = !allUses)}>
+              <button type="button" class="link" onclick={() => (usesFor = allUses ? null : piece)}>
                 {allUses ? "Fewer" : `All ${word.uses.length} uses`}
               </button>
             {/if}
@@ -293,7 +420,11 @@
         {/if}
 
         {#each word.tables as table (table.title)}
-          <ParadigmTable {lang} {table} />
+          <ParadigmTable
+            {lang}
+            {table}
+            bind:open={() => sheet.forms[table.title] ?? false, (open) => (sheet.forms[table.title] = open ?? false)}
+          />
         {/each}
       {/if}
     </section>

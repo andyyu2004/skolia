@@ -18,7 +18,8 @@
     const review = /^#\/review\/([a-z]+)$/.exec(hash)?.[1];
     if (review !== undefined && isLang(review)) return { page: "review", lang: review };
     if (hash === "#/settings") return { page: "settings" };
-    const match = /^#\/doc\/([0-9a-f]{64})$/.exec(hash);
+    // After the id, a word in the text (lib/link.ts), which Reader reads
+    const match = /^#\/doc\/([0-9a-f]{64})(?:\?.*)?$/.exec(hash);
     return match?.[1] ? { page: "reader", id: match[1] } : { page: "explore" };
   }
 

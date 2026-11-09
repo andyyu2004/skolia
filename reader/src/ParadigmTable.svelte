@@ -2,13 +2,21 @@
   import type { Lang } from "@skolia/shared/api";
   import type { Table } from "@skolia/shared/paradigm";
 
-  let { lang, table }: { lang: Lang; table: Table } = $props();
+  let {
+    lang,
+    table,
+    open = $bindable(),
+  }: {
+    lang: Lang;
+    table: Table;
+    /** Given, the table folds under its title; the review card folds its tables itself. */
+    open?: boolean;
+  } = $props();
 
   const isList = $derived(table.columns.length === 1 && table.columns[0] === "" && table.rows.length === 1);
 </script>
 
-<div class="paradigm">
-  <h3>{table.title}</h3>
+{#snippet body()}
   {#if isList}
     <p {lang} class="form-list">
       {#each table.rows[0]?.cells[0] ?? [] as form, i (i)}
@@ -41,4 +49,16 @@
       </table>
     </div>
   {/if}
-</div>
+{/snippet}
+
+{#if open === undefined}
+  <div class="paradigm">
+    <h3>{table.title}</h3>
+    {@render body()}
+  </div>
+{:else}
+  <details class="paradigm" bind:open>
+    <summary>{table.title}</summary>
+    {@render body()}
+  </details>
+{/if}
