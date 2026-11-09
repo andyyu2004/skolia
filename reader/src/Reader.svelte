@@ -10,7 +10,7 @@
   import { sheet } from "./lib/sheet.svelte.ts";
   import { readLink, writeLink } from "./lib/link.ts";
   import { tick, untrack } from "svelte";
-  import { defaultMode, rememberMode, type ReaderMode } from "./lib/mode.ts";
+  import type { ReaderMode } from "./lib/mode.ts";
   import { words as known } from "./lib/words.svelte.ts";
 
   let { id }: { id: string } = $props();
@@ -22,7 +22,7 @@
   let error = $state<string | null>(null);
   let selected = $state<number | null>(null);
   let editing = $state(false);
-  let mode = $state<ReaderMode>(defaultMode());
+  let mode = $state<ReaderMode>("reading");
 
   const notice = $derived(noticeFor(summary, reading !== null, error));
 
@@ -114,10 +114,6 @@
     event.preventDefault();
   }
 
-  function change(next: ReaderMode): void {
-    mode = next;
-    rememberMode(next);
-  }
 
   function headText(sentence: number, index: number): string | null {
     const id = doc?.pieceOf.get(tokenKey(sentence, index));
@@ -174,7 +170,7 @@
                 type="button"
                 class="quiet small with-icon {mode}"
                 aria-describedby="mode-help"
-                onclick={() => change(mode === "reading" ? "learning" : "reading")}
+                onclick={() => (mode = mode === "reading" ? "learning" : "reading")}
               >
                 {#if mode === "reading"}
                   <svg viewBox="0 0 16 16" aria-hidden="true"
