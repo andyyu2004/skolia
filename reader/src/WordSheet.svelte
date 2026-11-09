@@ -192,13 +192,19 @@
   <div class="sheet-bar">
     <button type="button" class="handle" aria-label={expanded ? "Shrink" : "Expand"} onclick={() => (expanded = !expanded)}
     ></button>
-    <button type="button" class="share" aria-label="Copy a link to this word" title="Copy link" onclick={share}
-      ><svg viewBox="0 0 16 16" aria-hidden="true"
-        ><path d="M6.5 9.5a3 3 0 0 0 4.2 0l2.1-2.1a3 3 0 0 0-4.2-4.2l-.9.9M9.5 6.5a3 3 0 0 0-4.2 0L3.2 8.6a3 3 0 0 0 4.2 4.2l.9-.9" /></svg
-      ></button
-    >
-    <span class="share-note" role="status">{shared}</span>
-    <button type="button" class="close" aria-label="Close" onclick={onclose}>×</button>
+    <div class="sheet-actions">
+      <span class="share-note" role="status">{shared}</span>
+      <button type="button" class="share" aria-label="Copy a link to this word" title="Copy link" onclick={share}
+        ><svg viewBox="0 0 16 16" aria-hidden="true"
+          ><path
+            d="M6.5 9.5a3 3 0 0 0 4.2 0l2.1-2.1a3 3 0 0 0-4.2-4.2l-.9.9M9.5 6.5a3 3 0 0 0-4.2 0L3.2 8.6a3 3 0 0 0 4.2 4.2l.9-.9"
+          /></svg
+        ></button
+      >
+      <button type="button" class="close" aria-label="Close" onclick={onclose}
+        ><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg></button
+      >
+    </div>
     <div class="sheet-tabs" role="tablist" aria-label="Show">
       {#each VIEWS as [view, label] (view)}
         <button

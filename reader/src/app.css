@@ -1043,46 +1043,50 @@ label.check {
   background: var(--line);
 }
 
-.close {
+/* Copy link and close, top right of the sheet, on one line */
+.sheet-actions {
   position: absolute;
   right: 0;
-  top: 0.2rem;
-  border: 0;
-  background: transparent;
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  color: var(--muted);
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
-.share {
-  position: absolute;
-  right: 2rem;
-  top: 0.1rem;
+.share,
+.close {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
   border: 0;
+  border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  padding: 0.35rem;
   cursor: pointer;
 }
 
-.share svg {
-  display: block;
+.share:hover,
+.close:hover {
+  color: var(--text);
+}
+
+.share svg,
+.close svg {
   width: 1.1rem;
   height: 1.1rem;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.5;
+  stroke-width: 1.6;
   stroke-linecap: round;
 }
 
 .share-note {
-  position: absolute;
-  right: 4.25rem;
-  top: 0.45rem;
   font-size: 0.8rem;
   color: var(--muted);
 }
+
 
 @media (min-width: 900px) {
   .reader {
@@ -1123,6 +1127,11 @@ label.check {
   .sheet-tabs {
     margin-top: 0;
     padding-right: 4.5rem;
+  }
+
+  /* With no handle, level with the tabs */
+  .sheet-actions {
+    top: 0.7rem;
   }
 }
 
