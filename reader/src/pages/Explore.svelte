@@ -1,7 +1,9 @@
 <script lang="ts">
-  import type { DocumentSummary, Lang, User } from "@skolia/shared/api";
-  import { LANGS, LANGUAGE_INFO, LICENCE_INFO } from "@skolia/shared/api";
-  import { listDocuments } from "../lib/api.ts";
+  import type { AvailableTag, DocumentSummary, Lang, User } from "@skolia/shared/api";
+  import { LANGS, LANGUAGE_INFO, LICENCE_INFO, matchesTags, parseTag, tagFilter } from "@skolia/shared/api";
+  import { listDocuments, listTags } from "../lib/api.ts";
+  import { tagLabel } from "../lib/tags.ts";
+  import TagFilter from "../components/TagFilter.svelte";
   import { badge } from "../lib/reading.ts";
   import Page from "../components/Page.svelte";
 
@@ -12,6 +14,11 @@
   let query = $state("");
   let lang = $state<Lang | "all">("all");
   let importer = $state<"all" | "mine" | `by:${string}`>("all");
+  /** The tags kept, as kind:value: any of one kind, all of the kinds. */
+  let tagged = $state<readonly string[]>([]);
+  let available = $state<readonly AvailableTag[]>([]);
+  let tagsError = $state<string | null>(null);
+  const filter = $derived(tagFilter(tagged.flatMap((t) => parseTag(t) ?? [])));
 
   /** Others who imported what's listed, by id, since two can share a name. */
   const importers = $derived(
@@ -31,11 +38,19 @@
   const shown = $derived.by(() => {
     const q = query.trim().toLocaleLowerCase();
     return (documents ?? []).filter(
-      (d) => (lang === "all" || d.lang === lang) && byImporter(d) && (q === "" || d.title.toLocaleLowerCase().includes(q)),
+      (d) => (lang === "all" || d.lang === lang) && byImporter(d) && matchesTags(d.tags, filter) && (q === "" || d.title.toLocaleLowerCase().includes(q)),
     );
   });
 
   const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
+
+  $effect(() => {
+    // Without them there's no tag filter, but the list still works
+    listTags().then(
+      (t) => (available = t),
+      (e: unknown) => (tagsError = e instanceof Error ? e.message : String(e)),
+    );
+  });
 
   $effect(() => {
     listDocuments().then(
@@ -76,6 +91,7 @@
             <option value={`by:${id}`}>{name}</option>
           {/each}
         </select>
+        <TagFilter {available} error={tagsError} bind:selected={tagged} />
       </div>
 
       {#if documents === null}
@@ -104,6 +120,9 @@
                   {#if status}
                     <span class={["badge", { failed: status.failed }]}>{status.text}</span>
                   {/if}
+                  {#each Object.entries(doc.tags) as [kind, value] (kind)}
+                    <span class="badge tag">{tagLabel({ kind, value })}</span>
+                  {/each}
                 </span>
                 <span class="entry-meta">
                   <span>{LANGUAGE_INFO[doc.lang].flag} {LANGUAGE_INFO[doc.lang].name}</span>
@@ -162,10 +181,11 @@
     border-radius: 10px;
     background: var(--surface);
     box-shadow: var(--card-shadow);
-    overflow: hidden;
   }
 
+  /* Rounded here rather than clipped by .listing, so the tag menu can hang below it */
   .listing-head {
+    border-radius: 10px 10px 0 0;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -234,6 +254,10 @@
     background: var(--bg);
   }
 
+  .entries li:last-child .entry {
+    border-radius: 0 0 10px 10px;
+  }
+
   .entry:hover .entry-title {
     color: var(--accent);
   }
@@ -264,6 +288,12 @@
     padding: 0.05rem 0.45rem;
     border-radius: 99px;
     background: var(--line);
+  }
+
+  .badge.tag {
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--accent);
+    font-weight: 600;
   }
 
   .badge.failed {

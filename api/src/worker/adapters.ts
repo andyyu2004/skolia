@@ -14,9 +14,10 @@ import {
   type Lookup,
   type Timestamp,
   type UserId,
-  type ReviewRequest, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
+  type ReviewRequest, type Settings, type AvailableTag, type TagFilter, type Tags, type Word, type WordStatus } from "@skolia/shared/api";
 import type { BundleParadigm, IngestJob, Pronunciation, Relation, Sense } from "@skolia/shared/schema";
-import { DocumentRow, LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
+import { AvailableTag as AvailableTagSchema, DocumentRow, LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
+import { sql, type Sql } from "@skolia/util/sql";
 import type {
   BlobStore,
   DocumentContent,
@@ -172,17 +173,39 @@ export class D1Lexicon implements Lexicon {
 }
 
 const SELECT_DOCUMENT = `SELECT entry.document_id AS id, entry.user_id AS "user", entry.title, entry.imported_at AS imported,
-    entry.visibility, entry.licence, entry.author, entry.source, document.lang, document.words, "user"."name" AS importerName
+    entry.visibility, entry.licence, entry.author, entry.source, document.lang, document.words, "user"."name" AS importerName,
+    (SELECT json_group_object(tag.kind, tag.value) FROM user_document_tag AS tag
+      WHERE tag.user_id = entry.user_id AND tag.document_id = entry.document_id) AS tags
   FROM user_document AS entry
   JOIN document ON document.id = entry.document_id
   JOIN "user" ON "user"."id" = entry.user_id`;
 
+/** The list's query: every public entry and the viewer's private ones, narrowed to those
+ * with any of the values the filter gives for each kind of tag it names. Each kind looks
+ * its values up in user_document_tag_value_idx. */
+export function listQuery(viewer: UserId | null, tags: TagFilter): Sql {
+  const narrowed = sql.join(
+    Object.entries(tags)
+      .filter(([, values]) => values.length > 0)
+      .map(
+        ([kind, values]) => sql` AND (entry.user_id, entry.document_id) IN (SELECT user_id, document_id FROM user_document_tag
+          WHERE kind = ${kind} AND value IN (${sql.join(values, ", ")}))`,
+      ),
+    "",
+  );
+  const select = sql.raw(SELECT_DOCUMENT);
+  // A UNION rather than an OR, so each half searches its own index
+  return sql`${select} WHERE entry.visibility = 'public'${narrowed}
+    UNION ALL ${select} WHERE entry.user_id = ${viewer} AND entry.visibility = 'private'${narrowed}
+    ORDER BY imported DESC`;
+}
+
 /** D1Documents' queries, exported for the test that checks each one uses an index. */
 export const DOCUMENT_QUERIES = {
-  // A UNION rather than an OR, so each half searches its own index
-  list: `${SELECT_DOCUMENT} WHERE entry.visibility = 'public'
-    UNION ALL ${SELECT_DOCUMENT} WHERE entry.user_id = ?1 AND entry.visibility = 'private'
-    ORDER BY imported DESC`,
+  list: listQuery(null, {}).text,
+  /** The list narrowed to one kind of tag, two of its values */
+  listTagged: listQuery(null, { level: ["A1", "B1"] }).text,
+  tags: "SELECT kind, value, description FROM tag ORDER BY kind, position",
   importedBy: `${SELECT_DOCUMENT} WHERE entry.user_id = ?1 ORDER BY entry.imported_at DESC`,
   visible: `${SELECT_DOCUMENT} WHERE entry.document_id = ?1 AND (entry.user_id = ?2 OR entry.visibility = 'public')
     ORDER BY entry.user_id IS ?2 DESC, entry.imported_at LIMIT 1`,
@@ -191,6 +214,8 @@ export const DOCUMENT_QUERIES = {
   addEntry: `INSERT OR IGNORE INTO user_document (user_id, document_id, title, imported_at, visibility, licence, author, source)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
   update: "UPDATE user_document SET title = ?3, visibility = ?4, licence = ?5, author = ?6, source = ?7 WHERE document_id = ?1 AND user_id = ?2",
+  addTag: "INSERT OR IGNORE INTO user_document_tag (user_id, document_id, kind, value) VALUES (?1, ?2, ?3, ?4)",
+  removeTags: "DELETE FROM user_document_tag WHERE user_id = ?1 AND document_id = ?2",
   remove: "DELETE FROM user_document WHERE document_id = ?1 AND user_id = ?2",
 } as const;
 
@@ -201,9 +226,18 @@ export class D1Documents implements DocumentStore {
     this.db = db;
   }
 
-  async list(viewer: UserId | null): Promise<readonly StoredDocument[]> {
-    const { results } = await this.db.prepare(DOCUMENT_QUERIES.list).bind(viewer).all();
+  async list(viewer: UserId | null, tags: TagFilter): Promise<readonly StoredDocument[]> {
+    const { text, params } = listQuery(viewer, tags);
+    const { results } = await this.db
+      .prepare(text)
+      .bind(...params)
+      .all();
     return results.map((row) => DocumentRow.parse(row));
+  }
+
+  async tags(): Promise<readonly AvailableTag[]> {
+    const { results } = await this.db.prepare(DOCUMENT_QUERIES.tags).all();
+    return results.map((row) => AvailableTagSchema.parse(row));
   }
 
   async importedBy(user: UserId): Promise<readonly StoredDocument[]> {
@@ -224,11 +258,22 @@ export class D1Documents implements DocumentStore {
     await this.db.batch([
       this.db.prepare(DOCUMENT_QUERIES.addContent).bind(c.id, c.lang, c.words),
       this.db.prepare(DOCUMENT_QUERIES.addEntry).bind(e.user, e.id, e.title, e.imported, e.visibility, e.licence, e.author, e.source),
+      ...this.addTags(e.user, e.id, e.tags),
     ]);
   }
 
-  async update(id: DocumentId, user: UserId, { title, visibility, licence, author, source }: EntryFields): Promise<void> {
-    await this.db.prepare(DOCUMENT_QUERIES.update).bind(id, user, title, visibility, licence, author, source).run();
+  async update(id: DocumentId, user: UserId, { title, visibility, licence, author, source, tags }: EntryFields): Promise<void> {
+    await this.db.batch([
+      this.db.prepare(DOCUMENT_QUERIES.update).bind(id, user, title, visibility, licence, author, source),
+      this.db.prepare(DOCUMENT_QUERIES.removeTags).bind(user, id),
+      ...this.addTags(user, id, tags),
+    ]);
+  }
+
+  private addTags(user: UserId, id: DocumentId, tags: Tags): D1PreparedStatement[] {
+    return Object.entries(tags).flatMap(([kind, value]) =>
+      value === undefined ? [] : [this.db.prepare(DOCUMENT_QUERIES.addTag).bind(user, id, kind, value)],
+    );
   }
 
   async remove(id: DocumentId, user: UserId): Promise<void> {

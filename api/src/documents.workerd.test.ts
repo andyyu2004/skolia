@@ -5,7 +5,7 @@ import { MAX_TEXT_LENGTH, type DocumentId, type DocumentSummary, type DocumentUp
 import { docId, statusKey, textKey } from "@skolia/shared/keys";
 import type { AppType } from "./app.ts";
 import type { IngestJobs } from "./ports.ts";
-import { ALICE, NOW, TEXT, client, importText, importer, listed, local, putJson, readyAt, setup, summaryOf, useLocal, type App } from "./testing/app.ts";
+import { ALICE, NOW, TEXT, client, importText, importer, listed, local, putJson, raw, readyAt, setup, summaryOf, useLocal, type App } from "./testing/app.ts";
 import { ORIGIN } from "./testing/harness.ts";
 import { body, expectStatus } from "./testing/responses.ts";
 
@@ -25,7 +25,7 @@ test("the typed client imports, lists and gets a document, and sees a 404 as not
   assert.equal(imported.status, 202);
   if (!imported.ok) throw new Error("import failed");
   const { id } = await imported.json();
-  const listed = await api.documents.$get();
+  const listed = await api.documents.$get({ query: {} });
   assert.ok(listed.ok);
   assert.deepEqual((await listed.json()).documents.map((d) => d.id), [id]);
   const got = await api.documents[":id"].$get({ param: { id } });
@@ -169,9 +169,9 @@ test("another user importing the same text gets their own entry, and the first s
   assert.deepEqual([ivys.title, ivys.visibility, ivys.licence, ivys.author, ivys.mine], ["Ivy's", "private", "all-rights-reserved", "someone", true]);
   const signedOut = await summaryOf(app, id, {});
   assert.deepEqual([signedOut.title, signedOut.importer.name, signedOut.mine], ["Alice's", "Alice", false]);
-  const { documents } = await body("list", client(app).documents.$get());
+  const { documents } = await body("list", client(app).documents.$get({ query: {} }));
   assert.deepEqual(documents.map((d) => d.title), ["Alice's"]);
-  const both = await body("list", client(app, importer).documents.$get());
+  const both = await body("list", client(app, importer).documents.$get({ query: {} }));
   assert.deepEqual(both.documents.map((d) => d.title).sort(), ["Alice's", "Ivy's"]);
 });
 
@@ -241,6 +241,68 @@ test("the importer changes a document's title, licence, author and source; nobod
   assert.equal((await body("get", view(app, undefined, id))).title, "Nowy tytuł");
 });
 
+test("an entry has the tags it was imported with, which its user replaces", async () => {
+  const app = setup();
+  const id = await imported(app, importer, TEXT, { tags: { level: "A2" } });
+  const tags = async () => (await body("get", view(app, importer, id))).tags;
+  assert.deepEqual(await tags(), { level: "A2" });
+  assert.deepEqual((await body("list", client(app, importer).documents.$get({ query: {} }))).documents.map((d) => d.tags), [{ level: "A2" }]);
+  assert.deepEqual((await body("patch", patch(app, importer, id, { tags: { level: "C2" } }))).tags, { level: "C2" });
+  await expectStatus("title only", patch(app, importer, id, { title: "Pies" }), 200);
+  assert.deepEqual(await tags(), { level: "C2" });
+  await expectStatus("no tags", patch(app, importer, id, { tags: {} }), 200);
+  assert.deepEqual(await tags(), {});
+  await expectStatus("a tag skolia hasn't", patch(app, importer, id, { tags: { level: "D1" } }), 400);
+  await expectStatus("a kind skolia hasn't", patch(app, importer, id, { tags: { genre: "poem" } }), 400);
+  await expectStatus("not a tag", patch(app, importer, id, { tags: { level: "B 1" } }), 400);
+  await expectStatus("import, a tag skolia hasn't", client(app, importer).documents.$post({ json: { text: "Inny tekst.", lang: "pl", tags: { level: "D1" } } }), 400);
+  assert.deepEqual(await tags(), {});
+  assert.deepEqual((await body("get", view(app, importer, await imported(app, importer, "Bez tagów.")))).tags, {});
+});
+
+test("each user's entry for a text has its own tags, which go with the entry", async () => {
+  const app = setup();
+  const alice = await local.signIn((await local.signUp(ALICE)).id);
+  const shared = { visibility: "public", licence: "cc0" } as const;
+  const id = await imported(app, importer, TEXT, { ...shared, tags: { level: "B1" } });
+  await body("alice imports", client(app, alice).documents.$post({ json: { text: TEXT, lang: "pl", ...shared, tags: { level: "B2" } } }));
+  assert.deepEqual((await body("get", view(app, alice, id))).tags, { level: "B2" });
+  assert.deepEqual((await body("get", view(app, importer, id))).tags, { level: "B1" });
+  await expectStatus("alice deletes hers", remove(app, alice, id), 204);
+  await body("alice imports again", client(app, alice).documents.$post({ json: { text: TEXT, lang: "pl", ...shared } }));
+  assert.deepEqual((await body("get", view(app, alice, id))).tags, {});
+});
+
+test("a list narrows to entries with any of the values asked for each kind of tag", async () => {
+  const app = setup();
+  const alice = await local.signIn((await local.signUp(ALICE)).id);
+  const shared = { visibility: "public", licence: "cc0" } as const;
+  const a1 = await imported(app, importer, "Pierwszy tekst.", { ...shared, tags: { level: "A1" } });
+  const b1 = await imported(app, importer, "Drugi tekst.", { ...shared, tags: { level: "B1" } });
+  await imported(app, importer, "Trzeci tekst.", shared);
+  const own = await imported(app, alice, "Czwarty tekst.", { tags: { level: "B1" } });
+  const narrowed = async (headers: Headers | undefined, tag: string | string[]) =>
+    (await body("list", client(app, headers).documents.$get({ query: { tag } }))).documents.map((d) => d.id).sort();
+  assert.deepEqual(await narrowed(undefined, "level:B1"), [b1]);
+  assert.deepEqual(await narrowed(alice, "level:B1"), [b1, own].sort());
+  assert.deepEqual(await narrowed(undefined, ["level:A1", "level:B1"]), [a1, b1].sort());
+  assert.deepEqual(await narrowed(undefined, "level:C3"), []);
+  assert.deepEqual(await narrowed(undefined, ["level:B1", "form:poem"]), []);
+  assert.equal((await listed(app)).length, 3);
+  for (const tag of ["level", "level:", ":B1", "level:B 1"]) {
+    await expectStatus(tag, client(app).documents.$get({ query: { tag } }), 400);
+  }
+});
+
+test("the tags skolia has are listed, each kind's in its order", async () => {
+  const { tags } = await body("tags", client(setup()).tags.$get());
+  assert.deepEqual(
+    tags.filter((t) => t.kind === "level").map((t) => t.value),
+    ["A0", "A1", "A2", "B1", "B2", "C1", "C2", "C3"],
+  );
+  assert.equal(tags.find((t) => t.value === "B1")?.description, "Intermediate");
+});
+
 test("the importer makes a document public under a shareable licence, and private again", async () => {
   const app = setup();
   const id = await imported(app, importer, TEXT);
@@ -259,7 +321,7 @@ test("a summary says whether the viewer imported it", async () => {
   const alice = await local.signIn((await local.signUp(ALICE)).id);
   const mine = async (headers?: Headers) => (await body("get", view(app, headers, id))).mine;
   assert.deepEqual([await mine(importer), await mine(alice), await mine()], [true, false, false]);
-  const { documents } = await body("list", client(app, importer).documents.$get());
+  const { documents } = await body("list", client(app, importer).documents.$get({ query: {} }));
   assert.deepEqual(documents.map((d) => d.mine), [true]);
 });
 
@@ -286,9 +348,9 @@ test("a user's own documents are listed for them, private ones too, and nobody e
   const mine = await imported(app, importer, "Mój tekst.");
   const alice = await local.signIn((await local.signUp(ALICE)).id);
   await imported(app, alice, "Tekst Alicji.", { visibility: "public", licence: "cc0" });
-  const { documents } = await body("mine", client(app, importer).me.documents.$get());
+  const { documents } = await body("mine", client(app, importer).me.documents.$get({ query: {} }));
   assert.deepEqual(documents.map((d) => d.id), [mine]);
-  await expectStatus("signed out", client(app).me.documents.$get(), 401);
+  await expectStatus("signed out", client(app).me.documents.$get({ query: {} }), 401);
 });
 
 test("the importer sees where their document is in the queue; others don't", async () => {

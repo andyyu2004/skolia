@@ -1,0 +1,11 @@
+{
+  "name": "@skolia/util",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./sql": "./sql.ts"
+  },
+  "scripts": {
+    "test": "node --test \"*.test.ts\""
+  }
+}

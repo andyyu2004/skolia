@@ -2,7 +2,8 @@
 // network (CuratedSpec), then resolved to a text and its credits, fetching it if its
 // kind names a source.
 import * as z from "zod";
-import { LICENCES, type Lang, type Licence } from "@skolia/shared/api";
+import { LICENCES, type Lang, type Licence, type Tags } from "@skolia/shared/api";
+import { Tags as TagsSchema } from "@skolia/shared/schemas";
 
 /** A curated text and its credits, as sync-curated imports it. */
 export interface Resolved {
@@ -10,6 +11,7 @@ export interface Resolved {
   readonly licence: Licence;
   readonly author?: string | undefined;
   readonly source?: string | undefined;
+  readonly tags: Tags;
   readonly text: string;
 }
 
@@ -20,6 +22,7 @@ const Inline = z.strictObject({
   licence: z.enum(LICENCES),
   author: z.string().min(1).optional(),
   source: z.string().optional(),
+  tags: TagsSchema.default({}),
   text: z.string(),
 });
 
@@ -29,6 +32,7 @@ const WolneLektury = z.strictObject({
   kind: z.literal("wolnelektury"),
   slug: z.string().regex(/^[a-z0-9-]+$/u, "slug must be lowercase letters, digits and hyphens"),
   title: z.string().min(1).optional(),
+  tags: TagsSchema.default({}),
 });
 
 export const CuratedSpec = z.discriminatedUnion("kind", [Inline, WolneLektury]);
@@ -78,6 +82,7 @@ async function wolneLektury(spec: z.output<typeof WolneLektury>, lang: Lang, fet
     licence: wolneLekturyLicence(raw),
     ...(author === "" ? {} : { author }),
     source: book.url,
+    tags: spec.tags,
     text: wolneLekturyText(raw),
   };
 }

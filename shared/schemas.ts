@@ -10,12 +10,17 @@ import {
   MAX_SOURCE_LENGTH,
   MAX_TEXT_LENGTH,
   MAX_TITLE_LENGTH,
+  MAX_TAGS,
   RATINGS,
+  TAG_KIND,
+  TAG_VALUE,
   UPOS,
   USER_TYPES,
   VISIBILITIES,
   WORD_STATUSES,
   isShareable,
+  parseTag,
+  tagFilter,
 } from "./api.ts";
 import type { Status as StatusType, Versions as VersionsType } from "./schema.gen.ts";
 
@@ -92,6 +97,31 @@ const Source = z
   .max(MAX_SOURCE_LENGTH)
   .refine((s) => /^https?:\/\/\S+$/u.test(s), "source must be an http(s) URL");
 
+export const TagKind = z.string().regex(TAG_KIND, "a tag's kind is lowercase letters, digits and hyphens");
+export const TagValue = z.string().regex(TAG_VALUE, "a tag's value is letters, digits and . + -");
+
+/** An entry's tags, each kind to its value; GET /api/tags has the ones skolia has. */
+export const Tags = z.record(TagKind, TagValue).refine((tags) => Object.keys(tags).length <= MAX_TAGS, `at most ${MAX_TAGS} tags`);
+
+export const AvailableTag = z.object({ kind: TagKind, value: TagValue, description: z.string().nullable() });
+
+/** A list's query: tag=kind:value, once or more, keeps entries with any of the values of
+ * each kind given. */
+export const DocumentsQuery = z.object({
+  tag: z
+    .union([z.string(), z.array(z.string())])
+    .transform((tags, context) =>
+      tagFilter(
+        (Array.isArray(tags) ? tags : [tags]).flatMap((text) => {
+          const tag = parseTag(text);
+          if (tag === null) context.addIssue({ code: "custom", message: `${text} isn't a tag, kind:value` });
+          return tag === null ? [] : [tag];
+        }),
+      ),
+    )
+    .optional(),
+});
+
 export const ImportRequest = z
   .object({
     title: z.string().optional(),
@@ -104,6 +134,7 @@ export const ImportRequest = z
     licence: Licence.default("unknown"),
     author: z.string().max(MAX_AUTHOR_LENGTH).optional(),
     source: Source.optional(),
+    tags: Tags.default({}),
   })
   .refine((r) => r.visibility === "private" || isShareable(r.licence), {
     message: "a public text needs a licence that allows sharing it",
@@ -116,6 +147,7 @@ export const DocumentUpdate = z.object({
   author: z.string().trim().max(MAX_AUTHOR_LENGTH).nullable().optional(),
   source: Source.nullable().optional(),
   visibility: Visibility.optional(),
+  tags: Tags.optional(),
 });
 
 export const State = z.enum(["queued", "analysing", "ready", "failed"]);
@@ -149,4 +181,9 @@ export const DocumentRow = z.object({
   author: z.string().nullable(),
   source: z.string().nullable(),
   importerName: z.string(),
+  /** The entry's user_document_tag rows, as a JSON object of kind to value. */
+  tags: z
+    .string()
+    .transform((json) => JSON.parse(json) as unknown)
+    .pipe(Tags),
 });

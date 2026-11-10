@@ -37,7 +37,7 @@ const noFetch: Fetch = async (url) => {
 };
 
 test("an inline file is its credits and text, and isn't fetched", async () => {
-  const yaml = "kind: inline\ntitle: Inwokacja\nauthor: Adam Mickiewicz\nlicence: public-domain\nsource: https://wolnelektury.pl/katalog/lektura/pan-tadeusz/\ntext: |\n  Litwo! Ojczyzno moja!\n";
+  const yaml = "kind: inline\ntitle: Inwokacja\nauthor: Adam Mickiewicz\nlicence: public-domain\nsource: https://wolnelektury.pl/katalog/lektura/pan-tadeusz/\ntags:\n  level: C2\ntext: |\n  Litwo! Ojczyzno moja!\n";
   const [text] = await resolveCurated([parseCurated("pl/a.yaml", "pl", yaml)], noFetch);
   assert.equal(text?.id, await docId("pl", "Litwo! Ojczyzno moja!"));
   assert.deepEqual(text?.request, {
@@ -48,6 +48,7 @@ test("an inline file is its credits and text, and isn't fetched", async () => {
     licence: "public-domain",
     author: "Adam Mickiewicz",
     source: "https://wolnelektury.pl/katalog/lektura/pan-tadeusz/",
+    tags: { level: "C2" },
   });
 });
 
@@ -58,6 +59,8 @@ test("a file that isn't YAML of a kind is refused, naming the file and what's wr
   refused("kind: inline\ntitle: A\ntext: B\n", /pl\/a\.yaml: licence: /u);
   refused("kind: inline\ntitle: A\nlicence: cc0\ntext: B\nyear: 1834\n", /pl\/a\.yaml: .*year/u);
   refused("kind: wolnelektury\nslug: Tuwim Rzepka\n", /pl\/a\.yaml: slug: slug must be/u);
+  refused("kind: wolnelektury\nslug: tuwim-rzepka\ntags:\n  level: B 1\n", /pl\/a\.yaml: tags\.level: /u);
+  refused("kind: wolnelektury\nslug: tuwim-rzepka\ntags:\n  Level: B1\n", /pl\/a\.yaml: tags\.Level: /u);
   refused("kind: wolnelektury\nslug: tuwim-rzepka\nlicence: cc0\n", /pl\/a\.yaml: .*licence/u);
 });
 
@@ -81,9 +84,9 @@ test("a Wolne Lektury licence is read from its footer", () => {
   assert.throws(() => wolneLekturyLicence("a\n\n\n\nb"), /no "-----" footer/u);
 });
 
-test("a wolnelektury file is fetched: its title, author, licence and catalogue page come from Wolne Lektury", async () => {
+test("a wolnelektury file is fetched: its title, author, licence and catalogue page come from Wolne Lektury, its tags from the file", async () => {
   const { fetch, asked } = wolneLektury();
-  const [text] = await resolveCurated([parseCurated("pl/o.yaml", "pl", "kind: wolnelektury\nslug: fredro-osiolkowi-w-zloby-dano\n")], fetch);
+  const [text] = await resolveCurated([parseCurated("pl/o.yaml", "pl", "kind: wolnelektury\nslug: fredro-osiolkowi-w-zloby-dano\ntags:\n  level: A2\n")], fetch);
   assert.deepEqual(asked, ["https://wolnelektury.pl/api/books/fredro-osiolkowi-w-zloby-dano/", BOOK.txt]);
   assert.deepEqual(text?.request, {
     title: "Osiołkowi w żłoby dano",
@@ -93,6 +96,7 @@ test("a wolnelektury file is fetched: its title, author, licence and catalogue p
     licence: "public-domain",
     author: "Aleksander Fredro",
     source: BOOK.url,
+    tags: { level: "A2" },
   });
   const [retitled] = await resolveCurated([parseCurated("pl/o.yaml", "pl", "kind: wolnelektury\nslug: fredro-osiolkowi-w-zloby-dano\ntitle: Osiołek\n")], fetch);
   assert.equal(retitled?.request.title, "Osiołek");

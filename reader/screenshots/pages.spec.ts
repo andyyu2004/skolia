@@ -21,6 +21,15 @@ test("explore", async ({ page }) => {
   await expect(page).toHaveScreenshot("explore.png", { fullPage: true });
 });
 
+test("explore, tag filter", async ({ page }) => {
+  await open(page, "#/");
+  await page.getByLabel("Tags").click();
+  await page.getByLabel("level · B1").check();
+  await page.getByLabel("level · C1").check();
+  await expect(page.getByText("2 texts")).toBeVisible();
+  await expect(page).toHaveScreenshot("explore-tag-filter.png");
+});
+
 test("account menu", async ({ page }) => {
   await open(page, "#/");
   await page.getByRole("button", { name: "Account: Ada Lovelace" }).click();

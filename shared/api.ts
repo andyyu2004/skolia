@@ -31,8 +31,9 @@ export { MAX_TEXT_LENGTH } from "./schema.gen.ts";
 
 export type ImportRequest = z.input<typeof schemas.ImportRequest>;
 
-/** A change to a document's title, licence, author, source or visibility, by its
- * importer. A field left out stays as it is; null clears author or source. */
+/** A change to a document's title, licence, author, source, visibility or tags, by its
+ * importer. A field left out stays as it is; null clears author or source; tags replace
+ * all of its tags. */
 export type DocumentUpdate = z.input<typeof schemas.DocumentUpdate>;
 
 /** A user's entry for a text. private: only that user sees it. A text no entry makes
@@ -107,6 +108,62 @@ export const LICENCE_INFO: Record<Licence, LicenceInfo> = {
   unknown: { short: "Licence unknown", label: "Unknown", url: null },
 };
 
+/** A tag, a kind and a value: level:B1. Only the tags skolia has (GET /api/tags) can be
+ * given, and an entry has at most one of each kind. */
+export interface Tag {
+  kind: string;
+  value: string;
+}
+
+/** A tag that can be given, and what it means: level:B1, "Intermediate". */
+export interface AvailableTag extends Tag {
+  description: string | null;
+}
+
+/** Every tag that can be given, by kind, then in each kind's own order (A0 before A1). */
+export interface TagList {
+  tags: AvailableTag[];
+}
+
+/** An entry's tags, each kind to its value. */
+export type Tags = Readonly<Record<string, string>>;
+
+/** A list's tags to keep: each kind to its values. An entry is kept when, for every kind,
+ * its tag of that kind is one of the values: any of one kind, all of the kinds. */
+export type TagFilter = Readonly<Record<string, readonly string[]>>;
+
+export const TAG_KIND = /^[a-z][a-z0-9-]{0,31}$/u;
+export const TAG_VALUE = /^[A-Za-z0-9][A-Za-z0-9.+-]{0,31}$/u;
+export const MAX_TAGS = 16;
+
+/** kind:value, as GET /api/documents?tag= takes it. */
+export function formatTag({ kind, value }: Tag): string {
+  return `${kind}:${value}`;
+}
+
+/** A tag from kind:value; null for anything else. */
+export function parseTag(text: string): Tag | null {
+  const colon = text.indexOf(":");
+  const kind = text.slice(0, colon);
+  const value = text.slice(colon + 1);
+  return colon > 0 && TAG_KIND.test(kind) && TAG_VALUE.test(value) ? { kind, value } : null;
+}
+
+/** The tags, as a filter keeping entries with any of them of each kind. */
+export function tagFilter(tags: readonly Tag[]): TagFilter {
+  return tags.reduce<Record<string, readonly string[]>>(
+    (filter, { kind, value }) => ({ ...filter, [kind]: [...new Set([...(filter[kind] ?? []), value])] }),
+    {},
+  );
+}
+
+export function matchesTags(tags: Tags, filter: TagFilter): boolean {
+  return Object.entries(filter).every(([kind, values]) => {
+    const value = tags[kind];
+    return value !== undefined && values.includes(value);
+  });
+}
+
 export const MAX_TITLE_LENGTH = 200;
 export const MAX_AUTHOR_LENGTH = 200;
 export const MAX_SOURCE_LENGTH = 2000;
@@ -136,6 +193,7 @@ export interface DocumentSummary {
   author: string | null;
   /** An http(s) URL of where the text is from. */
   source: string | null;
+  tags: Tags;
   /** The entry's user: with id, the summary is one (document, user) pair. */
   importer: { id: UserId; name: string };
   /** Whether it's the viewer's entry, so they can change or delete it. */

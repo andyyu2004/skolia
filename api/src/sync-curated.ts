@@ -1,5 +1,5 @@
 // Makes the curated user's documents match curated/: imports each text there publicly,
-// updates the title, licence, author or source of those already imported, and deletes the
+// updates the title, licence, author, source or tags of those already imported, and deletes the
 // curated user's documents that aren't there any more. A document's id is its text's hash,
 // so an edited text, in the file or at its source, is a new document and the old one is
 // deleted. With --check, only lists what it would do, and fails if that's anything.
@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { hc } from "hono/client";
 import { parse as parseYaml } from "yaml";
 import * as z from "zod";
-import { LANGS, type DocumentId, type DocumentSummary, type DocumentUpdate, type Lang } from "@skolia/shared/api";
+import { LANGS, type DocumentId, type DocumentSummary, type DocumentUpdate, type Lang, type Tags } from "@skolia/shared/api";
 import { docId } from "@skolia/shared/keys";
 import * as schemas from "@skolia/shared/schemas";
 import type { AppType } from "./app.ts";
@@ -113,12 +113,13 @@ export function plan(texts: readonly Curated[], mine: readonly DocumentSummary[]
       changes.push({ kind: "import", text });
       continue;
     }
-    const { title, licence, author, source } = text.request;
+    const { title, licence, author, source, tags } = text.request;
     const update: DocumentUpdate = {};
     if (title !== undefined && title !== document.title) update.title = title;
     if (licence !== document.licence) update.licence = licence;
     if ((author ?? null) !== document.author) update.author = author ?? null;
     if ((source ?? null) !== document.source) update.source = source ?? null;
+    if (!sameTags(tags, document.tags)) update.tags = tags;
     if (Object.keys(update).length > 0) changes.push({ kind: "update", text, id: text.id, update });
   }
   const wanted = new Set(texts.map((t) => t.id));
@@ -126,6 +127,11 @@ export function plan(texts: readonly Curated[], mine: readonly DocumentSummary[]
     if (!wanted.has(document.id)) changes.push({ kind: "delete", document });
   }
   return changes;
+}
+
+function sameTags(a: Tags, b: Tags): boolean {
+  const kinds = Object.keys(a);
+  return kinds.length === Object.keys(b).length && kinds.every((kind) => a[kind] === b[kind]);
 }
 
 function describe(change: Change): string {
@@ -148,7 +154,7 @@ export type Api = ReturnType<typeof hc<AppType>>["api"];
 /** Lists, then unless check is set makes, the changes that make the signed-in user's
  * documents match the texts. */
 export async function sync(api: Api, texts: readonly Curated[], { check = false, log = console.log } = {}): Promise<Change[]> {
-  const listed = await api.me.documents.$get();
+  const listed = await api.me.documents.$get({ query: {} });
   if (!listed.ok) throw new Error(`list: ${listed.status} ${await listed.text()}`);
   const changes = plan(texts, (await listed.json()).documents);
   for (const change of changes) log(describe(change));

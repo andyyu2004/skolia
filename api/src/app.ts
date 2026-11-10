@@ -85,7 +85,10 @@ export function createApp(deps: Deps) {
     .post("/api/lexicon/entries", zValidator("json", schemas.LookupRequest, badRequest()), async (c) =>
       send(c, await cards.lookUp(deps, c.req.valid("json").ids)),
     )
-    .get("/api/documents", async (c) => send(c, await documents.list(deps, await deps.auth.user(c.req.raw.headers))))
+    .get("/api/documents", zValidator("query", schemas.DocumentsQuery, badRequest()), async (c) =>
+      send(c, await documents.list(deps, await deps.auth.user(c.req.raw.headers), c.req.valid("query").tag ?? {})),
+    )
+    .get("/api/tags", async (c) => send(c, await documents.tags(deps)))
     .post("/api/documents", limit, zValidator("json", schemas.ImportRequest, badRequest()), (c) =>
       signedIn(c, (user) => documents.importText(deps, user, c.req.valid("json")), "sign in to import"),
     )

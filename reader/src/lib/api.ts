@@ -10,6 +10,7 @@ import {
   type CardCounts,
   type Due,
   type DocumentSummary,
+  type AvailableTag,
   type DocumentUpdate,
   type ImportRequest,
   type Lang,
@@ -67,9 +68,24 @@ export async function signOut(): Promise<void> {
 }
 
 export async function listDocuments(): Promise<DocumentSummary[]> {
-  const response = await api.documents.$get();
+  const response = await api.documents.$get({ query: {} });
   if (!response.ok) throw await failure(response);
   return (await response.json()).documents;
+}
+
+let available: Promise<AvailableTag[]> | null = null;
+
+/** The tags that can be given, asked for once. */
+export function listTags(): Promise<AvailableTag[]> {
+  available ??= (async () => {
+    const response = await api.tags.$get();
+    if (!response.ok) throw await failure(response);
+    return (await response.json()).tags;
+  })().catch((error: unknown) => {
+    available = null;
+    throw error;
+  });
+  return available;
 }
 
 export async function getDocument(id: string): Promise<DocumentSummary> {
