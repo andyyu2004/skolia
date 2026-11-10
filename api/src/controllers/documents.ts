@@ -1,5 +1,6 @@
 // Documents: importing a text, listing and opening them, and their text, analysis and
 // bundle, queueing a document again when ingest makes other versions or its job is lost.
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import * as z from "zod";
 import {
   MAX_TITLE_LENGTH,
@@ -17,7 +18,7 @@ import type { Status, Versions } from "@skolia/shared/schema";
 import * as schemas from "@skolia/shared/schemas";
 import { log } from "../log.ts";
 import type { BlobStore, Deps, EntryFields, IngestJobs, StoredDocument } from "../ports.ts";
-import { NO_CONTENT, fail, ok, type BlobResult, type Failed, type Json, type NoContent, type Ok } from "./result.ts";
+import { NO_CONTENT, fail, ok, type BlobResult, type Failed, type Json, type NoContent, type NotModified, type Ok } from "./result.ts";
 
 const logger = log("documents");
 
@@ -123,12 +124,10 @@ export function placeIn(jobs: IngestJobs | null, id: DocumentId): QueuePlace {
 }
 
 /** The id is the text's hash, so the text at this URL never changes. */
-export async function text(deps: Deps, id: string, viewer: User | null): Promise<BlobResult | Failed<404 | 500>> {
+export async function text(deps: Deps, id: string, viewer: User | null, ifNoneMatch: string | undefined): Promise<BlobResult | NotModified | Failed<404 | 500>> {
   const record = await findDocument(deps, id, viewer);
   if (!record) return noSuchDocument();
-  const blob = await deps.blobs.get(textKey(record.id));
-  if (!blob) return fail(500, "missing text");
-  return { status: 200, blob, encoding: undefined };
+  return stored(deps, textKey(record.id), undefined, ifNoneMatch, fail(500, "missing text"));
 }
 
 /** An analysis or bundle by name (DocumentSummary.reading): a name is a version, so
@@ -140,12 +139,25 @@ export async function part(
   viewer: User | null,
   which: "analysis" | "bundle",
   name: string,
-): Promise<BlobResult | Failed<404>> {
+  ifNoneMatch: string | undefined,
+): Promise<BlobResult | NotModified | Failed<404>> {
   const record = await findDocument(deps, id, viewer);
   if (!record || !NAME.test(name)) return noSuchDocument();
-  const blob = await deps.blobs.get(partKey(record.id, which, name));
-  if (!blob) return fail(404, `no ${which} ${name}`);
-  return { status: 200, blob, encoding: PART_ENCODING };
+  return stored(deps, partKey(record.id, which, name), PART_ENCODING, ifNoneMatch, fail(404, `no ${which} ${name}`));
+}
+
+/** The blob at a key that never changes, or 304 without reading it when the client has it. */
+async function stored<S extends ContentfulStatusCode>(
+  deps: Deps,
+  key: string,
+  encoding: typeof PART_ENCODING | undefined,
+  ifNoneMatch: string | undefined,
+  missing: Failed<S>,
+): Promise<BlobResult | NotModified | Failed<S>> {
+  const etag = `"${key}"`;
+  if (ifNoneMatch?.split(",").some((tag) => tag.trim().replace(/^W\//u, "") === etag)) return { status: 304, etag, encoding };
+  const blob = await deps.blobs.get(key);
+  return blob ? { status: 200, etag, blob, encoding } : missing;
 }
 
 function noSuchDocument(): Failed<404> {

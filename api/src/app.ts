@@ -9,14 +9,13 @@ import type { JSONParsed } from "hono/utils/types";
 import { zValidator } from "@hono/zod-validator";
 import * as z from "zod";
 import { LANGS, MAX_TEXT_LENGTH, type ApiError, type User, type Version } from "@skolia/shared/api";
-import type { PART_ENCODING } from "@skolia/shared/keys";
 import * as schemas from "@skolia/shared/schemas";
 import * as cards from "./controllers/cards.ts";
 import * as documents from "./controllers/documents.ts";
 import * as positions from "./controllers/positions.ts";
-import { fail, ok, type BlobResult, type Failed, type Result } from "./controllers/result.ts";
+import { fail, ok, type BlobResult, type Failed, type NotModified, type Result } from "./controllers/result.ts";
 import { log } from "./log.ts";
-import type { Deps, StoredBlob } from "./ports.ts";
+import type { Deps } from "./ports.ts";
 
 const logger = log("api");
 
@@ -98,13 +97,13 @@ export function createApp(deps: Deps) {
     )
     .delete("/api/documents/:id", (c) => signedIn(c, (user) => documents.remove(deps, user, c.req.param("id"))))
     .get("/api/documents/:id/text", async (c) =>
-      send(c, await documents.text(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers))),
+      send(c, await documents.text(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers), c.req.header("if-none-match"))),
     )
     .get("/api/documents/:id/analysis/:name", async (c) =>
-      send(c, await documents.part(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers), "analysis", c.req.param("name"))),
+      send(c, await documents.part(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers), "analysis", c.req.param("name"), c.req.header("if-none-match"))),
     )
     .get("/api/documents/:id/bundle/:name", async (c) =>
-      send(c, await documents.part(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers), "bundle", c.req.param("name"))),
+      send(c, await documents.part(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers), "bundle", c.req.param("name"), c.req.header("if-none-match"))),
     );
 
   return app;
@@ -112,7 +111,7 @@ export function createApp(deps: Deps) {
 
 /** The response for a result, typed by its status so the typed client (hono/client)
  * knows each status's body. */
-type Sent<R> = R extends BlobResult
+type Sent<R> = R extends BlobResult | NotModified
   ? Response
   : R extends { status: 204 }
     ? Response & TypedResponse<null, 204, "body">
@@ -121,20 +120,21 @@ type Sent<R> = R extends BlobResult
       : never;
 
 function send<R extends Result>(c: Context, result: R): Sent<R> {
-  if ("blob" in result) return sendBlob(c, result.blob, result.encoding) as Sent<R>;
+  if ("etag" in result) return sendBlob(c, result) as Sent<R>;
   if (!("body" in result)) return c.body(null, 204) as Sent<R>;
   return c.json(result.body as object, result.status) as unknown as Sent<R>;
 }
 
 /** Workers can't decompress Brotli, so a client that doesn't accept a blob's encoding
- * gets 406 (browsers all accept br). */
-function sendBlob(c: Context, blob: StoredBlob, encoding: typeof PART_ENCODING | undefined): Response {
-  const headers: Record<string, string> = {
-    "content-type": blob.contentType ?? "application/octet-stream",
-    "cache-control": "private, max-age=31536000, immutable",
-  };
+ * gets 406 (browsers all accept br). no-cache: the browser keeps its copy, and asks
+ * before each use whether it may still see it (BlobResult). */
+function sendBlob(c: Context, result: BlobResult | NotModified): Response {
+  const { etag, encoding } = result;
+  const cached = { etag, "cache-control": "private, no-cache", ...(encoding === undefined ? {} : { vary: "accept-encoding" }) };
+  if (result.status === 304) return new Response(null, { status: 304, headers: cached });
+  const { blob } = result;
+  const headers: Record<string, string> = { ...cached, "content-type": blob.contentType ?? "application/octet-stream" };
   if (encoding === undefined) return new Response(blob.body, { headers });
-  headers["vary"] = "accept-encoding";
   if (acceptsEncoding(c.req.header("accept-encoding"), encoding)) {
     headers["content-encoding"] = encoding;
     // Workers otherwise compress the body again by its content-encoding; Node ignores it
