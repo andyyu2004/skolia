@@ -104,10 +104,10 @@ test("the importer is recorded, and a private text is in only its importer's lib
   assert.equal(response.status, 202);
   const summary = (await response.json()) as DocumentSummary;
   assert.equal(summary.visibility, "private");
-  assert.equal(summary.importerName, "Ivy");
-  assert.equal("importer" in summary, false);
+  const ivy = (await local.auth.user(importer))?.id;
+  assert.deepEqual(summary.importer, { id: ivy, name: "Ivy" });
   const row = await local.env.DB.prepare("select user_id, visibility from user_document where document_id = ?").bind(summary.id).first();
-  assert.deepEqual(row, { user_id: (await local.auth.user(importer))?.id, visibility: "private" });
+  assert.deepEqual(row, { user_id: ivy, visibility: "private" });
   const alice = await local.signIn((await local.signUp(ALICE)).id);
   assert.deepEqual(await listed(app), []);
   assert.deepEqual(await listed(app, alice), []);
@@ -163,12 +163,12 @@ test("another user importing the same text gets their own entry, and the first s
   await local.takeQueued();
   const alice = await local.signIn((await local.signUp(ALICE)).id);
   const theirs = await body("import", client(app, alice).documents.$post({ json: { text: TEXT, lang: "pl", title: "Alice's", visibility: "public", licence: "cc0" } }), 200);
-  assert.deepEqual([theirs.id, theirs.title, theirs.visibility, theirs.licence, theirs.importerName, theirs.mine], [id, "Alice's", "public", "cc0", "Alice", true]);
+  assert.deepEqual([theirs.id, theirs.title, theirs.visibility, theirs.licence, theirs.importer.name, theirs.mine], [id, "Alice's", "public", "cc0", "Alice", true]);
   assert.deepEqual(await local.takeQueued(), []);
   const ivys = await summaryOf(app, id);
   assert.deepEqual([ivys.title, ivys.visibility, ivys.licence, ivys.author, ivys.mine], ["Ivy's", "private", "all-rights-reserved", "someone", true]);
   const signedOut = await summaryOf(app, id, {});
-  assert.deepEqual([signedOut.title, signedOut.importerName, signedOut.mine], ["Alice's", "Alice", false]);
+  assert.deepEqual([signedOut.title, signedOut.importer.name, signedOut.mine], ["Alice's", "Alice", false]);
   const { documents } = await body("list", client(app).documents.$get());
   assert.deepEqual(documents.map((d) => d.title), ["Alice's"]);
   const both = await body("list", client(app, importer).documents.$get());

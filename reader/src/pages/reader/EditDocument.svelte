@@ -19,7 +19,7 @@
   const initial = untrack(() => summary);
   let title = $state(initial.title);
   let licence = $state<Licence | "">(initial.licence === "unknown" ? "" : initial.licence);
-  let ownWork = $state(initial.author !== null && initial.author === initial.importerName);
+  let ownWork = $state(initial.author !== null && initial.author === initial.importer.name);
   let author = $state(initial.author ?? "");
   let source = $state(initial.source ?? "");
   let share = $state(initial.visibility === "public");
@@ -41,7 +41,7 @@
     busy = true;
     error = null;
     try {
-      const by = ownWork ? summary.importerName : author.trim();
+      const by = ownWork ? summary.importer.name : author.trim();
       onsaved(
         await updateDocument(summary.id, {
           title: title.trim(),

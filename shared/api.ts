@@ -136,8 +136,8 @@ export interface DocumentSummary {
   author: string | null;
   /** An http(s) URL of where the text is from. */
   source: string | null;
-  /** The display name of the entry's user. */
-  importerName: string;
+  /** The entry's user: with id, the summary is one (document, user) pair. */
+  importer: { id: UserId; name: string };
   /** Whether it's the viewer's entry, so they can change or delete it. */
   mine: boolean;
   /** Where it is in its language's analysis queue: for the viewer's own document, while

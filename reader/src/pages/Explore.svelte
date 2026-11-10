@@ -13,14 +13,15 @@
   let lang = $state<Lang | "all">("all");
   let importer = $state<"all" | "mine" | `by:${string}`>("all");
 
+  /** Others who imported what's listed, by id, since two can share a name. */
   const importers = $derived(
-    [...new Set((documents ?? []).filter((d) => !d.mine).map((d) => d.importerName))].sort((a, b) => a.localeCompare(b)),
+    [...new Map((documents ?? []).filter((d) => !d.mine).map((d) => [d.importer.id, d.importer])).values()].sort((a, b) => a.name.localeCompare(b.name)),
   );
 
   function byImporter(d: DocumentSummary): boolean {
     if (importer === "all") return true;
     if (importer === "mine") return d.mine;
-    return !d.mine && `by:${d.importerName}` === importer;
+    return !d.mine && `by:${d.importer.id}` === importer;
   }
 
   $effect(() => {
@@ -71,8 +72,8 @@
           {#if user}
             <option value="mine">You</option>
           {/if}
-          {#each importers as name (name)}
-            <option value={`by:${name}`}>{name}</option>
+          {#each importers as { id, name } (id)}
+            <option value={`by:${id}`}>{name}</option>
           {/each}
         </select>
       </div>
@@ -91,7 +92,7 @@
         </p>
       {:else}
         <ul class="entries">
-          {#each shown as doc (doc.id)}
+          {#each shown as doc (`${doc.id}/${doc.importer.id}`)}
             {@const status = badge(doc)}
             <li>
               <a class="entry" href={`#/doc/${doc.id}`}>
@@ -110,7 +111,7 @@
                     <span class="entry-author">{doc.author}</span>
                   {/if}
                   <span>{doc.words.toLocaleString()} {doc.words === 1 ? "word" : "words"}</span>
-                  <span>imported by {doc.mine ? "you" : doc.importerName}</span>
+                  <span>imported by {doc.mine ? "you" : doc.importer.name}</span>
                   <span>{dateFormat.format(new Date(doc.imported))}</span>
                 </span>
                 <span class="licence">{LICENCE_INFO[doc.licence].short}</span>

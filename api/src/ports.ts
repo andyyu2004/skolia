@@ -139,8 +139,6 @@ export interface Deps {
   documents: DocumentStore;
   blobs: BlobStore;
   queue: JobQueue;
-  /** New texts accepted per UTC day, across everyone: analysis time is what costs
-   * money. Importing a text that's already here doesn't count. */
   /** git describe of the build */
   version: string;
   now: () => Date;

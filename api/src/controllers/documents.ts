@@ -246,8 +246,8 @@ export function parseVersions(raw: string): Versions | null {
   return parseJson(schemas.Versions, raw);
 }
 
-function summarize({ user, ...record }: StoredDocument, status: Status | null, viewer: User | null): DocumentSummary {
-  const summary: DocumentSummary = { ...record, mine: user === viewer?.id, state: status?.state ?? "failed" };
+function summarize({ user, importerName, ...record }: StoredDocument, status: Status | null, viewer: User | null): DocumentSummary {
+  const summary: DocumentSummary = { ...record, importer: { id: user, name: importerName }, mine: user === viewer?.id, state: status?.state ?? "failed" };
   const analysis = nameOf(status?.analysis);
   const bundle = nameOf(status?.bundle);
   if (analysis !== undefined && bundle !== undefined) summary.reading = { analysis, bundle };
