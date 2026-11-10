@@ -4,7 +4,8 @@ name: CI
 # tests (the check job, which the queue requires). Pull requests: a plan per environment,
 # and a preview environment, pr-<number>, deployed and end-to-end tested on each push and torn
 # down when the pull request closes (sweep.yml catches any left); the mergeable job
-# gates merging on it.
+# gates merging on it. A comment on the pull request links to the preview, and says when
+# it's torn down (.github/preview-comment.sh).
 # main: deploy staging and end-to-end test it. A v* tag on a commit in main: staging, then production. The ingest
 # images are built once, before any deploy. The steps are just recipes (justfile) and
 # infra/deploy-ingest.sh, so a deploy by hand runs the same commands.
@@ -179,6 +180,38 @@ jobs:
       env: pr-${{ github.event.number }}
     secrets: inherit
 
+  # Once the preview's Worker is deployed, even if its end-to-end tests then fail: links to it
+  # for a tester, with the commit it runs. One comment, edited by each deploy.
+  comment-preview:
+    if: always() && needs.deploy-preview.outputs.url != ''
+    needs: deploy-preview
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: preview-comment-pr-${{ github.event.number }}
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      URL: ${{ needs.deploy-preview.outputs.url }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+      RESULT: ${{ needs.deploy-preview.result }}
+      RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          case $RESULT in
+            success) tests="passed" ;;
+            *) tests="didn't pass ($RESULT)" ;;
+          esac
+          .github/preview-comment.sh ${{ github.event.number }} <<EOF
+          **Preview:** $URL
+
+          Deployed from $SHA; its end-to-end tests $tests ([run]($RUN)). It's torn down when this pull request closes.
+          EOF
+
   # Required by main's ruleset, with check. It fails if check should have run and didn't
   # pass, or if check-curated failed. On a pull request it also needs the preview deployed
   # and its end-to-end tests passed, unless the pull request only changes content, which
@@ -229,6 +262,9 @@ jobs:
   teardown-preview:
     if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
     concurrency:
       group: preview-pr-${{ github.event.number }}
       cancel-in-progress: false
@@ -244,6 +280,12 @@ jobs:
           ref: ${{ github.event.pull_request.base.ref }}
       - uses: ./.github/actions/setup
       - run: just teardown pr-${{ github.event.number }}
+      # Only edits a comment a deploy left: one that didn't deploy has nothing to say
+      - run: |
+          echo "**Preview:** torn down when this pull request closed." | .github/preview-comment.sh ${{ github.event.number }} --if-exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
 
   deploy-staging:
     if: needs.changes.outputs.deploy == 'true' && github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
