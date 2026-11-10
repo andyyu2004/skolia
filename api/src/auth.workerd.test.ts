@@ -4,7 +4,7 @@ import { insertKeySql } from "./api-keys.ts";
 import { API_KEY_HEADER, NO_AUTH, createAuth } from "./auth.ts";
 import { SYSTEM_USER, e2eKeysSql } from "./e2e-keys.ts";
 import { CURATED_USER, syncCuratedKeySql } from "./sync-curated-key.ts";
-import { ALICE, TEXT, client, importText, importer, local, setup, useLocal } from "./testing/app.ts";
+import { ALICE, TEXT, client, importText, importer, local, raw, setup, useLocal } from "./testing/app.ts";
 import { ORIGIN, authConfig } from "./testing/harness.ts";
 import { body, expectStatus } from "./testing/responses.ts";
 
@@ -30,39 +30,33 @@ test("Google sign-in answers with Google's authorize URL, back to /api/auth/call
 
 test("/api/me is the session's user, 401 without one", async () => {
   const app = setup();
-  assert.equal((await app.request(`${ORIGIN}/api/me`)).status, 401);
+  assert.equal((await client(app).me.$get()).status, 401);
   const alice = await local.signUp(ALICE);
-  const response = await app.request(`${ORIGIN}/api/me`, { headers: await local.signIn(alice.id) });
-  assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), alice);
+  assert.deepEqual(await body("me", client(app, await local.signIn(alice.id)).me.$get()), alice);
 });
 
 test("after signing out the session's cookie signs nobody in", async () => {
   const app = setup();
   const headers = await local.signIn((await local.signUp(ALICE)).id);
-  assert.equal((await app.request(`${ORIGIN}/api/me`, { headers })).status, 200);
-  const out = await app.request(`${ORIGIN}/api/auth/sign-out`, {
-    method: "POST",
-    headers: { cookie: headers.get("cookie") ?? "", "content-type": "application/json", origin: ORIGIN },
-    body: "{}",
-  });
+  assert.equal((await client(app, headers).me.$get()).status, 200);
+  const out = await raw(app, "POST", "/api/auth/sign-out", new Headers({ cookie: headers.get("cookie") ?? "", origin: ORIGIN }), {});
   assert.equal(out.status, 200);
-  assert.equal((await app.request(`${ORIGIN}/api/me`, { headers })).status, 401);
+  assert.equal((await client(app, headers).me.$get()).status, 401);
 });
 
 test("an expired session signs nobody in", async () => {
   const app = setup();
   const headers = await local.signIn((await local.signUp(ALICE)).id);
-  assert.equal((await app.request(`${ORIGIN}/api/me`, { headers })).status, 200);
+  assert.equal((await client(app, headers).me.$get()).status, 200);
   const expired = new Date(Date.now() - 1000).toISOString();
   await local.env.DB.prepare(`update session set "expiresAt" = ?`).bind(expired).run();
-  assert.equal((await app.request(`${ORIGIN}/api/me`, { headers })).status, 401);
+  assert.equal((await client(app, headers).me.$get()).status, 401);
 });
 
 test("without its configuration sign-in answers 503 and nobody is signed in", async () => {
   const app = setup({ auth: NO_AUTH });
-  assert.equal((await app.request(`${ORIGIN}/api/auth/sign-in/social`, { method: "POST" })).status, 503);
-  assert.equal((await app.request(`${ORIGIN}/api/me`)).status, 401);
+  assert.equal((await raw(app, "POST", "/api/auth/sign-in/social", undefined, undefined)).status, 503);
+  assert.equal((await client(app).me.$get()).status, 401);
 });
 
 test("the end-to-end tests' keys, as e2e-keys.ts writes them, sign in the system user and a new user; earlier ones don't", async () => {
@@ -86,10 +80,10 @@ test("the end-to-end tests' keys, as e2e-keys.ts writes them, sign in the system
 });
 
 async function whoIs(app: ReturnType<typeof setup>, key: string): Promise<string | null> {
-  const me = await app.request(`${ORIGIN}/api/me`, { headers: { [API_KEY_HEADER]: key } });
+  const me = await client(app, new Headers({ [API_KEY_HEADER]: key })).me.$get();
   if (me.status === 401) return null;
   assert.equal(me.status, 200);
-  return ((await me.json()) as { id: string }).id;
+  return (await me.json()).id;
 }
 
 test("sync-curated's key signs in the curated user, a system user; new end-to-end keys leave it", async () => {
@@ -112,11 +106,8 @@ test("a new sync-curated key deletes the key it had when it was the seed's", asy
 test("signed-in users can't make API keys", async () => {
   const app = setup();
   for (const path of ["create", "list"]) {
-    const response = await app.request(`${ORIGIN}/api/auth/api-key/${path}`, {
-      method: path === "create" ? "POST" : "GET",
-      headers: { cookie: importer.get("cookie") ?? "", "content-type": "application/json", origin: ORIGIN },
-      ...(path === "create" ? { body: "{}" } : {}),
-    });
+    const headers = new Headers({ cookie: importer.get("cookie") ?? "", origin: ORIGIN });
+    const response = await raw(app, path === "create" ? "POST" : "GET", `/api/auth/api-key/${path}`, headers, path === "create" ? {} : undefined);
     assert.equal(response.status, 404, path);
   }
   const { results } = await local.env.DB.prepare("select id from apikey").all();

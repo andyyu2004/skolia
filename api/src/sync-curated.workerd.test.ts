@@ -24,7 +24,7 @@ test("the sync imports, updates and deletes until the curated user's documents m
   assert.deepEqual(kinds(await sync(api, [retitled, edited], { log })), ["delete", "import", "update"]);
   assert.deepEqual(await sync(api, [retitled, edited], { check: true, log }), []);
   assert.deepEqual((await listed(app)).sort(), [first.id, edited.id].sort());
-  assert.equal((await app.request(`/api/documents/${second.id}`)).status, 404);
+  assert.equal((await client(app).documents[":id"].$get({ param: { id: second.id } })).status, 404);
 
   const tagged = await toCurated("pl/a.yaml", "pl", { ...INWOKACJA, title: "Pan Tadeusz, Inwokacja", tags: { level: "C2" } });
   assert.deepEqual(await sync(api, [tagged, edited], { log }), [{ kind: "update", text: tagged, id: first.id, update: { tags: { level: "C2" } } }]);
