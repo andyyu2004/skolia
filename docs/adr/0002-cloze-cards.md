@@ -14,7 +14,8 @@ A cloze card is a sentence from a text with one word blanked out and its lemma a
 
 The back shows the sentence filled in, the word's grammar (accusative · singular · feminine), why it has that case (na + accusative means where to, …), the lemma's meanings, and its paradigm with the form marked.
 
-- The word sheet offers it ("Practise kolację in this sentence") for a learnable word whose form isn't its lemma, signed in, in either reader mode. The user picks the sentences; nothing is made automatically, since the parser's mistakes would make bad cards.
+- It's made with the word: a word's + in the word sheet, or a tap in learning mode, adds the word and a cloze card of its form in that sentence, for a learnable word whose form isn't its lemma and isn't part of a fused word (*du* is *de* + *le*, which share its span). A tap on a word already in your cards adds a card for the new sentence, since many forms in many sentences is the practice. The parser's mistakes make some bad cards, which Delete takes away; the word's tick takes the word and this sentence's card out again.
+- Forms are a skill apart from words, so they have their own daily allowance (new forms a day, in cards) beside new words a day (in lemmas, so a word's recognition and production cards share one place), and can be reviewed in a session of their own. A new cloze card waits until its lemma has had a review, so you aren't asked a form of a word you haven't been taught.
 - It's answered by revealing, like the other cards. Typing the form would test it better, but Polish diacritics are slow to type on a phone.
 - A lemma can have any number of cloze cards, one per sentence and word. A text's sentence and word (`document_id`, `sentence_start`, `blank_start`) have at most one, and asking again returns it (200, or 201 when made).
 - A word's status applies to its cloze cards too: marking *kolacja* known or ignored takes them out of reviews with its own cards, and active brings them back. Known could mean only that you know what it means, not that you can pick its case, but users press it to stop seeing the word, and a cloze turning up the next day would look like Known didn't work. Asking whether to keep practising its forms can come later if people want that. A new cloze card is reviewed while its word is active or has no status, and the word sheet doesn't offer one for a known or ignored word.
@@ -39,9 +40,11 @@ cloze(card_id, document_id, sentence, sentence_start, blank_start, blank_end, fe
 POST   /api/me/clozes                 { lemmaId, documentId, sentence, sentenceStart, blankStart, blankEnd, feats, why }
 GET    /api/me/clozes?documentId=     the text's cloze cards: { cardId, start }, start in the text
 DELETE /api/me/clozes/:cardId         a cloze card and its reviews
+DELETE /api/me/words/:lemmaId         the word's status, its cards out of reviews, keeping them
+GET    /api/me/cards/due?group=       words or forms; without one, both
 ```
 
-The due list's cards carry `cloze`, null for a word's cards.
+The due list's cards carry `cloze`, null for a word's cards. Migration 5 adds the forms allowance and the choice of one session or two to `settings`.
 
 ## Open
 
