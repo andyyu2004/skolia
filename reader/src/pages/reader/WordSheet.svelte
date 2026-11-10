@@ -236,7 +236,8 @@
   }
 
   /** A cloze card practises a form: offered for a word that isn't its lemma (pracy, not
-   * praca), in a sentence short enough to keep. */
+   * praca), in a sentence short enough to keep, unless the word is known or ignored, which
+   * takes its cloze cards out of reviews too. */
   function clozeOf(w: (typeof words)[number]) {
     if (!learnable(w) || sameWord(w.entry?.lemma ?? w.ref.token.lemma ?? w.ref.token.text, w.ref.token.text)) return null;
     const found = sentenceText(w.ref.sentence);
@@ -390,7 +391,7 @@
         {@const lemmaId = learnable(word) ? word.lemmaId : null}
         {@const status = lemmaId && known.byId[lemmaId]?.status}
         {@const offerAdd = lemmaId !== null && status === undefined && mode === "reading"}
-        {@const request = clozeOf(word)}
+        {@const request = status === "known" || status === "ignored" ? null : clozeOf(word)}
         {@const clozed = request !== null && clozes.documentId === documentId && clozes.starts?.has(token.start) === true}
         {#if status === "active"}
           <p class="in-cards muted small">In your cards</p>

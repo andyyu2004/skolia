@@ -106,7 +106,7 @@
     showButton?.focus();
   }
 
-  /** Known takes the word out of reviews, both its cards, and skips them in this session. */
+  /** Known takes the word out of reviews, all its cards, and skips them in this session. */
   async function markKnown(): Promise<void> {
     if (!card || !due || busy) return;
     const { lemmaId } = card;

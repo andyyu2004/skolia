@@ -66,7 +66,7 @@ test("a cloze card keeps its sentence and blank, is due with its lemma's entry, 
   assert.equal((await review(app, headers, cardId, 3)).status, 200);
 });
 
-test("a lemma can have many cloze cards, and they stay in reviews whatever its word's status", async () => {
+test("a lemma can have many cloze cards, and its word's status takes them out of reviews and back with its own", async () => {
   const app = setup();
   const headers = await signedIn();
   await mark(app, headers, "pl:praca:NOUN", "active");
@@ -75,9 +75,33 @@ test("a lemma can have many cloze cards, and they stay in reviews whatever its w
   const kinds = async () => (await due(app, headers)).cards.map((c) => c.kind).sort();
   assert.deepEqual(await kinds(), ["cloze", "cloze", "production", "recognition"]);
   await mark(app, headers, "pl:praca:NOUN", "known");
-  assert.deepEqual(await kinds(), ["cloze", "cloze"]);
+  assert.deepEqual(await kinds(), []);
   await mark(app, headers, "pl:praca:NOUN", "active");
   assert.deepEqual(await kinds(), ["cloze", "cloze", "production", "recognition"]);
+});
+
+test("a cloze card is reviewed if its word has no status or is active, not if it's known or ignored", async () => {
+  const app = setup();
+  const headers = await signedIn();
+  await body("no status", make(app, headers, PRACY), 201);
+  await mark(app, headers, "pl:dom:NOUN", "known");
+  await body("known", make(app, headers, { ...PRACY, lemmaId: "pl:dom:NOUN", sentence: "Idę do domu.", sentenceStart: 100, blankStart: 7, blankEnd: 11 }), 201);
+  await mark(app, headers, "pl:Ola:NOUN", "ignored");
+  await body("ignored", make(app, headers, { ...PRACY, lemmaId: "pl:Ola:NOUN", sentence: "Widzę Olę.", sentenceStart: 200, blankStart: 6, blankEnd: 9 }), 201);
+  assert.deepEqual(
+    (await due(app, headers)).cards.map((c) => c.lemmaId),
+    ["pl:praca:NOUN"],
+  );
+  await mark(app, headers, "pl:dom:NOUN", "active");
+  assert.deepEqual(
+    (await due(app, headers)).cards.map((c) => [c.lemmaId, c.kind]).sort(),
+    [
+      ["pl:dom:NOUN", "cloze"],
+      ["pl:dom:NOUN", "production"],
+      ["pl:dom:NOUN", "recognition"],
+      ["pl:praca:NOUN", "cloze"],
+    ],
+  );
 });
 
 test("deleting a cloze card takes it and its reviews away; a word's cards and others' clozes can't be", async () => {

@@ -1,6 +1,6 @@
 // Cloze cards: a sentence from a text with one word blanked out, made from the reader.
-// A lemma can have many (one per sentence), and they aren't tied to the word's status, so
-// card is rebuilt without UNIQUE (lemma_id, kind) and the foreign key to word. Recognition
+// A lemma can have many (one per sentence), and one can be made before its word has a
+// status, so card is rebuilt without UNIQUE (lemma_id, kind) and the foreign key to word. Recognition
 // and production cards stay one per word, by a partial unique index.
 const iso = (column: string) => `CHECK (${column} IS strftime('%Y-%m-%dT%H:%M:%fZ', ${column}))`;
 

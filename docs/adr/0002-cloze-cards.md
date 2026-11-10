@@ -17,7 +17,8 @@ The back shows the sentence filled in, the word's grammar (accusative · singula
 - The word sheet offers it ("Practise kolację in this sentence") for a learnable word whose form isn't its lemma, signed in, in either reader mode. The user picks the sentences; nothing is made automatically, since the parser's mistakes would make bad cards.
 - It's answered by revealing, like the other cards. Typing the form would test it better, but Polish diacritics are slow to type on a phone.
 - A lemma can have any number of cloze cards, one per sentence and word. A text's sentence and word (`document_id`, `sentence_start`, `blank_start`) have at most one, and asking again returns it (200, or 201 when made).
-- Cloze cards aren't tied to the word's status. Marking *kolacja* known says you know what it means, not that you can pick its case. Their review button is Delete, not Known: it deletes the card and its reviews, for a sentence the parser got wrong or one not worth keeping.
+- A word's status applies to its cloze cards too: marking *kolacja* known or ignored takes them out of reviews with its own cards, and active brings them back. Known could mean only that you know what it means, not that you can pick its case, but users press it to stop seeing the word, and a cloze turning up the next day would look like Known didn't work. Asking whether to keep practising its forms can come later if people want that. A new cloze card is reviewed while its word is active or has no status, and the word sheet doesn't offer one for a known or ignored word.
+- A cloze card's review button is Delete, not Known: it deletes the card and its reviews, for a sentence the parser got wrong or one not worth keeping.
 - The card copies the sentence, the word's features and the explanation of its case. The user's entry for the text can be deleted or made private, a curated text that changes is a new document, and the analysis can be redone, so the card doesn't depend on any of them. `document_id` and `sentence_start` still point at the text, for Open the text and to know which words already have a card.
 
 ### Storage
@@ -30,7 +31,7 @@ cloze(card_id, document_id, sentence, sentence_start, blank_start, blank_end, fe
 
 `blank_start` and `blank_end` are offsets in `sentence`, as the analysis gives them (JavaScript string indices); `sentence_start` is the sentence's offset in the text.
 
-`card` had `UNIQUE (lemma_id, kind)` and a foreign key to `word`, so migration 4 rebuilds it: a partial unique index (`card_word`, `WHERE kind != 'cloze'`) keeps a word to one card of each of its kinds, and the foreign key goes. `setWord` only changes its word's own cards. SQLite can't drop a constraint in place, and a Durable Object can't turn `foreign_keys` off, so `review`'s rows are set aside in a table while `card` is rebuilt. `PRAGMA defer_foreign_keys` isn't enough: dropping `card` counts each review as a violation, and the new table taking its name doesn't uncount them, so the commit fails.
+`card` had `UNIQUE (lemma_id, kind)` and a foreign key to `word`, so migration 4 rebuilds it: a partial unique index (`card_word`, `WHERE kind != 'cloze'`) keeps a word to one card of each of its kinds, and the foreign key goes, as a cloze card can be made for a lemma that isn't a word yet. SQLite can't drop a constraint in place, and a Durable Object can't turn `foreign_keys` off, so `review`'s rows are set aside in a table while `card` is rebuilt. `PRAGMA defer_foreign_keys` isn't enough: dropping `card` counts each review as a violation, and the new table taking its name doesn't uncount them, so the commit fails.
 
 ### Routes
 

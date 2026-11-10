@@ -59,8 +59,8 @@ export class User extends DurableObject<object> {
       .map((row) => schemas.Word.parse({ ...row, mature: row["mature"] === 1 }));
   }
 
-  /** Active gives the word its cards, if it hasn't any; the cards are reviewed while their
-   * word is active (card.active, so the review queries need only card's indexes). */
+  /** Active gives the word its cards, if it hasn't any; the cards, its cloze cards too, are
+   * reviewed while their word is active (card.active, so the review queries need only card's indexes). */
   async setWord(lemmaId: LemmaId, status: WordStatus, now: Timestamp): Promise<void> {
     const s = await fsrs();
     this.ctx.storage.transactionSync(() => {
@@ -72,7 +72,7 @@ export class User extends DurableObject<object> {
         now,
       );
       const active = status === "active" ? 1 : 0;
-      this.sql.exec(`UPDATE card SET active = ? WHERE lemma_id = ? AND kind != 'cloze'`, active, lemmaId);
+      this.sql.exec(`UPDATE card SET active = ? WHERE lemma_id = ?`, active, lemmaId);
       if (!active) return;
       for (const kind of WORD_CARD_KINDS) {
         const id = CardId.parse(crypto.randomUUID());
@@ -90,7 +90,8 @@ export class User extends DurableObject<object> {
   }
 
   /** A new cloze card for the word in the sentence, or the one it already has: the same
-   * text, sentence and blank. Whether the card was made. */
+   * text, sentence and blank. Whether the card was made. It's reviewed while its word is
+   * active or has no status, like the word's own cards (setWord). */
   async makeCloze(cloze: NewCloze, now: Timestamp): Promise<{ cardId: CardIdType; made: boolean }> {
     const s = await fsrs();
     return this.ctx.storage.transactionSync(() => {
@@ -100,10 +101,12 @@ export class User extends DurableObject<object> {
       if (had !== undefined) return { cardId: CardId.parse(had["card_id"]), made: false };
       const id = CardId.parse(crypto.randomUUID());
       this.sql.exec(
-        `INSERT INTO card (id, lemma_id, kind, created, active, fsrs) VALUES (?, ?, 'cloze', ?, 1, ?)`,
+        `INSERT INTO card (id, lemma_id, kind, created, active, fsrs)
+         VALUES (?, ?, 'cloze', ?, coalesce((SELECT status = 'active' FROM word WHERE lemma_id = ?), 1), ?)`,
         id,
         cloze.lemmaId,
         now,
+        cloze.lemmaId,
         toJson(newCard(s, id, new Date(now))),
       );
       this.sql.exec(

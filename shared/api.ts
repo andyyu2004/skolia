@@ -236,7 +236,8 @@ export type WordStatus = (typeof WORD_STATUSES)[number];
 export const WORD_CARD_KINDS = ["recognition", "production"] as const;
 
 /** cloze: a sentence from a text with a word blanked out, its lemma the hint. Made from the
- * reader, any number per lemma, and not tied to the word's status. */
+ * reader, any number per lemma. Like the word's own cards, they're reviewed while the word
+ * is active or has no status. */
 export const CARD_KINDS = [...WORD_CARD_KINDS, "cloze"] as const;
 export type CardKind = (typeof CARD_KINDS)[number];
 
