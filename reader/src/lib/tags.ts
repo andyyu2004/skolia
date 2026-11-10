@@ -1,9 +1,9 @@
-// Tags as the reader shows them: "level: B1", and the tags that can be given, by kind.
+// Tags as the reader shows them: "level · B1", and the tags that can be given, by kind.
 import type { AvailableTag, Tag } from "@skolia/shared/api";
 
-/** A tag as a badge or option shows it: level: B1. */
+/** A tag as a badge or the tag menu shows it: level · B1. */
 export function tagLabel({ kind, value }: Tag): string {
-  return `${kind}: ${value}`;
+  return `${kind} · ${value}`;
 }
 
 /** A kind's name as a form field's label: Level. */

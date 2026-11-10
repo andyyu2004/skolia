@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { byKind, kindLabel, tagLabel } from "./tags.ts";
 
 test("a tag reads kind: value, and a kind as a label", () => {
-  assert.equal(tagLabel({ kind: "level", value: "B1" }), "level: B1");
+  assert.equal(tagLabel({ kind: "level", value: "B1" }), "level · B1");
   assert.equal(kindLabel("level"), "Level");
   assert.equal(kindLabel("reading-time"), "Reading time");
 });
