@@ -14,6 +14,7 @@
   import { SAVE_AFTER_MS, firstBelow, onScreen, positionsOf, scrollToTop, snippet, wordElements, type Positions } from "../../lib/position.ts";
   import type { ReaderMode } from "../../lib/mode.ts";
   import { words as known } from "../../lib/words.svelte.ts";
+  import { loadClozes } from "../../lib/clozes.svelte.ts";
 
   let { id }: { id: string } = $props();
 
@@ -49,6 +50,17 @@
   function sentenceTokens(sentence: number): Token[] {
     return reading?.analysis.sentences[sentence]?.tokens ?? [];
   }
+
+  /** A sentence's text and where it starts in the document, for a cloze card. */
+  function sentenceText(sentence: number): { start: number; text: string } | null {
+    const found = reading?.analysis.sentences[sentence];
+    return reading && found ? { start: found.start, text: reading.text.slice(found.start, found.end) } : null;
+  }
+
+  // The cloze cards from this text, once signed in
+  $effect(() => {
+    if (known.byId !== null) void loadClozes(id).catch(() => undefined);
+  });
 
   $effect(() => {
     let cancelled = false;
@@ -407,6 +419,8 @@
       {mode}
       {headText}
       {sentenceTokens}
+      {sentenceText}
+      documentId={id}
       onselectToken={(sentence, index) => (selected = doc?.pieceOf.get(tokenKey(sentence, index)) ?? selected)}
       onclose={() => (selected = null)}
     />

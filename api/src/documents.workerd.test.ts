@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hc } from "hono/client";
 import { MAX_TEXT_LENGTH, type DocumentId, type DocumentSummary, type DocumentUpdate, type ImportRequest } from "@skolia/shared/api";
 import { docId, statusKey, textKey } from "@skolia/shared/keys";
-import type { AppType } from "./app.ts";
 import type { IngestJobs } from "./ports.ts";
 import { ALICE, NOW, TEXT, client, importText, importer, listed, local, putJson, raw, readyAt, setup, summaryOf, useLocal, type App } from "./testing/app.ts";
-import { ORIGIN } from "./testing/harness.ts";
 import { body, expectStatus } from "./testing/responses.ts";
 
 useLocal();
@@ -19,8 +16,7 @@ test("the version is the build's", async () => {
 
 test("the typed client imports, lists and gets a document, and sees a 404 as not ok", async () => {
   const app = setup();
-  const headers = Object.fromEntries(importer);
-  const api = hc<AppType>(ORIGIN, { headers, fetch: (input: string | URL | Request, init?: RequestInit) => app.request(input, init) }).api;
+  const api = client(app, importer);
   const imported = await api.documents.$post({ json: { title: "", text: TEXT, lang: "pl" } });
   assert.equal(imported.status, 202);
   if (!imported.ok) throw new Error("import failed");
@@ -73,21 +69,11 @@ test("texts over the limit are refused, oversized bodies without being parsed", 
 test("bad requests and ids are rejected", async () => {
   const app = setup();
   assert.equal((await importText(app, "   ")).status, 400);
-  const german = await app.request(`${ORIGIN}/api/documents`, {
-    method: "POST",
-    headers: { "content-type": "application/json", cookie: importer.get("cookie") ?? "" },
-    body: JSON.stringify({ text: "Ich gehe.", lang: "de" }),
-  });
-  assert.equal(german.status, 400);
-  const malformed = await app.request(`${ORIGIN}/api/documents`, {
-    method: "POST",
-    headers: { "content-type": "application/json", cookie: importer.get("cookie") ?? "" },
-    body: "{",
-  });
-  assert.equal(malformed.status, 400);
+  assert.equal((await raw(app, "POST", "/api/documents", importer, { text: "Ich gehe.", lang: "de" })).status, 400);
+  assert.equal((await raw(app, "POST", "/api/documents", importer, "{")).status, 400);
   assert.deepEqual(await local.takeQueued(), []);
-  assert.equal((await app.request("/api/documents/../etc")).status, 404);
-  assert.equal((await app.request(`/api/documents/${"0".repeat(64)}`)).status, 404);
+  assert.equal((await client(app).documents[":id"].$get({ param: { id: "../etc" } })).status, 404);
+  assert.equal((await client(app).documents[":id"].$get({ param: { id: "0".repeat(64) } })).status, 404);
 });
 
 test("importing needs a session", async () => {

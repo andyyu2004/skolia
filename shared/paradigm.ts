@@ -1,5 +1,5 @@
 // Paradigm tables for the word sheet, with the token's own form marked, and for review
-// cards, with the lemma marked. Each language lays out its tables (lang/*/paradigm.ts) with
+// cards, with the lemma marked (a cloze card's: its blanked form). Each language lays out its tables (lang/*/paradigm.ts) with
 // the Builder here.
 import type { Bundle, Entry, Feats, Token } from "@skolia/shared/schema";
 import { featsMatch } from "./lexicon.ts";
@@ -61,7 +61,7 @@ export function paradigmTables(
   layout: Layout,
   mergeLabels: MergeLabels = (labels) => labels.join("/"),
 ): Table[] {
-  return tables((id) => bundle.feats[id], entry, token, layout, mergeLabels);
+  return formTables((id) => bundle.feats[id], entry, token, layout, mergeLabels);
 }
 
 /** A card's tables: the lemma's own paradigm, with the lemma marked. */
@@ -71,15 +71,16 @@ export function lemmaTables(
   layout: Layout,
   mergeLabels: MergeLabels = (labels) => labels.join("/"),
 ): Table[] {
-  return tables(featsOf, entry, { text: entry.lemma, feats: {} }, layout, mergeLabels);
+  return formTables(featsOf, entry, { text: entry.lemma, feats: {} }, layout, mergeLabels);
 }
 
-function tables(
+/** The lemma's paradigm, with the shown form marked: a cloze card's blanked one. */
+export function formTables(
   featsOf: FeatsOf,
   entry: Pick<Entry, "upos" | "paradigms">,
   shown: Shown,
   layout: Layout,
-  mergeLabels: MergeLabels,
+  mergeLabels: MergeLabels = (labels) => labels.join("/"),
 ): Table[] {
   const forms = chooseParadigm(featsOf, entry, shown);
   if (forms.length <= 1) return [];

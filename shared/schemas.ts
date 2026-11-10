@@ -1,9 +1,12 @@
 import * as z from "zod";
 import {
+  CARD_GROUPS,
   CARD_KINDS,
   LANGS,
   LICENCES,
   MAX_AUTHOR_LENGTH,
+  MAX_CLOZE_SENTENCE,
+  MAX_CLOZE_WHY,
   MAX_LEMMA_LENGTH,
   MAX_LOOKUP,
   MAX_NEW_PER_DAY,
@@ -55,7 +58,11 @@ export const Word = z.object({ lemmaId: LemmaId, status: WordStatus, updated: Ti
 
 export const SetWord = z.object({ status: WordStatus });
 
-export const Settings = z.object({ newPerDay: z.number().int().min(0).max(MAX_NEW_PER_DAY) });
+const PerDay = z.number().int().min(0).max(MAX_NEW_PER_DAY);
+
+/** newLemmasPerDay: new words a day, each with all its word cards; newFormsPerDay: new
+ * cloze cards a day; formsWithWords: one review session for both, or one for each. */
+export const Settings = z.object({ newLemmasPerDay: PerDay, newFormsPerDay: PerDay, formsWithWords: z.boolean() });
 
 /** An ISO 8601 UTC time as a client sends it, any precision; timestamp(new Date(t)) for
  * the stored form. */
@@ -78,14 +85,40 @@ const Index = z.number().int().min(0).max(MAX_TEXT_LENGTH);
 export const ReadingPosition = z.object({ sentence: Index, token: Index, at: IsoTime });
 
 export const CountsQuery = z.object({ dayStart: IsoTime });
-export const DueQuery = z.object({ lang: Lang, dayStart: IsoTime });
+/** group: only its cards; without one, both groups'. */
+export const DueQuery = z.object({ lang: Lang, dayStart: IsoTime, group: z.enum(CARD_GROUPS).optional() });
 
+export const Cloze = z.object({
+  documentId: DocumentId,
+  sentence: z.string().min(1).max(MAX_CLOZE_SENTENCE),
+  sentenceStart: Index,
+  blankStart: Index,
+  blankEnd: Index,
+  feats: z.record(z.string(), z.string()),
+  why: z.string().max(MAX_CLOZE_WHY).nullable(),
+});
+
+/** A cloze card to make for the word in the sentence: the blank, like the sentence, is
+ * offsets in the text, and must be inside the sentence. */
+export const NewCloze = Cloze.extend({ lemmaId: LemmaId }).refine(
+  (c) =>
+    c.sentenceStart <= c.blankStart &&
+    c.blankStart < c.blankEnd &&
+    c.blankEnd <= c.sentenceStart + c.sentence.length &&
+    c.sentence.slice(c.blankStart - c.sentenceStart, c.blankEnd - c.sentenceStart).trim() !== "",
+  { message: "the blank must be a word in the sentence" },
+);
+
+export const ClozesQuery = z.object({ documentId: DocumentId });
+
+/** cloze: a cloze card's sentence, null for a word's cards. */
 export const ScheduledCard = z.object({
   id: CardId,
   lemmaId: LemmaId,
   kind: z.enum(CARD_KINDS),
   isNew: z.boolean(),
   dueAt: Timestamp,
+  cloze: Cloze.nullable(),
 });
 
 export const LookupRequest = z.object({ ids: z.array(LemmaId).min(1).max(MAX_LOOKUP) });

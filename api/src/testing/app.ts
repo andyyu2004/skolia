@@ -59,11 +59,12 @@ export function client(app: App, headers?: Headers) {
   return hc<AppType>(ORIGIN, { headers: Object.fromEntries(headers ?? []), fetch }).api;
 }
 
-/** A JSON request the typed client won't send: invalid input, for the API's validation. */
+/** A JSON request the typed client won't send: invalid input, for the API's validation. A
+ * string body is sent as it is, for malformed JSON. */
 export function raw(app: App, method: string, path: string, headers: Headers | undefined, body: unknown) {
   const allHeaders = new Headers(headers);
   allHeaders.set("content-type", "application/json");
-  return app.request(`${ORIGIN}${path}`, { method, headers: allHeaders, body: JSON.stringify(body) });
+  return app.request(`${ORIGIN}${path}`, { method, headers: allHeaders, body: typeof body === "string" ? body : JSON.stringify(body) });
 }
 
 /** Lexicon rows as infra/load-lexicon.py loads them, and the version that serves. */

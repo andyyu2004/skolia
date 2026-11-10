@@ -8,9 +8,10 @@ import { extname, join } from "node:path";
 import { brotliCompressSync, brotliDecompressSync } from "node:zlib";
 import type { Page, Route } from "@playwright/test";
 import { createApp } from "@skolia/api/app";
-import type { DocumentId as DocumentIdType, Lang, LemmaId as LemmaIdType, LexiconEntry, ScheduledCard, Settings, User, UserId as UserIdType } from "@skolia/shared/api";
+import { blankOut, type Cloze, type DocumentId as DocumentIdType, type Lang, type LemmaId as LemmaIdType, type LexiconEntry, type ScheduledCard, type Settings, type User, type UserId as UserIdType } from "@skolia/shared/api";
+import { LANGUAGES } from "@skolia/shared/lang";
 import { partKey, statusKey, textKey } from "@skolia/shared/keys";
-import type { Bundle, Status } from "@skolia/shared/schema";
+import type { Blob, Bundle, Status } from "@skolia/shared/schema";
 import { CardId, DocumentId, LemmaId, Timestamp, UserId } from "@skolia/shared/schemas";
 
 type Deps = Parameters<typeof createApp>[0];
@@ -23,6 +24,8 @@ const FIXTURES = join(import.meta.dirname, "fixtures");
 const NOW = new Date("2026-11-09T10:00:00Z");
 const fixture = (name: string) => readFileSync(join(FIXTURES, name));
 const bundle = JSON.parse(fixture("lalka.bundle.json").toString("utf8")) as Bundle;
+const analysis = JSON.parse(fixture("lalka.analysis.json").toString("utf8")) as Blob;
+const text = fixture("lalka.txt").toString("utf8");
 
 export const LALKA = DocumentId.parse("121e58375c32bad22cee4888347e0b0003e5594199043db745303749a87c988c");
 
@@ -103,16 +106,30 @@ function entry(lemmaId: LemmaIdType): LexiconEntry | null {
 
 const featureSets = Object.fromEntries(bundle.feats.map((feats, id) => [String(id), feats]));
 
+/** A cloze card for a token of the text, as the word sheet makes it. */
+function clozeOf(sentence: number, index: number): Cloze {
+  const found = analysis.sentences[sentence];
+  const token = found?.tokens[index];
+  if (!found || !token) throw new Error(`no token ${sentence}.${index}`);
+  return {
+    documentId: LALKA,
+    ...blankOut({ start: found.start, text: text.slice(found.start, found.end) }, token),
+    why: LANGUAGES.pl.explainCase(found.tokens, index)?.text ?? null,
+  };
+}
+
 const cards: readonly ScheduledCard[] = [
-  { id: CardId.parse("00000000-0000-4000-8000-000000000001"), lemmaId: LemmaId.parse("pl:sklep:NOUN"), kind: "recognition", isNew: false, dueAt: Timestamp.parse("2026-11-09T08:00:00.000Z") },
-  { id: CardId.parse("00000000-0000-4000-8000-000000000002"), lemmaId: LemmaId.parse("pl:wojna:NOUN"), kind: "production", isNew: true, dueAt: Timestamp.parse("2026-11-09T08:00:00.000Z") },
+  { id: CardId.parse("00000000-0000-4000-8000-000000000001"), lemmaId: LemmaId.parse("pl:sklep:NOUN"), kind: "recognition", isNew: false, dueAt: Timestamp.parse("2026-11-09T08:00:00.000Z"), cloze: null },
+  { id: CardId.parse("00000000-0000-4000-8000-000000000002"), lemmaId: LemmaId.parse("pl:wojna:NOUN"), kind: "production", isNew: true, dueAt: Timestamp.parse("2026-11-09T08:00:00.000Z"), cloze: null },
+  // kolację, in "schodzą się na kolację": na takes the accusative for where to
+  { id: CardId.parse("00000000-0000-4000-8000-000000000003"), lemmaId: LemmaId.parse("pl:kolacja:NOUN"), kind: "cloze", isNew: true, dueAt: Timestamp.parse("2026-11-09T08:00:00.000Z"), cloze: clozeOf(1, 14) },
 ];
 
 /** The API's ports, in memory, for one test. Writes the pages make are accepted and
  * forgotten, except settings. */
 function deps(signedIn: boolean): Deps {
   const visible = (viewer: UserIdType | null) => documents.filter((d) => d.visibility === "public" || d.user === viewer);
-  let settings: Settings = { newPerDay: 10 };
+  let settings: Settings = { newLemmasPerDay: 10, newFormsPerDay: 5, formsWithWords: true };
   return {
     auth: {
       handle: async () => new Response(null, { status: 404 }),
@@ -121,9 +138,16 @@ function deps(signedIn: boolean): Deps {
     users: {
       words: async () => [],
       setWord: async () => {},
-      due: async (_userId, lang: Lang) => ({ cards: lang === "pl" ? [...cards] : [], newLeft: 4 }),
-      counts: async () => [{ lang: "pl", due: 2, new: 5 }],
+      clearWordStatus: async () => {},
+      due: async (_userId, lang: Lang, _now, _dayStart, _limit, group) => ({
+        cards: lang === "pl" ? cards.filter((c) => group === undefined || (c.kind === "cloze") === (group === "forms")) : [],
+        newLeft: { words: 4, forms: 3 },
+      }),
+      counts: async () => [{ lang: "pl", words: { due: 2, new: 4 }, forms: { due: 0, new: 2 } }],
       review: async (_userId, request) => ({ kind: "reviewed", cardId: request.cardId, dueAt: Timestamp.parse("2026-11-10T10:00:00.000Z") }),
+      makeCloze: async () => ({ cardId: CardId.parse("00000000-0000-4000-8000-000000000009"), made: true }),
+      clozes: async () => ({ clozes: [] }),
+      deleteCloze: async () => true,
       settings: async () => settings,
       setSettings: async (_userId, next) => {
         settings = next;
@@ -187,7 +211,7 @@ export async function serve(page: Page, { signedIn }: { signedIn: boolean }): Pr
   const app = createApp(deps(signedIn));
   const failed: string[] = [];
   await page.clock.setFixedTime(NOW);
-  await page.route("http://skolia.test/**", async (route) => {
+  await page.route("https://skolia.test/**", async (route) => {
     const { pathname } = new URL(route.request().url());
     if (pathname.startsWith("/api/")) return forward(route, app, failed);
     const file = pathname === "/" ? "index.html" : pathname.slice(1);

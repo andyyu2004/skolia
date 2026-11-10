@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { isLang, type Lang, type User } from "@skolia/shared/api";
+  import { isLang, type CardGroup, type Lang, type User } from "@skolia/shared/api";
   import Explore from "./pages/Explore.svelte";
   import { currentUser } from "./lib/api.ts";
   import { clearWords, loadWords } from "./lib/words.svelte.ts";
@@ -10,13 +10,13 @@
   import Upload from "./pages/Upload.svelte";
   import { versionUrl } from "./lib/version.ts";
 
-  type Route = { page: "explore" } | { page: "upload" } | { page: "review"; lang: Lang | null } | { page: "settings" } | { page: "reader"; id: string };
+  type Route = { page: "explore" } | { page: "upload" } | { page: "review"; lang: Lang | null; group: CardGroup | null } | { page: "settings" } | { page: "reader"; id: string };
 
   function parse(hash: string): Route {
     if (hash === "#/upload") return { page: "upload" };
-    if (hash === "#/review") return { page: "review", lang: null };
-    const review = /^#\/review\/([a-z]+)$/.exec(hash)?.[1];
-    if (review !== undefined && isLang(review)) return { page: "review", lang: review };
+    if (hash === "#/review") return { page: "review", lang: null, group: null };
+    const [, review, group] = /^#\/review\/([a-z]+)(?:\/(words|forms))?$/.exec(hash) ?? [];
+    if (review !== undefined && isLang(review)) return { page: "review", lang: review, group: group === "words" || group === "forms" ? group : null };
     if (hash === "#/settings") return { page: "settings" };
     // After the id, a word in the text (lib/link.ts), which Reader reads
     const match = /^#\/doc\/([0-9a-f]{64})(?:\?.*)?$/.exec(hash);
@@ -67,7 +67,7 @@
   {:else if route.page === "upload"}
     <Upload {user} />
   {:else if route.page === "review"}
-    <Review {user} lang={route.lang} />
+    <Review {user} lang={route.lang} group={route.group} />
   {:else if route.page === "settings"}
     <Settings {user} />
   {:else}

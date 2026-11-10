@@ -94,10 +94,11 @@ test("the tables are STRICT, the user's are WITHOUT ROWID, and timestamps must b
   const storage = await storageOf("heidi");
   assert.deepEqual(
     await storage.exec(
-      "select name, strict, wr from pragma_table_list where name in ('word', 'card', 'review', 'settings', 'migration_log') order by name",
+      "select name, strict, wr from pragma_table_list where name in ('word', 'card', 'cloze', 'review', 'settings', 'migration_log') order by name",
     ),
     [
       { name: "card", strict: 1, wr: 1 },
+      { name: "cloze", strict: 1, wr: 1 },
       { name: "migration_log", strict: 1, wr: 0 },
       { name: "review", strict: 1, wr: 1 },
       { name: "settings", strict: 1, wr: 0 },
@@ -128,4 +129,83 @@ test("an active word's cards are stored with their ts-fsrs state, which gives th
     ],
   );
   await assert.rejects(storage.exec("update card set fsrs = json_set(fsrs, '$.scheduleStatus', 'lost')"));
+});
+
+test("cloze's migration keeps the word cards and their reviews, and down takes the cloze cards away", async () => {
+  const at = schemas.Timestamp.parse("2026-11-07T00:00:00.000Z");
+  const judy = local.env.USER.getByName("judy");
+  await judy.migrate(3);
+  const storage = await storageOf("judy");
+  // A version 3 word and cards, with the ts-fsrs state a newer object gives them
+  const ken = local.env.USER.getByName("ken");
+  await ken.setWord("pl:pies:NOUN", "active", at);
+  const fsrs = await (await storageOf("ken")).exec<{ kind: string; fsrs: string }>("select kind, fsrs from card order by kind");
+  await storage.exec("insert into word values ('pl:pies:NOUN', 'active', ?)", at);
+  for (const [i, { kind, fsrs: state }] of fsrs.entries()) {
+    await storage.exec("insert into card (id, lemma_id, kind, created, active, fsrs) values (?, 'pl:pies:NOUN', ?, ?, 1, ?)", `c${i}`, kind, at, state);
+  }
+  await storage.exec("insert into review values ('r0', 'c0', 3, ?)", at);
+  const cards = "select id, lemma_id, kind, active, fsrs from card order by id";
+  const before = await storage.exec(cards);
+
+  await judy.migrate(4);
+  assert.deepEqual(await storage.exec(cards), before);
+  assert.deepEqual(await storage.exec("select id, card_id from review"), [{ id: "r0", card_id: "c0" }]);
+  assert.deepEqual(await storage.exec("pragma foreign_key_check"), []);
+  await assert.rejects(storage.exec("insert into card (id, lemma_id, kind, created, active, fsrs) values ('c9', 'pl:pies:NOUN', 'production', ?, 1, ?)", at, fsrs[0]!.fsrs));
+  const cloze = {
+    lemmaId: "pl:pies:NOUN" as const,
+    documentId: schemas.DocumentId.parse("a".repeat(64)),
+    sentence: "Widzę psa.",
+    sentenceStart: 0,
+    blankStart: 6,
+    blankEnd: 9,
+    feats: { Case: "Acc" },
+    why: null,
+  };
+  const { cardId } = await judy.makeCloze(cloze, at);
+  await judy.review({ id: schemas.ReviewId.parse(crypto.randomUUID()), cardId, rating: 3, at }, at);
+  const clozeRow = "insert into cloze (card_id, document_id, sentence, sentence_start, blank_start, blank_end, feats) values (?, ?, 'Widzę psa.', 0, 0, 5, '{}')";
+  // A cloze row belongs to a cloze card, not a word's card or none
+  await assert.rejects(storage.exec(clozeRow, "c0", cloze.documentId));
+  await assert.rejects(storage.exec(clozeRow, "nope", cloze.documentId));
+  await assert.rejects(storage.exec("insert into cloze (card_id, kind, document_id, sentence, sentence_start, blank_start, blank_end, feats) values (?, 'recognition', ?, 'Widzę psa.', 0, 0, 5, '{}')", "c0", cloze.documentId));
+
+  // Deleting a card deletes its cloze row and reviews
+  await storage.exec("insert into review values ('r1', 'c1', 3, ?)", at);
+  await storage.exec("delete from card where id = 'c1'");
+  assert.deepEqual(await storage.exec("select id from review where card_id = 'c1'"), []);
+  const { cardId: other } = await judy.makeCloze({ ...cloze, blankStart: 0, blankEnd: 5 }, at);
+  await judy.review({ id: schemas.ReviewId.parse(crypto.randomUUID()), cardId: other, rating: 3, at }, at);
+  await storage.exec("delete from card where id = ?", other);
+  assert.deepEqual(await storage.exec("select count(*) as n from cloze where card_id = ?", other), [{ n: 0 }]);
+  assert.deepEqual(await storage.exec("select count(*) as n from review where card_id = ?", other), [{ n: 0 }]);
+  await storage.exec("insert into card (id, lemma_id, kind, created, active, fsrs) values ('c1', 'pl:pies:NOUN', ?, ?, 1, ?)", fsrs[1]!.kind, at, fsrs[1]!.fsrs);
+
+  await judy.migrate(3);
+  assert.deepEqual(await storage.exec(cards), before);
+  assert.deepEqual(await storage.exec("select id from review"), [{ id: "r0" }]);
+  assert.ok(!(await tables("judy")).includes("cloze"));
+  assert.deepEqual(await storage.exec("pragma foreign_key_check"), []);
+});
+
+test("card_groups' migration keeps the user's new cards a day as new words a day, and down restores it", async () => {
+  const lia = local.env.USER.getByName("lia");
+  await lia.migrate(4);
+  const storage = await storageOf("lia");
+  await storage.exec("update settings set new_per_day = 7");
+  // A plain object, not the RPC result's stub
+  const settings = async () => ({ ...(await lia.settings()) });
+
+  await lia.migrate(5);
+  assert.deepEqual(await settings(), { newLemmasPerDay: 7, newFormsPerDay: 20, formsWithWords: true });
+  await assert.rejects(storage.exec("update settings set new_lemmas_per_day = 1001"));
+  await assert.rejects(storage.exec("update settings set new_forms_per_day = 1001"));
+  await assert.rejects(storage.exec("update settings set forms_with_words = 2"));
+  await lia.setSettings({ newLemmasPerDay: 8, newFormsPerDay: 3, formsWithWords: false });
+
+  await lia.migrate(4);
+  assert.deepEqual(await storage.exec("select * from settings"), [{ id: 1, new_per_day: 8 }]);
+  await lia.migrate(5);
+  assert.deepEqual(await settings(), { newLemmasPerDay: 8, newFormsPerDay: 20, formsWithWords: true });
 });

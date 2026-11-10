@@ -14,7 +14,7 @@ export default defineConfig({
     toHaveScreenshot: { maxDiffPixelRatio: 0.001 },
   },
   use: {
-    baseURL: "http://skolia.test",
+    baseURL: "https://skolia.test",
     locale: "en-GB",
     timezoneId: "UTC",
   },

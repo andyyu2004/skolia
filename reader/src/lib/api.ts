@@ -8,6 +8,9 @@ import {
   lemmaParam,
   type ApiError,
   type CardCounts,
+  type CardGroup,
+  type ClozeList,
+  type ClozeMade,
   type Due,
   type DocumentSummary,
   type AvailableTag,
@@ -15,6 +18,7 @@ import {
   type ImportRequest,
   type Lang,
   type LemmaId,
+  type NewClozeInput,
   type Rating,
   type ReadingPosition,
   type ReadingNames,
@@ -148,6 +152,12 @@ export async function setWord(lemmaId: LemmaId, status: WordStatus): Promise<voi
   if (!response.ok) throw await failure(response);
 }
 
+/** Takes the word's status away, and its cards out of reviews, keeping their history. */
+export async function clearWordStatus(lemmaId: LemmaId): Promise<void> {
+  const response = await api.me.words[":lemmaId"].$delete({ param: { lemmaId: lemmaParam(lemmaId) } });
+  if (!response.ok) throw await failure(response);
+}
+
 /** The start of the local day, which today's new cards count from. */
 function dayStartOf(now: Date): string {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
@@ -161,9 +171,10 @@ export async function cardCounts(now = new Date()): Promise<CardCounts[] | null>
   return response.json();
 }
 
-/** A language's cards to review. */
-export async function dueCards(lang: Lang, now = new Date()): Promise<Due | null> {
-  const response = await api.me.cards.due.$get({ query: { lang, dayStart: dayStartOf(now) } });
+/** A language's cards to review: one group's, or with no group both. */
+export async function dueCards(lang: Lang, group: CardGroup | null, now = new Date()): Promise<Due | null> {
+  const dayStart = dayStartOf(now);
+  const response = await api.me.cards.due.$get({ query: group ? { lang, dayStart, group } : { lang, dayStart } });
   if (response.status === 401) return null;
   if (!response.ok) throw await failure(response);
   // Hono's JSON type makes the entries' optional fields `| undefined`, which
@@ -176,6 +187,26 @@ export async function review(cardId: string, rating: Rating): Promise<Reviewed> 
   const response = await api.me.reviews.$post({ json });
   if (!response.ok) throw await failure(response);
   return response.json();
+}
+
+/** A cloze card for the word in the sentence, or the one it already has. */
+export async function makeCloze(json: NewClozeInput): Promise<ClozeMade> {
+  const response = await api.me.clozes.$post({ json });
+  if (!response.ok) throw await failure(response);
+  return response.json();
+}
+
+/** The user's cloze cards from a text, or null when signed out. */
+export async function listClozes(documentId: string): Promise<ClozeList | null> {
+  const response = await api.me.clozes.$get({ query: { documentId } });
+  if (response.status === 401) return null;
+  if (!response.ok) throw await failure(response);
+  return response.json();
+}
+
+export async function deleteCloze(cardId: string): Promise<void> {
+  const response = await api.me.clozes[":cardId"].$delete({ param: { cardId } });
+  if (!response.ok) throw await failure(response);
 }
 
 export async function getSettings(): Promise<Settings> {

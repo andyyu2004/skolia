@@ -45,8 +45,18 @@ test("upload", async ({ page }) => {
 
 test("settings", async ({ page }) => {
   await open(page, "#/settings");
-  await expect(page.getByLabel("New cards a day")).toHaveValue("10");
+  await expect(page.getByLabel("New words a day")).toHaveValue("10");
   await expect(page).toHaveScreenshot("settings.png", { fullPage: true });
+});
+
+test("review, forms on their own", async ({ page }) => {
+  await open(page, "#/settings");
+  await page.getByLabel("Review forms with words").uncheck();
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Saved")).toBeVisible();
+  await page.goto("/#/review/pl/forms");
+  await expect(page.getByText("(kolacja)")).toBeVisible();
+  await expect(page).toHaveScreenshot("review-forms.png", { fullPage: true });
 });
 
 test("review, front", async ({ page }) => {
@@ -58,8 +68,30 @@ test("review, front", async ({ page }) => {
 test("review, answer", async ({ page }) => {
   await open(page, "#/review");
   await page.getByRole("button", { name: "Show answer" }).click();
-  await page.getByText("Forms").click();
+  await page.getByText("Forms", { exact: true }).click();
   await expect(page).toHaveScreenshot("review-answer.png", { fullPage: true });
+});
+
+/** Grades the cards before the cloze card Good, so it's the one shown. */
+async function toCloze(page: Page): Promise<void> {
+  await open(page, "#/review");
+  for (const _ of [0, 1]) {
+    await page.getByRole("button", { name: "Show answer" }).click();
+    await page.getByRole("button", { name: "Good" }).click();
+  }
+  await expect(page.getByText("(kolacja)")).toBeVisible();
+}
+
+test("review, cloze", async ({ page }) => {
+  await toCloze(page);
+  await expect(page).toHaveScreenshot("review-cloze.png", { fullPage: true });
+});
+
+test("review, cloze answer", async ({ page }) => {
+  await toCloze(page);
+  await page.getByRole("button", { name: "Show answer" }).click();
+  await page.getByText("Forms", { exact: true }).click();
+  await expect(page).toHaveScreenshot("review-cloze-answer.png", { fullPage: true });
 });
 
 test("reader", async ({ page }) => {
