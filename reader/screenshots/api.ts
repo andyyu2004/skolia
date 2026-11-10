@@ -71,7 +71,7 @@ const LEVELS = (
     ["B2", "Upper intermediate"],
     ["C1", "Advanced"],
     ["C2", "Proficient"],
-    ["C3", "Beyond proficient"],
+    ["C3", "Native"],
   ] as const
 ).map(([value, description]) => ({ kind: "level", value, description }));
 

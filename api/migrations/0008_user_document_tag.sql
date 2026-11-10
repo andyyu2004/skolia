@@ -20,7 +20,7 @@ INSERT INTO tag (kind, value, description, position) VALUES
   ('level', 'B2', 'Upper intermediate', 4),
   ('level', 'C1', 'Advanced', 5),
   ('level', 'C2', 'Proficient', 6),
-  ('level', 'C3', 'Beyond proficient', 7);
+  ('level', 'C3', 'Native', 7);
 
 CREATE TABLE user_document_tag (
   user_id TEXT NOT NULL,
