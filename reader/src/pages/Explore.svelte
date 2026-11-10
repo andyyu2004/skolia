@@ -17,6 +17,7 @@
   /** The tags kept, as kind:value: any of one kind, all of the kinds. */
   let tagged = $state<readonly string[]>([]);
   let available = $state<readonly AvailableTag[]>([]);
+  let tagsError = $state<string | null>(null);
   const filter = $derived(tagFilter(tagged.flatMap((t) => parseTag(t) ?? [])));
 
   /** Others who imported what's listed, by id, since two can share a name. */
@@ -44,10 +45,10 @@
   const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 
   $effect(() => {
+    // Without them there's no tag filter, but the list still works
     listTags().then(
       (t) => (available = t),
-      // Without them there's no tag filter; the list still works
-      () => {},
+      (e: unknown) => (tagsError = e instanceof Error ? e.message : String(e)),
     );
   });
 
@@ -90,7 +91,7 @@
             <option value={`by:${id}`}>{name}</option>
           {/each}
         </select>
-        <TagFilter {available} bind:selected={tagged} />
+        <TagFilter {available} error={tagsError} bind:selected={tagged} />
       </div>
 
       {#if documents === null}

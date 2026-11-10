@@ -4,8 +4,12 @@
   import { byKind, tagLabel } from "../lib/tags.ts";
 
   /** A menu of every tag, grouped by kind, to tick the ones a list keeps: selected holds
-   * them as kind:value. */
-  let { available, selected = $bindable() }: { available: readonly AvailableTag[]; selected: readonly string[] } = $props();
+   * them as kind:value. error: why the tags couldn't be had. */
+  let {
+    available,
+    error = null,
+    selected = $bindable(),
+  }: { available: readonly AvailableTag[]; error?: string | null; selected: readonly string[] } = $props();
 
   let menu = $state<HTMLDetailsElement | null>(null);
 
@@ -43,7 +47,7 @@
         {/each}
       </fieldset>
     {:else}
-      <p class="none">No tags yet.</p>
+      <p class={["none", { failed: error !== null }]}>{error === null ? "No tags yet." : `Couldn't load tags: ${error}`}</p>
     {/each}
     {#if selected.length > 0}
       <button type="button" class="clear" onclick={() => (selected = [])}>Clear</button>
@@ -145,6 +149,10 @@
     padding: 0.3rem 0.4rem;
     color: var(--muted);
     font-size: 0.9rem;
+  }
+
+  .none.failed {
+    color: var(--error);
   }
 
   .clear {

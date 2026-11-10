@@ -8,12 +8,13 @@
   let { tags = $bindable(), id }: { tags: Tags; id: string } = $props();
 
   let available = $state<readonly AvailableTag[]>([]);
+  let error = $state<string | null>(null);
 
   $effect(() => {
+    // Without the tags there's nothing to choose, but the rest of the form still works
     listTags().then(
       (t) => (available = t),
-      // Without the tags there's nothing to choose; the rest of the form still works
-      () => {},
+      (e: unknown) => (error = e instanceof Error ? e.message : String(e)),
     );
   });
 
@@ -23,6 +24,9 @@
   }
 </script>
 
+{#if error !== null}
+  <p class="error">Couldn't load tags: {error}</p>
+{/if}
 {#each byKind(available) as [kind, options] (kind)}
   <Field label={kindLabel(kind)} for="{id}-{kind}" optional>
     <select id="{id}-{kind}" value={tags[kind] ?? ""} onchange={(event) => set(kind, event.currentTarget.value)}>
@@ -33,3 +37,11 @@
     </select>
   </Field>
 {/each}
+
+<style>
+  .error {
+    margin: 0;
+    color: var(--error);
+    font-size: 0.85rem;
+  }
+</style>
