@@ -1,5 +1,6 @@
 import * as z from "zod";
 import {
+  CARD_GROUPS,
   CARD_KINDS,
   LANGS,
   LICENCES,
@@ -57,7 +58,11 @@ export const Word = z.object({ lemmaId: LemmaId, status: WordStatus, updated: Ti
 
 export const SetWord = z.object({ status: WordStatus });
 
-export const Settings = z.object({ newPerDay: z.number().int().min(0).max(MAX_NEW_PER_DAY) });
+const PerDay = z.number().int().min(0).max(MAX_NEW_PER_DAY);
+
+/** newLemmasPerDay: new words a day, each with all its word cards; newFormsPerDay: new
+ * cloze cards a day; formsWithWords: one review session for both, or one for each. */
+export const Settings = z.object({ newLemmasPerDay: PerDay, newFormsPerDay: PerDay, formsWithWords: z.boolean() });
 
 /** An ISO 8601 UTC time as a client sends it, any precision; timestamp(new Date(t)) for
  * the stored form. */
@@ -80,7 +85,8 @@ const Index = z.number().int().min(0).max(MAX_TEXT_LENGTH);
 export const ReadingPosition = z.object({ sentence: Index, token: Index, at: IsoTime });
 
 export const CountsQuery = z.object({ dayStart: IsoTime });
-export const DueQuery = z.object({ lang: Lang, dayStart: IsoTime });
+/** group: only its cards; without one, both groups'. */
+export const DueQuery = z.object({ lang: Lang, dayStart: IsoTime, group: z.enum(CARD_GROUPS).optional() });
 
 export const Cloze = z.object({
   documentId: DocumentId,

@@ -4,6 +4,7 @@
 import type {
   AvailableTag,
   CardCounts,
+  CardGroup,
   CardId,
   ClozeList,
   DocumentId,
@@ -14,6 +15,7 @@ import type {
   Lookup,
   Licence,
   NewCloze,
+  NewLeft,
   ReadingPosition,
   Reviewed,
   ReviewRequest,
@@ -107,8 +109,8 @@ export interface JobQueue {
 }
 
 export interface DueCards {
-  cards: ScheduledCard[];
-  newLeft: number;
+  readonly cards: ScheduledCard[];
+  readonly newLeft: NewLeft;
 }
 
 /** out-of-order: answered before the card was made or before its last review.
@@ -121,7 +123,11 @@ export type ReviewOutcome = ({ kind: "reviewed" } & Reviewed) | { kind: "no-card
 export interface UserData {
   words(userId: UserId): Promise<Word[]>;
   setWord(userId: UserId, lemmaId: LemmaId, status: WordStatus, now: Timestamp): Promise<void>;
-  due(userId: UserId, lang: Lang, now: Timestamp, dayStart: Timestamp, limit: number): Promise<DueCards>;
+  /** Clears the word's status and takes its cards, cloze cards too, out of reviews. Deletes
+   * nothing: the cards and their reviews come back when the word is made active again. */
+  clearWordStatus(userId: UserId, lemmaId: LemmaId): Promise<void>;
+  /** group: only its cards; undefined, both groups'. */
+  due(userId: UserId, lang: Lang, now: Timestamp, dayStart: Timestamp, limit: number, group: CardGroup | undefined): Promise<DueCards>;
   counts(userId: UserId, now: Timestamp, dayStart: Timestamp): Promise<CardCounts[]>;
   review(userId: UserId, request: ReviewRequest, now: Timestamp): Promise<ReviewOutcome>;
   /** The cloze card the text's sentence and word already had, if any, made: false. */

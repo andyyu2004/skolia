@@ -1,7 +1,7 @@
 // Requests and responses of skolia-api. The analysis and bundle shapes come from the
 // Python schemas (schema.gen.ts); these are the API's own.
 import type { z } from "zod";
-import type { BundleParadigm, Feats, Pronunciation, Relation, Sense, State, Upos } from "./schema.gen.ts";
+import type { BundleParadigm, Feats, Pronunciation, Relation, Sense, State, Token, Upos } from "./schema.gen.ts";
 import type * as schemas from "./schemas.ts";
 
 export const LANGS = ["en", "fr", "pl"] as const;
@@ -253,8 +253,14 @@ export type Rating = (typeof RATINGS)[number];
 /** Anki's: a card is mature once its interval is this many days or more. */
 export const MATURE_DAYS = 21;
 
-export const DEFAULT_NEW_PER_DAY = 20;
+export const DEFAULT_NEW_LEMMAS_PER_DAY = 20;
+export const DEFAULT_NEW_FORMS_PER_DAY = 20;
 export const MAX_NEW_PER_DAY = 1000;
+
+/** words: a word's recognition and production cards; forms: its cloze cards. Each has its
+ * own daily allowance, and can be reviewed alone. */
+export const CARD_GROUPS = ["words", "forms"] as const;
+export type CardGroup = (typeof CARD_GROUPS)[number];
 
 /** Most ids one lexicon lookup takes. */
 export const MAX_LOOKUP = 100;
@@ -347,30 +353,49 @@ export type NewCloze = z.output<typeof schemas.NewCloze>;
 /** What the reader sends: the same, before the API's validation brands its ids. */
 export type NewClozeInput = z.input<typeof schemas.NewCloze>;
 
+/** A sentence of a text, start being where it starts in the text, with the token blanked out. */
+export function blankOut(
+  sentence: { readonly start: number; readonly text: string },
+  token: Pick<Token, "start" | "end" | "feats">,
+): Pick<NewClozeInput, "sentence" | "sentenceStart" | "blankStart" | "blankEnd" | "feats"> {
+  return {
+    sentence: sentence.text,
+    sentenceStart: sentence.start,
+    blankStart: token.start - sentence.start,
+    blankEnd: token.end - sentence.start,
+    feats: { ...token.feats } as Record<string, string>,
+  };
+}
+
 /** The cloze card made, or the one the sentence and word already had. */
 export interface ClozeMade {
-  cardId: CardId;
+  readonly cardId: CardId;
 }
 
 /** A text's cloze cards, by where their blanks start in it. */
 export interface ClozeList {
-  clozes: { cardId: CardId; start: number }[];
+  readonly clozes: readonly { readonly cardId: CardId; readonly start: number }[];
 }
 
-/** Cards due now, then new cards up to what's left of today's allowance. */
+/** What's left of today's allowances: words in lemmas, forms in cards. */
+export type NewLeft = Readonly<Record<CardGroup, number>>;
+
+/** Cards due now, then new cards up to what's left of today's allowances. */
 export interface Due {
   cards: DueCard[];
-  newLeft: number;
+  newLeft: NewLeft;
   /** The feature sets the cards' paradigms use, in the cards' language */
   featureSets: FeatureSets;
 }
 
-/** A language's cards due now, and new cards it would show today. */
-export interface CardCounts {
-  lang: Lang;
-  due: number;
-  new: number;
+/** Cards due now, and new cards that would come up today. */
+export interface Tally {
+  readonly due: number;
+  readonly new: number;
 }
+
+/** A language's cards to review, by group. */
+export type CardCounts = { readonly lang: Lang } & Readonly<Record<CardGroup, Tally>>;
 
 /** A card after a review: when it's due next. */
 export interface Reviewed {

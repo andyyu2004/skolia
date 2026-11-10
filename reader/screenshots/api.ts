@@ -8,7 +8,7 @@ import { extname, join } from "node:path";
 import { brotliCompressSync, brotliDecompressSync } from "node:zlib";
 import type { Page, Route } from "@playwright/test";
 import { createApp } from "@skolia/api/app";
-import type { Cloze, DocumentId as DocumentIdType, Lang, LemmaId as LemmaIdType, LexiconEntry, ScheduledCard, Settings, User, UserId as UserIdType } from "@skolia/shared/api";
+import { blankOut, type Cloze, type DocumentId as DocumentIdType, type Lang, type LemmaId as LemmaIdType, type LexiconEntry, type ScheduledCard, type Settings, type User, type UserId as UserIdType } from "@skolia/shared/api";
 import { LANGUAGES } from "@skolia/shared/lang";
 import { partKey, statusKey, textKey } from "@skolia/shared/keys";
 import type { Blob, Bundle, Status } from "@skolia/shared/schema";
@@ -113,11 +113,7 @@ function clozeOf(sentence: number, index: number): Cloze {
   if (!found || !token) throw new Error(`no token ${sentence}.${index}`);
   return {
     documentId: LALKA,
-    sentence: text.slice(found.start, found.end),
-    sentenceStart: found.start,
-    blankStart: token.start - found.start,
-    blankEnd: token.end - found.start,
-    feats: { ...token.feats } as Record<string, string>,
+    ...blankOut({ start: found.start, text: text.slice(found.start, found.end) }, token),
     why: LANGUAGES.pl.explainCase(found.tokens, index)?.text ?? null,
   };
 }
@@ -133,7 +129,7 @@ const cards: readonly ScheduledCard[] = [
  * forgotten, except settings. */
 function deps(signedIn: boolean): Deps {
   const visible = (viewer: UserIdType | null) => documents.filter((d) => d.visibility === "public" || d.user === viewer);
-  let settings: Settings = { newPerDay: 10 };
+  let settings: Settings = { newLemmasPerDay: 10, newFormsPerDay: 5, formsWithWords: true };
   return {
     auth: {
       handle: async () => new Response(null, { status: 404 }),
@@ -142,8 +138,12 @@ function deps(signedIn: boolean): Deps {
     users: {
       words: async () => [],
       setWord: async () => {},
-      due: async (_userId, lang: Lang) => ({ cards: lang === "pl" ? [...cards] : [], newLeft: 4 }),
-      counts: async () => [{ lang: "pl", due: 2, new: 6 }],
+      clearWordStatus: async () => {},
+      due: async (_userId, lang: Lang, _now, _dayStart, _limit, group) => ({
+        cards: lang === "pl" ? cards.filter((c) => group === undefined || (c.kind === "cloze") === (group === "forms")) : [],
+        newLeft: { words: 4, forms: 3 },
+      }),
+      counts: async () => [{ lang: "pl", words: { due: 2, new: 4 }, forms: { due: 0, new: 2 } }],
       review: async (_userId, request) => ({ kind: "reviewed", cardId: request.cardId, dueAt: Timestamp.parse("2026-11-10T10:00:00.000Z") }),
       makeCloze: async () => ({ cardId: CardId.parse("00000000-0000-4000-8000-000000000009"), made: true }),
       clozes: async () => ({ clozes: [] }),

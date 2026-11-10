@@ -154,14 +154,15 @@ async function cards(base: string, key: string, lang: Lang): Promise<void> {
   const review = (cardId: string, id = crypto.randomUUID()) =>
     body(`${lang} review`, api.me.reviews.$post({ json: { id, cardId, rating: 3, at: new Date().toISOString() } }));
 
-  const { newPerDay } = await body("settings", api.me.settings.$get());
-  assert.ok(newPerDay >= 2, `${lang}: a new user's settings allow ${newPerDay} new cards a day`);
-  assert.deepEqual(await counts(), { lang, due: 0, new: 0 }, `${lang}: a new user has cards`);
+  const { newLemmasPerDay } = await body("settings", api.me.settings.$get());
+  assert.ok(newLemmasPerDay >= 1, `${lang}: a new user's settings allow ${newLemmasPerDay} new words a day`);
+  const none = { due: 0, new: 0 };
+  assert.deepEqual(await counts(), { lang, words: none, forms: none }, `${lang}: a new user has cards`);
 
   await mark("active");
   const words = await body("words", api.me.words.$get());
   assert.equal(words.find((w) => w.lemmaId === word)?.status, "active", `${lang}: ${word} isn't active`);
-  assert.deepEqual(await counts(), { lang, due: 0, new: 2 }, `${lang}: counts after adding a word`);
+  assert.deepEqual(await counts(), { lang, words: { due: 0, new: 2 }, forms: none }, `${lang}: counts after adding a word`);
 
   const added = await due();
   assert.deepEqual(new Set(added.cards.map((c) => c.kind)), new Set(["recognition", "production"]), `${lang}: card kinds`);
@@ -181,7 +182,7 @@ async function cards(base: string, key: string, lang: Lang): Promise<void> {
 
   await mark("known");
   assert.deepEqual((await due()).cards, [], `${lang}: a known word's cards are due`);
-  assert.deepEqual(await counts(), { lang, due: 0, new: 0 }, `${lang}: counts after marking a word known`);
+  assert.deepEqual(await counts(), { lang, words: none, forms: none }, `${lang}: counts after marking a word known`);
   console.log(`${lang}: cards ok`);
 }
 

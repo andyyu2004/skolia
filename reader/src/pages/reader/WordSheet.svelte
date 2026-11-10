@@ -15,9 +15,9 @@
   } from "@skolia/shared/lexicon";
   import type { Recording } from "@skolia/shared/schema";
   import { LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
-  import { setStatus, words as known } from "../../lib/words.svelte.ts";
-  import { addCloze, clozes } from "../../lib/clozes.svelte.ts";
-  import { MAX_CLOZE_SENTENCE, MAX_CLOZE_WHY } from "@skolia/shared/api";
+  import { clearStatus, setStatus, words as known } from "../../lib/words.svelte.ts";
+  import { addCloze, clozes, removeCloze } from "../../lib/clozes.svelte.ts";
+  import { MAX_CLOZE_SENTENCE, MAX_CLOZE_WHY, blankOut } from "@skolia/shared/api";
   import type { ReaderMode } from "../../lib/mode.ts";
   import { paradigmTables } from "@skolia/shared/paradigm";
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
@@ -206,76 +206,127 @@
   /** The last failure to add a word, by lemma id. */
   let statusError = $state<{ lemmaId: LemmaId; message: string } | null>(null);
 
-  /** Being added from the sheet's button. */
-  let adding = $state<LemmaId | null>(null);
+  /** The word being added from its +, by where it starts. */
+  let adding = $state<number | null>(null);
 
-  /** Tried in this sheet: a failed save shows its error rather than being retried. */
+  /** Tried in this sheet, words and cloze cards by where they start: a failed save shows
+   * its error rather than being retried. */
   const tried = new Set<LemmaId>();
+  const triedClozes = new Set<number>();
 
-  /** In learning mode a word you tap and have never marked goes into your cards; Known
-   * while reviewing takes it out. In reading mode the sheet's button adds it. */
+  /** In learning mode a word you tap goes into your cards if you've never marked it, and
+   * so does its form in this sentence; Known while reviewing takes them out. In reading
+   * mode the word's + adds them. */
   $effect(() => {
     if (!known.byId || mode !== "learning") return;
-    const fresh = words.flatMap((w) =>
-      learnable(w) && known.byId?.[w.lemmaId] === undefined && !tried.has(w.lemmaId) ? [w.lemmaId] : [],
-    );
-    for (const lemmaId of fresh) tried.add(lemmaId);
+    const fresh = words.flatMap((w): Addition[] => {
+      const { lemmaId, cloze } = additionOf(w);
+      const addition = {
+        lemmaId: lemmaId !== null && !tried.has(lemmaId) ? lemmaId : null,
+        cloze: cloze !== null && !triedClozes.has(w.ref.token.start) ? cloze : null,
+      };
+      return addition.lemmaId || addition.cloze ? [addition] : [];
+    });
+    for (const { lemmaId, cloze } of fresh) {
+      if (lemmaId) tried.add(lemmaId);
+      if (cloze) triedClozes.add(cloze.sentenceStart + cloze.blankStart);
+    }
     untrack(() => {
       void (async () => {
-        for (const lemmaId of fresh) await learn(lemmaId);
+        for (const addition of fresh) await add(addition);
       })();
     });
   });
 
-  async function learn(lemmaId: LemmaId): Promise<void> {
+  /** Whether it was added. */
+  async function learn(lemmaId: LemmaId): Promise<boolean> {
     try {
       await setStatus(lemmaId, "active");
+      return true;
     } catch (e: unknown) {
       statusError = { lemmaId, message: `Couldn't add it to your cards: ${e instanceof Error ? e.message : String(e)}` };
+      return false;
     }
   }
 
   /** A cloze card practises a form: offered for a word that isn't its lemma (pracy, not
    * praca), in a sentence short enough to keep, unless the word is known or ignored, which
-   * takes its cloze cards out of reviews too. */
+   * takes its cloze cards out of reviews too, or is part of a fused word (du is de + le),
+   * whose parts share its span. */
   function clozeOf(w: (typeof words)[number]) {
-    if (!learnable(w) || sameWord(w.entry?.lemma ?? w.ref.token.lemma ?? w.ref.token.text, w.ref.token.text)) return null;
+    if (!learnable(w) || w.ref.token.mwt !== undefined || sameWord(w.entry?.lemma ?? w.ref.token.lemma ?? w.ref.token.text, w.ref.token.text)) return null;
     const found = sentenceText(w.ref.sentence);
     if (!found || found.text.length > MAX_CLOZE_SENTENCE) return null;
-    const { token } = w.ref;
     const why = w.caseWhy && w.caseWhy.text.length <= MAX_CLOZE_WHY ? w.caseWhy.text : null;
     return {
       lemmaId: w.lemmaId,
       documentId,
-      sentence: found.text,
-      sentenceStart: found.start,
-      blankStart: token.start - found.start,
-      blankEnd: token.end - found.start,
-      feats: { ...token.feats } as Record<string, string>,
+      ...blankOut(found, w.ref.token),
       why,
     };
   }
 
-  /** The word whose cloze card is being made, or failed to be, by where it starts. */
-  let clozing = $state<number | null>(null);
+  type ClozeRequest = NonNullable<ReturnType<typeof clozeOf>>;
+
+  /** What a word's + adds: the word, if it has no status, and a cloze card of its form in
+   * this sentence, if it can have one and hasn't. No cloze card until the text's have
+   * loaded, so one it has isn't offered again. */
+  interface Addition {
+    readonly lemmaId: LemmaId | null;
+    readonly cloze: ClozeRequest | null;
+  }
+
+  function additionOf(w: (typeof words)[number]): Addition {
+    if (!known.byId || !learnable(w)) return { lemmaId: null, cloze: null };
+    const status = known.byId[w.lemmaId]?.status;
+    const cards = clozes.documentId === documentId ? clozes.byStart : null;
+    const request = status === "known" || status === "ignored" || cards === null ? null : clozeOf(w);
+    return {
+      lemmaId: status === undefined ? w.lemmaId : null,
+      cloze: request && !cards?.has(w.ref.token.start) ? request : null,
+    };
+  }
+
+  /** Unticking a word takes away what its + added: this sentence's cloze card, then the
+   * word's status, which takes its other cards out of reviews. */
+  async function removeFromCards(w: (typeof words)[number]): Promise<void> {
+    if (!learnable(w)) return;
+    const { start } = w.ref.token;
+    const cardId = clozes.documentId === documentId ? clozes.byStart?.get(start) : undefined;
+    adding = start;
+    statusError = null;
+    clozeError = null;
+    try {
+      if (cardId) await removeCloze(documentId, start, cardId);
+      await clearStatus(w.lemmaId);
+    } catch (e: unknown) {
+      statusError = { lemmaId: w.lemmaId, message: `Couldn't take it out of your cards: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    adding = null;
+  }
+
+  /** The last failure to make a cloze card, by where its word starts. */
   let clozeError = $state<{ start: number; message: string } | null>(null);
 
-  async function cloze(request: NonNullable<ReturnType<typeof clozeOf>>): Promise<void> {
+  async function cloze(request: ClozeRequest): Promise<void> {
     const start = request.sentenceStart + request.blankStart;
-    clozing = start;
-    clozeError = null;
     try {
       await addCloze(request);
     } catch (e: unknown) {
       clozeError = { start, message: `Couldn't make the card: ${e instanceof Error ? e.message : String(e)}` };
     }
-    clozing = null;
   }
 
-  async function add(lemmaId: LemmaId): Promise<void> {
-    adding = lemmaId;
+  async function add({ lemmaId, cloze: request }: Addition): Promise<void> {
+    if (lemmaId && !(await learn(lemmaId))) return;
+    if (request) await cloze(request);
+  }
+
+  async function addFromButton(start: number, addition: Addition): Promise<void> {
+    adding = start;
     statusError = null;
-    await learn(lemmaId);
+    clozeError = null;
+    await add(addition);
     adding = null;
   }
 </script>
@@ -380,42 +431,44 @@
   {#each words as word (word.ref.index)}
     {@const token = word.ref.token}
     <section class="word">
-      <h2>
-        <span {lang}>{token.text}</span>
-        {@render speakers(word.heard, token.text)}
-        {#if token.lemma && !sameWord(token.lemma, token.text)}
-          <span class="lemma">(<span {lang}>{word.entry?.lemma ?? token.lemma}</span>)</span>
+      <div class="head">
+        <h2>
+          <span {lang}>{token.text}</span>
+          {@render speakers(word.heard, token.text)}
+          {#if token.lemma && !sameWord(token.lemma, token.text)}
+            <span class="lemma">(<span {lang}>{word.entry?.lemma ?? token.lemma}</span>)</span>
+          {/if}
+        </h2>
+        {#if known.byId && learnable(word)}
+          {@const addition = additionOf(word)}
+          {@const lemma = word.entry?.lemma ?? token.lemma ?? token.text}
+          {#if addition.lemmaId || addition.cloze}
+            {@const label = addition.lemmaId
+              ? `Add ${lemma} to your cards${addition.cloze ? `, with this sentence to practise ${token.text}` : ""}`
+              : `Practise ${token.text} in this sentence`}
+            <button
+              type="button"
+              class="card-action"
+              aria-label={label}
+              title={label}
+              disabled={adding === token.start}
+              onclick={() => void addFromButton(token.start, addition)}
+              ><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg></button
+            >
+          {:else if known.byId[word.lemmaId]?.status === "active"}
+            {@const label = clozeOf(word) ? `${lemma} is in your cards, with this sentence` : `${lemma} is in your cards`}
+            <button
+              type="button"
+              class="card-action done"
+              aria-label="{label}. Take it out"
+              title="{label}. Click to take it out"
+              disabled={adding === token.start}
+              onclick={() => void removeFromCards(word)}
+              ><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.5 3.5L13 4.5" /></svg></button
+            >
+          {/if}
         {/if}
-      </h2>
-      {#if known.byId}
-        {@const lemmaId = learnable(word) ? word.lemmaId : null}
-        {@const status = lemmaId && known.byId[lemmaId]?.status}
-        {@const offerAdd = lemmaId !== null && status === undefined && mode === "reading"}
-        {@const request = status === "known" || status === "ignored" ? null : clozeOf(word)}
-        {@const clozed = request !== null && clozes.documentId === documentId && clozes.starts?.has(token.start) === true}
-        {#if status === "active"}
-          <p class="in-cards muted small">In your cards</p>
-        {/if}
-        {#if clozed}
-          <p class="in-cards muted small">This sentence is in your cards, with {token.text} to fill in</p>
-        {/if}
-        {#if offerAdd || (request && !clozed)}
-          <div class="add-card">
-            {#if offerAdd && lemmaId}
-              <Button variant="quiet" small disabled={adding === lemmaId} onclick={() => void add(lemmaId)}>Add to cards</Button>
-            {/if}
-            {#if request && !clozed}
-              <Button
-                variant="quiet"
-                small
-                disabled={clozing === token.start}
-                title="A card with this sentence, {token.text} left blank for you to fill in"
-                onclick={() => void cloze(request)}>Practise {token.text} in this sentence</Button
-              >
-            {/if}
-          </div>
-        {/if}
-      {/if}
+      </div>
       {#if word.lemmaId && statusError?.lemmaId === word.lemmaId}
         <p class="error" role="alert">{statusError.message}</p>
       {/if}
@@ -783,15 +836,57 @@
     color: var(--error);
   }
 
-  .add-card {
+  .head {
     display: flex;
-    flex-wrap: wrap;
+    align-items: flex-start;
     gap: 0.5rem;
-    margin: 0.25rem 0;
   }
 
-  .in-cards {
-    margin: 0.2rem 0;
+  .head h2 {
+    flex: 1;
+  }
+
+  .card-action {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    margin-top: 0.25rem;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    padding: 0;
+    background: none;
+    color: var(--muted);
+  }
+
+  .card-action svg {
+    width: 1rem;
+    height: 1rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  button.card-action {
+    cursor: pointer;
+  }
+
+  button.card-action:hover,
+  button.card-action:focus-visible {
+    color: var(--text);
+    border-color: var(--muted);
+  }
+
+  button.card-action:disabled {
+    cursor: progress;
+    opacity: 0.6;
+  }
+
+  .card-action.done {
+    border-color: transparent;
   }
 
   .word + .word {

@@ -5,6 +5,7 @@ import {
   LANGS,
   UPOS,
   type CardCounts,
+  type CardGroup,
   type CardId,
   type ClozeList,
   type NewCloze,
@@ -57,8 +58,12 @@ export class DurableObjectUsers implements UserData {
     await this.users.getByName(userId).setWord(lemmaId, status, now);
   }
 
-  async due(userId: UserId, lang: Lang, now: Timestamp, dayStart: Timestamp, limit: number): Promise<DueCards> {
-    return this.users.getByName(userId).due(lang, now, dayStart, limit);
+  async clearWordStatus(userId: UserId, lemmaId: LemmaId): Promise<void> {
+    await this.users.getByName(userId).clearWordStatus(lemmaId);
+  }
+
+  async due(userId: UserId, lang: Lang, now: Timestamp, dayStart: Timestamp, limit: number, group: CardGroup | undefined): Promise<DueCards> {
+    return this.users.getByName(userId).due(lang, now, dayStart, limit, group);
   }
 
   async counts(userId: UserId, now: Timestamp, dayStart: Timestamp): Promise<CardCounts[]> {

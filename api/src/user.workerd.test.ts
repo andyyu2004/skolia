@@ -172,3 +172,24 @@ test("cloze's migration keeps the word cards and their reviews, and down takes t
   assert.ok(!(await tables("judy")).includes("cloze"));
   assert.deepEqual(await storage.exec("pragma foreign_key_check"), []);
 });
+
+test("card_groups' migration keeps the user's new cards a day as new words a day, and down restores it", async () => {
+  const lia = local.env.USER.getByName("lia");
+  await lia.migrate(4);
+  const storage = await storageOf("lia");
+  await storage.exec("update settings set new_per_day = 7");
+  // A plain object, not the RPC result's stub
+  const settings = async () => ({ ...(await lia.settings()) });
+
+  await lia.migrate(5);
+  assert.deepEqual(await settings(), { newLemmasPerDay: 7, newFormsPerDay: 20, formsWithWords: true });
+  await assert.rejects(storage.exec("update settings set new_lemmas_per_day = 1001"));
+  await assert.rejects(storage.exec("update settings set new_forms_per_day = 1001"));
+  await assert.rejects(storage.exec("update settings set forms_with_words = 2"));
+  await lia.setSettings({ newLemmasPerDay: 8, newFormsPerDay: 3, formsWithWords: false });
+
+  await lia.migrate(4);
+  assert.deepEqual(await storage.exec("select * from settings"), [{ id: 1, new_per_day: 8 }]);
+  await lia.migrate(5);
+  assert.deepEqual(await settings(), { newLemmasPerDay: 8, newFormsPerDay: 20, formsWithWords: true });
+});

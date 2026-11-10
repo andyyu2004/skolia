@@ -1,6 +1,19 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import { LANGUAGE_INFO, RATINGS, isLang, type CardCounts, type Cloze, type Due, type DueCard, type Lang, type Rating, type User } from "@skolia/shared/api";
+  import {
+    CARD_GROUPS,
+    LANGUAGE_INFO,
+    RATINGS,
+    isLang,
+    type CardCounts,
+    type CardGroup,
+    type Cloze,
+    type Due,
+    type DueCard,
+    type Lang,
+    type Rating,
+    type User,
+  } from "@skolia/shared/api";
   import { LANGUAGES } from "@skolia/shared/lang";
   import { formTables, lemmaTables, type Table } from "@skolia/shared/paradigm";
   import { featureWords, UPOS_LABEL } from "@skolia/shared/ud";
@@ -8,20 +21,25 @@
   import Page from "../components/Page.svelte";
   import ParadigmTable from "../components/ParadigmTable.svelte";
   import Pronunciations from "../components/Pronunciations.svelte";
-  import { cardCounts, deleteCloze, dueCards, review, signIn } from "../lib/api.ts";
+  import { cardCounts, deleteCloze, dueCards, getSettings, review, signIn } from "../lib/api.ts";
   import { clue, keyTarget, shortcut } from "../lib/review.ts";
   import { setStatus } from "../lib/words.svelte.ts";
 
-  /** lang is the URL's (#/review/pl); without one, the language with the most to review. */
-  let { user, lang }: { user: User | null | undefined; lang: Lang | null } = $props();
+  /** lang and group are the URL's (#/review/pl/forms); without a language, the one with the
+   * most to review. group only counts when the settings review forms on their own: without
+   * one, words, unless only forms have something. */
+  let { user, lang, group: wanted }: { user: User | null | undefined; lang: Lang | null; group: CardGroup | null } = $props();
 
   const GRADE_LABELS: Record<Rating, string> = { 1: "Again", 2: "Hard", 3: "Good", 4: "Easy" };
+  const GROUP_LABELS: Record<CardGroup, string> = { words: "Words", forms: "Forms" };
   const SHOWN_SENSES = 3;
 
   let counts = $state<CardCounts[] | null>(null);
+  /** Whether forms have their own session; null until the settings have come. */
+  let split = $state<boolean | null>(null);
   let due = $state<Due | null>(null);
-  /** The language due's cards are in, so another language's don't show while it loads. */
-  let dueLang = $state<Lang | null>(null);
+  /** The language and group due's cards are from, so others' don't show while it loads. */
+  let dueFor = $state<string | null>(null);
   let index = $state(0);
   let revealed = $state(false);
   let busy = $state(false);
@@ -31,11 +49,19 @@
   /** Bumped by each load, so an older response can't replace a newer one. */
   let generation = 0;
 
-  const busiest = $derived(
-    counts?.reduce<CardCounts | null>((best, c) => (c.due + c.new > (best ? best.due + best.new : 0) ? c : best), null)?.lang ?? null,
-  );
+  /** Cards to review in one group, or with none in both. */
+  function toReview(c: CardCounts, group: CardGroup | null = null): number {
+    const groups: readonly CardGroup[] = group ? [group] : CARD_GROUPS;
+    return groups.reduce((n, g) => n + c[g].due + c[g].new, 0);
+  }
+
+  const busiest = $derived(counts?.reduce<CardCounts | null>((best, c) => (toReview(c) > (best ? toReview(best) : 0) ? c : best), null)?.lang ?? null);
   const selected = $derived(lang ?? busiest);
-  const withCards = $derived((counts ?? []).filter((c) => c.due + c.new > 0));
+  const withCards = $derived((counts ?? []).filter((c) => toReview(c) > 0));
+  const selectedCounts = $derived(counts?.find((c) => c.lang === selected) ?? null);
+  const group = $derived<CardGroup | null>(
+    split ? (wanted ?? (selectedCounts && toReview(selectedCounts, "words") === 0 && toReview(selectedCounts, "forms") > 0 ? "forms" : "words")) : null,
+  );
   const card = $derived(due?.cards[index]);
   const left = $derived(due ? due.cards.length - index : 0);
 
@@ -45,22 +71,25 @@
 
   async function loadCounts(): Promise<void> {
     try {
-      counts = await cardCounts();
+      const [loaded, settings] = await Promise.all([cardCounts(), getSettings()]);
+      counts = loaded;
+      split = !settings.formsWithWords;
     } catch (e: unknown) {
       error = message(e);
     }
   }
 
-  async function load(language: Lang): Promise<void> {
+  async function load(language: Lang, group: CardGroup | null): Promise<void> {
     const mine = ++generation;
+    const key = `${language}/${group ?? ""}`;
     busy = true;
     error = null;
-    if (dueLang !== language) due = null;
+    if (dueFor !== key) due = null;
     try {
-      const next = await dueCards(language);
+      const next = await dueCards(language, group);
       if (mine !== generation) return;
       due = next;
-      dueLang = language;
+      dueFor = key;
       index = 0;
       revealed = false;
     } catch (e: unknown) {
@@ -75,12 +104,18 @@
   });
 
   $effect(() => {
-    if (user && selected) void load(selected);
+    if (user && selected && split !== null) void load(selected, group);
   });
 
   function refresh(): void {
     void loadCounts();
-    if (selected) void load(selected);
+    if (selected && split !== null) void load(selected, group);
+  }
+
+  function newLeft(left: Due["newLeft"]): string {
+    if (group === "words") return `${left.words} new words left today`;
+    if (group === "forms") return `${left.forms} new forms left today`;
+    return `${left.words} new words and ${left.forms} new forms left today`;
   }
 
   async function reveal(): Promise<void> {
@@ -265,7 +300,7 @@
       <select
         aria-label="Language"
         value={selected ?? ""}
-        onchange={(event) => (location.hash = `#/review/${event.currentTarget.value}`)}
+        onchange={(event) => (location.hash = `#/review/${event.currentTarget.value}${wanted ? `/${wanted}` : ""}`)}
       >
         {#if !selected}
           <option value="" disabled>Choose a language</option>
@@ -273,7 +308,9 @@
           <option value={selected}>{LANGUAGE_INFO[selected].flag} {LANGUAGE_INFO[selected].endonym}</option>
         {/if}
         {#each withCards as c (c.lang)}
-          <option value={c.lang}>{LANGUAGE_INFO[c.lang].flag} {LANGUAGE_INFO[c.lang].endonym} · {c.due} due · {c.new} new</option>
+          <option value={c.lang}
+            >{LANGUAGE_INFO[c.lang].flag} {LANGUAGE_INFO[c.lang].endonym} · {c.words.due + c.forms.due} due · {c.words.new + c.forms.new} new</option
+          >
         {/each}
       </select>
     {/if}
@@ -288,10 +325,20 @@
   {#if user && counts && !selected}
     <p>Nothing to review right now. Words you look up in the reader turn into cards here.</p>
     <Button variant="quiet" onclick={refresh}>Check again</Button>
-  {:else if user && selected && !due}
+  {/if}
+  {#if user && selected && group}
+    <nav class="groups" aria-label="Cards to review">
+      {#each CARD_GROUPS as g (g)}
+        <a href="#/review/{selected}/{g}" aria-current={g === group ? "page" : undefined}
+          >{GROUP_LABELS[g]}{#if selectedCounts}{" "}<span class="count">{toReview(selectedCounts, g)}</span>{/if}</a
+        >
+      {/each}
+    </nav>
+  {/if}
+  {#if user && selected && !due}
     {#if !error}<p class="muted">Loading…</p>{/if}
   {:else if user && due}
-    <p class="counts muted">{left} to go · {due.newLeft} new left today · <a href="#/settings">Settings</a></p>
+    <p class="counts muted">{left} to go · {newLeft(due.newLeft)} · <a href="#/settings">Settings</a></p>
     {#if card}
       <section class="flashcard" aria-live="polite" aria-atomic="true">
         <div class="known">
@@ -358,6 +405,34 @@
   .counts,
   .hint {
     margin: 0;
+  }
+
+  .groups {
+    display: flex;
+    gap: 1.25rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .groups a {
+    margin-bottom: -1px;
+    padding: 0.55rem 0.1rem;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .groups a:hover {
+    color: var(--text);
+  }
+
+  .groups a[aria-current="page"] {
+    border-bottom-color: var(--accent);
+    color: var(--text);
+  }
+
+  .groups .count {
+    color: var(--muted);
+    font-size: 0.85em;
   }
 
   .muted {

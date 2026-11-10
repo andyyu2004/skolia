@@ -8,6 +8,7 @@ import {
   lemmaParam,
   type ApiError,
   type CardCounts,
+  type CardGroup,
   type ClozeList,
   type ClozeMade,
   type Due,
@@ -151,6 +152,12 @@ export async function setWord(lemmaId: LemmaId, status: WordStatus): Promise<voi
   if (!response.ok) throw await failure(response);
 }
 
+/** Takes the word's status away, and its cards out of reviews, keeping their history. */
+export async function clearWordStatus(lemmaId: LemmaId): Promise<void> {
+  const response = await api.me.words[":lemmaId"].$delete({ param: { lemmaId: lemmaParam(lemmaId) } });
+  if (!response.ok) throw await failure(response);
+}
+
 /** The start of the local day, which today's new cards count from. */
 function dayStartOf(now: Date): string {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
@@ -164,9 +171,10 @@ export async function cardCounts(now = new Date()): Promise<CardCounts[] | null>
   return response.json();
 }
 
-/** A language's cards to review. */
-export async function dueCards(lang: Lang, now = new Date()): Promise<Due | null> {
-  const response = await api.me.cards.due.$get({ query: { lang, dayStart: dayStartOf(now) } });
+/** A language's cards to review: one group's, or with no group both. */
+export async function dueCards(lang: Lang, group: CardGroup | null, now = new Date()): Promise<Due | null> {
+  const dayStart = dayStartOf(now);
+  const response = await api.me.cards.due.$get({ query: group ? { lang, dayStart, group } : { lang, dayStart } });
   if (response.status === 401) return null;
   if (!response.ok) throw await failure(response);
   // Hono's JSON type makes the entries' optional fields `| undefined`, which

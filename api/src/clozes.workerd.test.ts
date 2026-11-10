@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { lemmaParam, type Due, type LemmaId, type NewClozeInput, type Rating, type WordStatus } from "@skolia/shared/api";
+import { lemmaParam, type CardGroup, type Due, type LemmaId, type NewClozeInput, type Rating, type WordStatus } from "@skolia/shared/api";
 import { ALICE, NOW, client, loadLexicon, local, raw, setup, useLocal, type App } from "./testing/app.ts";
-import { ORIGIN } from "./testing/harness.ts";
 import { body, expectStatus } from "./testing/responses.ts";
 
 useLocal();
@@ -31,8 +30,8 @@ function make(app: App, headers: Headers | undefined, json: NewClozeInput) {
   return client(app, headers).me.clozes.$post({ json });
 }
 
-async function due(app: App, headers: Headers): Promise<Due> {
-  return (await body("due", client(app, headers).me.cards.due.$get({ query: { lang: "pl", dayStart: DAY_START } }))) as Due;
+async function due(app: App, headers: Headers, group?: CardGroup): Promise<Due> {
+  return (await body("due", client(app, headers).me.cards.due.$get({ query: { lang: "pl", dayStart: DAY_START, group } }))) as Due;
 }
 
 function listed(app: App, headers: Headers, documentId = DOC) {
@@ -47,13 +46,23 @@ function review(app: App, headers: Headers, cardId: string, rating: Rating) {
   return client(app, headers).me.reviews.$post({ json: { id: crypto.randomUUID(), cardId, rating, at: NOW } });
 }
 
+/** Makes the word active and reviews its recognition card, so its new cloze cards come up. */
+async function start(app: App, headers: Headers, lemmaId: LemmaId): Promise<void> {
+  await mark(app, headers, lemmaId, "active");
+  const recognition = (await due(app, headers, "words")).cards.find((c) => c.lemmaId === lemmaId && c.kind === "recognition");
+  if (!recognition) throw new Error(`${lemmaId} has no new recognition card`);
+  await body("review", review(app, headers, recognition.id, 3));
+}
+
 test("a cloze card keeps its sentence and blank, is due with its lemma's entry, and is made once per sentence and word", async () => {
   const app = setup();
   const headers = await signedIn();
   await loadLexicon("pl", "lex/1", [{ lemmaId: "pl:praca:NOUN", lemma: "praca", upos: "NOUN", gloss: "work, job" }]);
   const { cardId } = await body("made", make(app, headers, PRACY), 201);
   assert.deepEqual(await body("made again", make(app, headers, { ...PRACY, why: null }), 200), { cardId });
-  const { cards } = await due(app, headers);
+  assert.deepEqual((await due(app, headers)).cards, []);
+  await start(app, headers, "pl:praca:NOUN");
+  const { cards } = await due(app, headers, "forms");
   assert.equal(cards.length, 1);
   const [card] = cards;
   assert.equal(card?.kind, "cloze");
@@ -73,34 +82,57 @@ test("a lemma can have many cloze cards, and its word's status takes them out of
   await body("first", make(app, headers, PRACY), 201);
   await body("second", make(app, headers, { ...PRACY, sentence: "Mam pracę.", sentenceStart: 90, blankStart: 4, blankEnd: 9 }), 201);
   const kinds = async () => (await due(app, headers)).cards.map((c) => c.kind).sort();
-  assert.deepEqual(await kinds(), ["cloze", "cloze", "production", "recognition"]);
+  assert.deepEqual(await kinds(), ["production", "recognition"]);
+  await start(app, headers, "pl:praca:NOUN");
+  assert.deepEqual(await kinds(), ["cloze", "cloze", "production"]);
   await mark(app, headers, "pl:praca:NOUN", "known");
   assert.deepEqual(await kinds(), []);
   await mark(app, headers, "pl:praca:NOUN", "active");
-  assert.deepEqual(await kinds(), ["cloze", "cloze", "production", "recognition"]);
+  assert.deepEqual(await kinds(), ["cloze", "cloze", "production"]);
 });
 
 test("a cloze card is reviewed if its word has no status or is active, not if it's known or ignored", async () => {
   const app = setup();
   const headers = await signedIn();
-  await body("no status", make(app, headers, PRACY), 201);
+  const noStatus = await body("no status", make(app, headers, PRACY), 201);
   await mark(app, headers, "pl:dom:NOUN", "known");
-  await body("known", make(app, headers, { ...PRACY, lemmaId: "pl:dom:NOUN", sentence: "Idę do domu.", sentenceStart: 100, blankStart: 7, blankEnd: 11 }), 201);
+  const known = await body("known", make(app, headers, { ...PRACY, lemmaId: "pl:dom:NOUN", sentence: "Idę do domu.", sentenceStart: 100, blankStart: 7, blankEnd: 11 }), 201);
   await mark(app, headers, "pl:Ola:NOUN", "ignored");
-  await body("ignored", make(app, headers, { ...PRACY, lemmaId: "pl:Ola:NOUN", sentence: "Widzę Olę.", sentenceStart: 200, blankStart: 6, blankEnd: 9 }), 201);
+  const ignored = await body("ignored", make(app, headers, { ...PRACY, lemmaId: "pl:Ola:NOUN", sentence: "Widzę Olę.", sentenceStart: 200, blankStart: 6, blankEnd: 9 }), 201);
+  // New, they wait for their words to be started
+  assert.deepEqual((await due(app, headers)).cards, []);
+  // Again makes them due within minutes
+  for (const { cardId } of [noStatus, known, ignored]) await expectStatus("review", review(app, headers, cardId, 1), 200);
+  const later = setup({ at: "2026-11-04T00:30:00Z" });
   assert.deepEqual(
-    (await due(app, headers)).cards.map((c) => c.lemmaId),
+    (await due(later, headers)).cards.map((c) => c.lemmaId),
     ["pl:praca:NOUN"],
   );
   await mark(app, headers, "pl:dom:NOUN", "active");
   assert.deepEqual(
-    (await due(app, headers)).cards.map((c) => [c.lemmaId, c.kind]).sort(),
+    (await due(later, headers)).cards.map((c) => [c.lemmaId, c.kind]).sort(),
     [
       ["pl:dom:NOUN", "cloze"],
       ["pl:dom:NOUN", "production"],
       ["pl:dom:NOUN", "recognition"],
       ["pl:praca:NOUN", "cloze"],
     ],
+  );
+});
+
+test("a new cloze card comes up once one of its word's cards has been reviewed, and not for another word's", async () => {
+  const app = setup();
+  const headers = await signedIn();
+  await mark(app, headers, "pl:dom:NOUN", "active");
+  await mark(app, headers, "pl:praca:NOUN", "active");
+  const { cardId } = await body("made", make(app, headers, PRACY), 201);
+  assert.deepEqual(await due(app, headers, "forms"), { cards: [], newLeft: { words: 20, forms: 20 }, featureSets: {} });
+  await start(app, headers, "pl:dom:NOUN");
+  assert.deepEqual((await due(app, headers, "forms")).cards, []);
+  await start(app, headers, "pl:praca:NOUN");
+  assert.deepEqual(
+    (await due(app, headers, "forms")).cards.map((c) => [c.id, c.isNew]),
+    [[cardId, true]],
   );
 });
 
@@ -140,9 +172,9 @@ test("cloze cards need a session, and a blank that's a word inside its sentence"
     { ...PRACY, documentId: "abc" },
     { ...PRACY, lemmaId: "zz:praca:NOUN" as LemmaId },
   ];
-  for (const json of refused) assert.equal((await raw(app, "POST", "/api/me/clozes", headers, json)).status, 400, JSON.stringify(json));
+  for (const json of refused) assert.equal((await make(app, headers, json)).status, 400, JSON.stringify(json));
   assert.equal((await raw(app, "POST", "/api/me/clozes", headers, { ...PRACY, feats: { Case: 1 } })).status, 400);
-  assert.equal((await app.request(`${ORIGIN}/api/me/clozes?documentId=abc`, { headers })).status, 400);
-  assert.equal((await app.request(`${ORIGIN}/api/me/clozes/nope`, { method: "DELETE", headers })).status, 400);
+  assert.equal((await client(app, headers).me.clozes.$get({ query: { documentId: "abc" } })).status, 400);
+  assert.equal((await client(app, headers).me.clozes[":cardId"].$delete({ param: { cardId: "nope" } })).status, 400);
   assert.equal((await due(app, headers)).cards.length, 0);
 });

@@ -4,6 +4,7 @@ import {
   MAX_LOOKUP,
   timestamp,
   type CardCounts,
+  type CardGroup,
   type CardId,
   type ClozeList,
   type ClozeMade,
@@ -41,13 +42,20 @@ export async function setWord(deps: Deps, user: User, lemmaId: LemmaId, status: 
   return NO_CONTENT;
 }
 
+/** Clears the word's status, if it had one, and takes its cards out of reviews; deletes nothing. */
+export async function clearWordStatus(deps: Deps, user: User, lemmaId: LemmaId): Promise<NoContent> {
+  await deps.users.clearWordStatus(user.id, lemmaId);
+  return NO_CONTENT;
+}
+
 /** dayStart: when the user's day started, any ISO time; today's new cards count from it. */
 export async function counts(deps: Deps, user: User, dayStart: string): Promise<Ok<CardCounts[]>> {
   return ok(await deps.users.counts(user.id, timestamp(deps.now()), stored(dayStart)));
 }
 
-export async function due(deps: Deps, user: User, lang: Lang, dayStart: string): Promise<Ok<Due>> {
-  const { cards, newLeft } = await deps.users.due(user.id, lang, timestamp(deps.now()), stored(dayStart), MAX_DUE);
+/** group: only its cards; undefined, both groups'. */
+export async function due(deps: Deps, user: User, lang: Lang, dayStart: string, group: CardGroup | undefined): Promise<Ok<Due>> {
+  const { cards, newLeft } = await deps.users.due(user.id, lang, timestamp(deps.now()), stored(dayStart), MAX_DUE, group);
   return ok({ ...(await withEntries(deps.lexicon, lang, cards)), newLeft });
 }
 

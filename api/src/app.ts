@@ -58,12 +58,15 @@ export function createApp(deps: Deps) {
       zValidator("json", schemas.SetWord, badRequest()),
       (c) => signedIn(c, (user) => cards.setWord(deps, user, c.req.valid("param").lemmaId, c.req.valid("json").status)),
     )
+    .delete("/api/me/words/:lemmaId", zValidator("param", z.object({ lemmaId: schemas.LemmaId }), badRequest(LEMMA_ID_MESSAGE)), (c) =>
+      signedIn(c, (user) => cards.clearWordStatus(deps, user, c.req.valid("param").lemmaId)),
+    )
     .get("/api/me/cards/counts", zValidator("query", schemas.CountsQuery, badRequest("dayStart must be an ISO time")), (c) =>
       signedIn(c, (user) => cards.counts(deps, user, c.req.valid("query").dayStart)),
     )
-    .get("/api/me/cards/due", zValidator("query", schemas.DueQuery, badRequest("lang must be a language and dayStart an ISO time")), (c) => {
-      const { lang, dayStart } = c.req.valid("query");
-      return signedIn(c, (user) => cards.due(deps, user, lang, dayStart));
+    .get("/api/me/cards/due", zValidator("query", schemas.DueQuery, badRequest("lang must be a language, dayStart an ISO time and group words or forms")), (c) => {
+      const { lang, dayStart, group } = c.req.valid("query");
+      return signedIn(c, (user) => cards.due(deps, user, lang, dayStart, group));
     })
     .post("/api/me/reviews", zValidator("json", schemas.ReviewRequest, badRequest()), (c) =>
       signedIn(c, (user) => cards.review(deps, user, c.req.valid("json"))),
