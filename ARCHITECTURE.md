@@ -46,7 +46,7 @@ flowchart LR
   API --> BA
   BA -->|"users, sessions, API keys"| DB
   BA -->|"sign-in"| G
-  API -->|"document metadata, daily cap"| DB
+  API -->|"document metadata"| DB
   API -->|"text, status, analysis, bundle"| R2
   API -->|"job"| Q
   API -->|"RPC: words, cards, reviews, settings"| UDO
@@ -218,7 +218,7 @@ versions/{lang}.json                                    -- what ingest produces 
 ```
 
 - Analyses and bundles are JSON compressed with Brotli (quality 11), stored with `Content-Encoding: br` and sent as stored to clients that accept it (the API decompresses for those that don't). On *Kamizelka*, Brotli was 41% (analysis) and 59% (bundle) the size of gzip, and smaller than zstd at level 22; MessagePack was no smaller than JSON once compressed.
-- Texts are limited to 20,000 characters per import (about 3,000 words, roughly a minute of analysis), checked by the API and again by ingest. The API also accepts at most `MAX_IMPORTS_PER_DAY` imports per user per UTC day (`api/wrangler.jsonc`, 50), counting the entries they added that day, so one user can't take all the container time. System users (`user.type`, skolia.io's own accounts, the end-to-end tests' importer and the curated texts') aren't capped.
+- Texts are limited to 20,000 characters per import (about 3,000 words, roughly a minute of analysis), checked by the API and again by ingest. Imports aren't rate-limited yet.
 - Everything about a document is under one prefix, so it can be inspected in one place. `{analyzer}` and `{lexicon}` are short hashes of the version strings. Stale analyses and bundles are the ones `status.json` doesn't point at; clean them up by that rule, not by age (an old document's current analysis is old too).
 - Documents are deduped by a hash of language and text (`sha256("{lang}\n{text}")`): if many users import the same text, it's analyzed once. The text is stored once (`document`), and each user who imports it has their own entry (`user_document`) with their title, licence and visibility. A user sees their own entries and everyone's public ones; a text with no public entry is a 404 to anyone without an entry. Deleting an entry deletes only the entry: texts and their blobs are never deleted, so importing one again needn't analyse it again.
 - An analysis or bundle is named by everything it depends on: the blob shape (`SCHEMA`, `BUNDLE_SCHEMA`), the analyser (plugin version, models, Morfeusz, snap policy, Walenty) and, for the bundle, the bundle-making code (`BUNDLER_VERSION`) and the lexicon. Bump `PLUGIN_VERSION` whenever the analysis output changes, `BUNDLER_VERSION` whenever the bundle for the same analysis and lexicon does (lookup fallbacks, how paradigms are made), and the shape numbers whenever the JSON shape does. The generated `schema.gen.ts` carries the shape numbers, and the reader refuses a shape it doesn't know.

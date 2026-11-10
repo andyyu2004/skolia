@@ -1,7 +1,7 @@
 // skolia-api on Cloudflare Workers (api/wrangler.jsonc). Static assets (the reader) are
 // served before the Worker runs, except for /api/*.
 import type { IngestJob } from "@skolia/shared/schema";
-import { createApp, parseImportCap } from "../app.ts";
+import { createApp } from "../app.ts";
 import { NO_AUTH, createAuth } from "../auth.ts";
 import { log } from "../log.ts";
 import type { Auth } from "../ports.ts";
@@ -24,7 +24,6 @@ interface Env extends LexiconBindings {
   /** The ingest Worker's (worker/ingest.ts), for where a document is in its queue */
   INGESTER: DurableObjectNamespace<Ingester>;
   /** wrangler vars (api/wrangler.jsonc); a preview's from infra/preview.py */
-  MAX_IMPORTS_PER_DAY?: string;
   BASE_URL?: string;
   BETTER_AUTH_SECRET?: string;
   GOOGLE_CLIENT_ID?: string;
@@ -55,14 +54,10 @@ function authFor(env: Env): Auth {
 
 export default {
   fetch(request, env, ctx) {
-    const maxImportsPerDay = parseImportCap(env.MAX_IMPORTS_PER_DAY);
-    if (maxImportsPerDay === null) logger.error("MAX_IMPORTS_PER_DAY isn't set; refusing imports");
     const app = createApp({
       auth: authFor(env),
       users: new DurableObjectUsers(env.USER),
       lexicon: new D1Lexicon(lexiconsOf(env)),
-      // Misconfigured: accept none rather than run uncapped
-      maxImportsPerDay: maxImportsPerDay ?? 0,
       version: VERSION,
       documents: new D1Documents(env.DB),
       blobs: new R2Blobs(env.BLOBS),

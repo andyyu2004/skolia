@@ -30,17 +30,15 @@ export const ALICE = { name: "Alice", email: "alice@example.com" };
 
 /** jobsOf: what the ingest container answers about its jobs; none is running unless given. */
 export function setup({
-  maxImportsPerDay = 100,
   auth = local.auth,
   at = NOW,
   jobsOf = async () => null,
-}: { maxImportsPerDay?: number; auth?: Auth; at?: string; jobsOf?: JobsOf } = {}) {
+}: { auth?: Auth; at?: string; jobsOf?: JobsOf } = {}) {
   const { env } = local;
   return createApp({
     auth,
     users: new DurableObjectUsers(env.USER),
     lexicon: new D1Lexicon(lexiconsOf(env)),
-    maxImportsPerDay,
     documents: new D1Documents(env.DB),
     blobs: new R2Blobs(env.BLOBS),
     queue: new CloudflareQueue(env.INGEST, jobsOf),

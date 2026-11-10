@@ -68,8 +68,6 @@ export interface DocumentStore {
   update(id: DocumentId, user: UserId, fields: EntryFields): Promise<void>;
   /** Delete the user's entry. The text stays, for anyone who imports it again. */
   remove(id: DocumentId, user: UserId): Promise<void>;
-  /** How many entries this user has imported at or after this time. */
-  countImportedSince(user: UserId, since: Timestamp): Promise<number>;
 }
 
 export interface StoredBlob {
@@ -143,7 +141,6 @@ export interface Deps {
   queue: JobQueue;
   /** New texts accepted per UTC day, across everyone: analysis time is what costs
    * money. Importing a text that's already here doesn't count. */
-  maxImportsPerDay: number;
   /** git describe of the build */
   version: string;
   now: () => Date;

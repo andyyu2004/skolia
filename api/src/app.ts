@@ -155,13 +155,6 @@ export function acceptsEncoding(header: string | undefined, encoding: string): b
   });
 }
 
-/** A daily import cap from configuration: a whole number, at least 0. Null if it isn't
- * one, so the caller can refuse to start rather than run uncapped. */
-export function parseImportCap(raw: string | undefined): number | null {
-  if (raw === undefined || !/^\d+$/.test(raw.trim())) return null;
-  return Number(raw.trim());
-}
-
 /** A 400 with the first problem the schema found, or `message` in its place. */
 function badRequest(message?: string) {
   return (result: { success: true } | { success: false; error: z.core.$ZodError }, c: Context) => {

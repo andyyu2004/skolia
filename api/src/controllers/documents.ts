@@ -32,13 +32,12 @@ export async function list(deps: Deps, viewer: User | null): Promise<Ok<Document
 
 /** 202 if the text is queued, 200 if it's already here and not failed (a failed import is
  * retried by importing the same text again). A text someone else imported gets the user's
- * own entry, with their title, visibility and licence. Each new entry counts toward the
- * user's daily cap. */
+ * own entry, with their title, visibility and licence. */
 export async function importText(
   deps: Deps,
   user: User,
   body: z.output<typeof schemas.ImportRequest>,
-): Promise<Json<DocumentSummary, 200> | Json<DocumentSummary, 202> | Failed<429>> {
+): Promise<Json<DocumentSummary, 200> | Json<DocumentSummary, 202>> {
   const fields: EntryFields = {
     title: body.title?.trim().slice(0, MAX_TITLE_LENGTH) || firstWords(body.text),
     visibility: body.visibility,
@@ -50,11 +49,6 @@ export async function importText(
   const known = await deps.documents.has(id);
   const own = known ? await ownEntry(deps, id, user) : null;
   if (own === null) {
-    const today = new Date(deps.now());
-    today.setUTCHours(0, 0, 0, 0);
-    if (user.type !== "system" && (await deps.documents.countImportedSince(user.id, timestamp(today))) >= deps.maxImportsPerDay) {
-      return fail(429, "Today's imports are used up. Try again tomorrow.");
-    }
     if (!known) await deps.blobs.put(textKey(id), body.text, "text/plain; charset=utf-8");
     await deps.documents.add({ id, lang: body.lang, words: countWords(body.text) }, { id, user: user.id, imported: timestamp(deps.now()), ...fields });
   } else if (own.visibility === "private" && fields.visibility === "public") {

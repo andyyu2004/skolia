@@ -192,7 +192,6 @@ export const DOCUMENT_QUERIES = {
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
   update: "UPDATE user_document SET title = ?3, visibility = ?4, licence = ?5, author = ?6, source = ?7 WHERE document_id = ?1 AND user_id = ?2",
   remove: "DELETE FROM user_document WHERE document_id = ?1 AND user_id = ?2",
-  countImportedSince: "SELECT COUNT(*) AS n FROM user_document WHERE user_id = ?1 AND imported_at >= ?2",
 } as const;
 
 export class D1Documents implements DocumentStore {
@@ -234,11 +233,6 @@ export class D1Documents implements DocumentStore {
 
   async remove(id: DocumentId, user: UserId): Promise<void> {
     await this.db.prepare(DOCUMENT_QUERIES.remove).bind(id, user).run();
-  }
-
-  async countImportedSince(user: UserId, since: Timestamp): Promise<number> {
-    const row = await this.db.prepare(DOCUMENT_QUERIES.countImportedSince).bind(user, since).first();
-    return z.object({ n: z.number() }).parse(row).n;
   }
 }
 

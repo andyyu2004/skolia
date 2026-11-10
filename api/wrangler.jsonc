@@ -57,10 +57,8 @@
       }
     }
   ],
-  // MAX_IMPORTS_PER_DAY: new texts the API accepts per UTC day, across all users;
-  // analysis time is the main cost. wrangler dev takes BASE_URL from api/.env, and the
-  // auth secrets from api/.env.local (DEVELOP.md); deployed, they're wrangler secrets.
-  "vars": { "MAX_IMPORTS_PER_DAY": "50", "BASE_URL": "https://skolia.io" },
+  // wrangler dev takes BASE_URL from api/.env, and the auth secrets from api/.env.local (DEVELOP.md); deployed, they're wrangler secrets.
+  "vars": { "BASE_URL": "https://skolia.io" },
   "queues": {
     "producers": [{ "binding": "INGEST", "queue": "skolia-ingest" }]
   },
@@ -103,7 +101,7 @@
         }
       ],
       "r2_buckets": [{ "binding": "BLOBS", "bucket_name": "skolia-staging" }],
-      "vars": { "MAX_IMPORTS_PER_DAY": "50", "BASE_URL": "https://staging.skolia.io" },
+      "vars": { "BASE_URL": "https://staging.skolia.io" },
       "queues": {
         "producers": [{ "binding": "INGEST", "queue": "skolia-ingest-staging" }]
       },

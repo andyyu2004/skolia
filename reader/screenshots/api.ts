@@ -127,7 +127,6 @@ function deps(signedIn: boolean): Deps {
       add: async () => {},
       update: async () => {},
       remove: async () => {},
-      countImportedSince: async () => 0,
     },
     blobs: {
       get: async (key) => blobs.get(key) ?? null,
@@ -137,7 +136,6 @@ function deps(signedIn: boolean): Deps {
       send: async () => {},
       jobs: async () => ({ loading: false, running: [], waiting: [NOTATKI.id] }),
     },
-    maxImportsPerDay: 100,
     version: "screenshots",
     now: () => NOW,
   };

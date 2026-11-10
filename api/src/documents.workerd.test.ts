@@ -63,29 +63,6 @@ test("importing the same text again doesn't queue it twice, unless it failed", a
   assert.equal((await local.takeQueued()).length, 1);
 });
 
-test("new texts past the daily cap are refused; texts already here still open", async () => {
-  const app = setup({ maxImportsPerDay: 2 });
-  assert.equal((await importText(app, "Pierwszy tekst.")).status, 202);
-  assert.equal((await importText(app, "Drugi tekst.")).status, 202);
-  const refused = await importText(app, "Trzeci tekst.");
-  assert.equal(refused.status, 429);
-  assert.match(((await refused.json()) as { error: string }).error, /tomorrow/);
-  assert.equal((await importText(app, "Pierwszy tekst.")).status, 200);
-  assert.equal((await local.takeQueued()).length, 2);
-});
-
-test("system users import past the daily cap, and their imports don't count toward it", async () => {
-  const app = setup({ maxImportsPerDay: 1 });
-  const { id } = await local.signUp({ name: "Seed", email: "seed@skolia.io" });
-  await local.env.DB.prepare(`UPDATE "user" SET "type" = 'system' WHERE "id" = ?`).bind(id).run();
-  const system = { headers: await local.signIn(id) };
-  assert.equal((await importText(app, "Pierwszy tekst.", system)).status, 202);
-  assert.equal((await importText(app, "Drugi tekst.", system)).status, 202);
-  assert.equal((await importText(app, "Trzeci tekst.")).status, 202);
-  assert.equal((await importText(app, "Czwarty tekst.", system)).status, 202);
-  assert.equal((await importText(app, "Piąty tekst.")).status, 429);
-});
-
 test("texts over the limit are refused, oversized bodies without being parsed", async () => {
   const app = setup();
   assert.equal((await importText(app, "a".repeat(MAX_TEXT_LENGTH + 1))).status, 400);
@@ -217,15 +194,6 @@ test("a text only privately imported is unknown to everyone else, its text, anal
   await expectStatus("someone else's position", client(app, alice).me.positions[":id"].$put({ param: { id }, json: position }), 404);
   await expectStatus("the importer's position", client(app, importer).me.positions[":id"].$put({ param: { id }, json: position }), 204);
   await expectStatus("the importer's text", client(app, importer).documents[":id"].text.$get({ param: { id } }), 200);
-});
-
-test("the daily cap is each user's, and a text someone else imported counts toward it", async () => {
-  const app = setup({ maxImportsPerDay: 1 });
-  await imported(app, importer, TEXT);
-  await expectStatus("Ivy's second", client(app, importer).documents.$post({ json: { text: "Inny tekst.", lang: "pl" } }), 429);
-  const alice = await local.signIn((await local.signUp(ALICE)).id);
-  await expectStatus("Alice's first, a known text", client(app, alice).documents.$post({ json: { text: TEXT, lang: "pl" } }), 200);
-  await expectStatus("Alice's second", client(app, alice).documents.$post({ json: { text: "Inny tekst.", lang: "pl" } }), 429);
 });
 
 test("deleting entries keeps the text for others, and keeps it stored once nobody has one", async () => {

@@ -1,17 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { acceptsEncoding, parseImportCap } from "./app.ts";
+import { acceptsEncoding } from "./app.ts";
 import { STUCK_AFTER_MS, countWords, isOutdated, isStuck, nameOf, parseStatus, parseVersions } from "./controllers/documents.ts";
 
 const NOW = "2026-11-04T00:00:00Z";
-
-test("the import cap must be a whole number", () => {
-  assert.equal(parseImportCap("50"), 50);
-  assert.equal(parseImportCap(" 0 "), 0);
-  assert.equal(parseImportCap(undefined), null);
-  assert.equal(parseImportCap("-1"), null);
-  assert.equal(parseImportCap("lots"), null);
-});
 
 test("accept-encoding parsing", () => {
   assert.equal(acceptsEncoding("gzip, deflate, br, zstd", "br"), true);
