@@ -1,14 +1,14 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import { LANGUAGE_INFO, RATINGS, isLang, type CardCounts, type Due, type DueCard, type Lang, type Rating, type User } from "@skolia/shared/api";
+  import { LANGUAGE_INFO, RATINGS, isLang, type CardCounts, type Cloze, type Due, type DueCard, type Lang, type Rating, type User } from "@skolia/shared/api";
   import { LANGUAGES } from "@skolia/shared/lang";
-  import { lemmaTables, type Table } from "@skolia/shared/paradigm";
-  import { UPOS_LABEL } from "@skolia/shared/ud";
+  import { formTables, lemmaTables, type Table } from "@skolia/shared/paradigm";
+  import { featureWords, UPOS_LABEL } from "@skolia/shared/ud";
   import Button from "../components/Button.svelte";
   import Page from "../components/Page.svelte";
   import ParadigmTable from "../components/ParadigmTable.svelte";
   import Pronunciations from "../components/Pronunciations.svelte";
-  import { cardCounts, dueCards, review, signIn } from "../lib/api.ts";
+  import { cardCounts, deleteCloze, dueCards, review, signIn } from "../lib/api.ts";
   import { clue, keyTarget, shortcut } from "../lib/review.ts";
   import { setStatus } from "../lib/words.svelte.ts";
 
@@ -125,6 +125,26 @@
     showButton?.focus();
   }
 
+  /** Deletes a cloze card, made from a sentence the parser got wrong or one not worth
+   * practising, with its reviews. */
+  async function removeCloze(): Promise<void> {
+    if (!card || !due || busy || !confirm("Delete this card and its reviews?")) return;
+    const { id } = card;
+    busy = true;
+    error = null;
+    try {
+      await deleteCloze(id);
+      due.cards = due.cards.filter((c) => c.id !== id);
+      revealed = false;
+    } catch (e: unknown) {
+      error = message(e);
+    } finally {
+      busy = false;
+    }
+    await tick();
+    showButton?.focus();
+  }
+
   function langOf(c: DueCard): Lang | undefined {
     const lang = c.lemmaId.split(":")[0];
     return isLang(lang) ? lang : undefined;
@@ -149,7 +169,14 @@
     if (!lang || !c.entry || !due) return [];
     const sets = due.featureSets;
     const language = LANGUAGES[lang];
-    return lemmaTables((id) => sets[String(id)], c.entry, language.paradigm, language.mergeLabels);
+    const featsOf = (id: number) => sets[String(id)];
+    return c.cloze
+      ? formTables(featsOf, c.entry, { text: blankOf(c.cloze), feats: c.cloze.feats }, language.paradigm, language.mergeLabels)
+      : lemmaTables(featsOf, c.entry, language.paradigm, language.mergeLabels);
+  }
+
+  function blankOf(cloze: Cloze): string {
+    return cloze.sentence.slice(cloze.blankStart, cloze.blankEnd);
   }
 
   function lemmaOf(c: DueCard): string {
@@ -182,6 +209,22 @@
   {:else}
     <p class="muted">No dictionary meaning yet, so this card has no clue.</p>
   {/if}
+{/snippet}
+
+<!-- The sentence with the word left blank and its lemma to go on, or filled in -->
+{#snippet sentence(c: DueCard, cloze: Cloze, filled: boolean)}
+  <p class="sentence" lang={langOf(c)}>
+    {cloze.sentence.slice(0, cloze.blankStart)}{#if filled}<mark>{blankOf(cloze)}</mark>{:else}<span class="blank"
+        ><span class="visually-hidden">blank</span></span
+      > <span class="base">({lemmaOf(c)})</span>{/if}{cloze.sentence.slice(cloze.blankEnd)}
+  </p>
+{/snippet}
+
+{#snippet why(cloze: Cloze)}
+  {@const grammar = featureWords(cloze.feats)}
+  {#if grammar.length > 0}<p class="muted">{grammar.join(" · ")}</p>{/if}
+  {#if cloze.why}<p class="why">{cloze.why}</p>{/if}
+  <p class="source"><a href="#/doc/{cloze.documentId}">Open the text</a></p>
 {/snippet}
 
 {#snippet answer(c: DueCard)}
@@ -252,16 +295,26 @@
     {#if card}
       <section class="flashcard" aria-live="polite" aria-atomic="true">
         <div class="known">
-          <Button variant="quiet" small disabled={busy} title="You know this word: stop reviewing it" onclick={markKnown}>Known</Button>
+          {#if card.cloze}
+            <Button variant="quiet" small disabled={busy} title="Delete this card and its reviews" onclick={removeCloze}>Delete</Button>
+          {:else}
+            <Button variant="quiet" small disabled={busy} title="You know this word: stop reviewing it" onclick={markKnown}>Known</Button>
+          {/if}
         </div>
-        {#if card.kind === "recognition"}
+        {#if card.cloze}
+          {@render sentence(card, card.cloze, revealed)}
+        {:else if card.kind === "recognition"}
           {@render lemma(card)}
         {:else}
           {@render prompt(card)}
         {/if}
         {#if revealed}
           <hr />
-          {#if card.kind === "production"}{@render lemma(card)}{/if}
+          {#if card.cloze}
+            {@render why(card.cloze)}
+          {:else if card.kind === "production"}
+            {@render lemma(card)}
+          {/if}
           {@render answer(card)}
         {/if}
       </section>
@@ -346,6 +399,48 @@
     font-family: var(--reading);
     font-size: 2rem;
     margin: 0;
+  }
+
+  .sentence {
+    font-family: var(--reading);
+    font-size: 1.5rem;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  .blank {
+    display: inline-block;
+    width: 3em;
+    border-bottom: 2px solid var(--muted);
+  }
+
+  .base {
+    color: var(--muted);
+  }
+
+  mark {
+    background: none;
+    color: inherit;
+    font-weight: 600;
+    border-bottom: 2px solid var(--accent);
+  }
+
+  .why,
+  .source {
+    margin: 0;
+  }
+
+  .source {
+    font-size: 0.85rem;
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   .glosses {

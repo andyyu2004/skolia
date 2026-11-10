@@ -16,6 +16,8 @@
   import type { Recording } from "@skolia/shared/schema";
   import { LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
   import { setStatus, words as known } from "../../lib/words.svelte.ts";
+  import { addCloze, clozes } from "../../lib/clozes.svelte.ts";
+  import { MAX_CLOZE_SENTENCE, MAX_CLOZE_WHY } from "@skolia/shared/api";
   import type { ReaderMode } from "../../lib/mode.ts";
   import { paradigmTables } from "@skolia/shared/paradigm";
   import { CASE_NAME, featureWords, roleLabel, UPOS_LABEL } from "@skolia/shared/ud";
@@ -35,6 +37,8 @@
     mode,
     headText,
     sentenceTokens,
+    sentenceText,
+    documentId,
     onselectToken,
     onclose,
   }: {
@@ -45,6 +49,9 @@
     mode: ReaderMode;
     headText: (sentence: number, index: number) => string | null;
     sentenceTokens: (sentence: number) => Token[];
+    /** A sentence's text and where it starts in the document. */
+    sentenceText: (sentence: number) => { start: number; text: string } | null;
+    documentId: string;
     onselectToken: (sentence: number, index: number) => void;
     onclose: () => void;
   } = $props();
@@ -228,6 +235,42 @@
     }
   }
 
+  /** A cloze card practises a form: offered for a word that isn't its lemma (pracy, not
+   * praca), in a sentence short enough to keep. */
+  function clozeOf(w: (typeof words)[number]) {
+    if (!learnable(w) || sameWord(w.entry?.lemma ?? w.ref.token.lemma ?? w.ref.token.text, w.ref.token.text)) return null;
+    const found = sentenceText(w.ref.sentence);
+    if (!found || found.text.length > MAX_CLOZE_SENTENCE) return null;
+    const { token } = w.ref;
+    const why = w.caseWhy && w.caseWhy.text.length <= MAX_CLOZE_WHY ? w.caseWhy.text : null;
+    return {
+      lemmaId: w.lemmaId,
+      documentId,
+      sentence: found.text,
+      sentenceStart: found.start,
+      blankStart: token.start - found.start,
+      blankEnd: token.end - found.start,
+      feats: { ...token.feats } as Record<string, string>,
+      why,
+    };
+  }
+
+  /** The word whose cloze card is being made, or failed to be, by where it starts. */
+  let clozing = $state<number | null>(null);
+  let clozeError = $state<{ start: number; message: string } | null>(null);
+
+  async function cloze(request: NonNullable<ReturnType<typeof clozeOf>>): Promise<void> {
+    const start = request.sentenceStart + request.blankStart;
+    clozing = start;
+    clozeError = null;
+    try {
+      await addCloze(request);
+    } catch (e: unknown) {
+      clozeError = { start, message: `Couldn't make the card: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    clozing = null;
+  }
+
   async function add(lemmaId: LemmaId): Promise<void> {
     adding = lemmaId;
     statusError = null;
@@ -343,20 +386,40 @@
           <span class="lemma">(<span {lang}>{word.entry?.lemma ?? token.lemma}</span>)</span>
         {/if}
       </h2>
-      {#if known.byId && learnable(word)}
-        {@const status = known.byId[word.lemmaId]?.status}
+      {#if known.byId}
+        {@const lemmaId = learnable(word) ? word.lemmaId : null}
+        {@const status = lemmaId && known.byId[lemmaId]?.status}
+        {@const offerAdd = lemmaId !== null && status === undefined && mode === "reading"}
+        {@const request = clozeOf(word)}
+        {@const clozed = request !== null && clozes.documentId === documentId && clozes.starts?.has(token.start) === true}
         {#if status === "active"}
           <p class="in-cards muted small">In your cards</p>
-        {:else if status === undefined && mode === "reading"}
+        {/if}
+        {#if clozed}
+          <p class="in-cards muted small">This sentence is in your cards, with {token.text} to fill in</p>
+        {/if}
+        {#if offerAdd || (request && !clozed)}
           <div class="add-card">
-            <Button variant="quiet" small disabled={adding === word.lemmaId} onclick={() => void add(word.lemmaId)}
-              >Add to cards</Button
-            >
+            {#if offerAdd && lemmaId}
+              <Button variant="quiet" small disabled={adding === lemmaId} onclick={() => void add(lemmaId)}>Add to cards</Button>
+            {/if}
+            {#if request && !clozed}
+              <Button
+                variant="quiet"
+                small
+                disabled={clozing === token.start}
+                title="A card with this sentence, {token.text} left blank for you to fill in"
+                onclick={() => void cloze(request)}>Practise {token.text} in this sentence</Button
+              >
+            {/if}
           </div>
         {/if}
       {/if}
       {#if word.lemmaId && statusError?.lemmaId === word.lemmaId}
         <p class="error" role="alert">{statusError.message}</p>
+      {/if}
+      {#if clozeError?.start === token.start}
+        <p class="error" role="alert">{clozeError.message}</p>
       {/if}
       {#snippet speakers(recordings: Recording[], word: string)}
         {#each recordings as r (r.audio)}
@@ -719,7 +782,10 @@
     color: var(--error);
   }
 
-  .add-card :global(button) {
+  .add-card {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
     margin: 0.25rem 0;
   }
 

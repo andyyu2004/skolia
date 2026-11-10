@@ -5,6 +5,9 @@ import {
   LANGS,
   UPOS,
   type CardCounts,
+  type CardId,
+  type ClozeList,
+  type NewCloze,
   type DocumentId,
   type FeatureSets,
   type Lang,
@@ -64,6 +67,18 @@ export class DurableObjectUsers implements UserData {
 
   async review(userId: UserId, request: ReviewRequest, now: Timestamp): Promise<ReviewOutcome> {
     return this.users.getByName(userId).review(request, now);
+  }
+
+  async makeCloze(userId: UserId, cloze: NewCloze, now: Timestamp): Promise<{ cardId: CardId; made: boolean }> {
+    return this.users.getByName(userId).makeCloze(cloze, now);
+  }
+
+  async clozes(userId: UserId, documentId: DocumentId): Promise<ClozeList> {
+    return this.users.getByName(userId).clozes(documentId);
+  }
+
+  async deleteCloze(userId: UserId, cardId: CardId): Promise<boolean> {
+    return this.users.getByName(userId).deleteCloze(cardId);
   }
 
   async settings(userId: UserId): Promise<Settings> {

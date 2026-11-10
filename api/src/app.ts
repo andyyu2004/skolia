@@ -68,6 +68,15 @@ export function createApp(deps: Deps) {
     .post("/api/me/reviews", zValidator("json", schemas.ReviewRequest, badRequest()), (c) =>
       signedIn(c, (user) => cards.review(deps, user, c.req.valid("json"))),
     )
+    .post("/api/me/clozes", zValidator("json", schemas.NewCloze, badRequest()), (c) =>
+      signedIn(c, (user) => cards.makeCloze(deps, user, c.req.valid("json"))),
+    )
+    .get("/api/me/clozes", zValidator("query", schemas.ClozesQuery, badRequest(DOCUMENT_ID_MESSAGE)), (c) =>
+      signedIn(c, (user) => cards.clozes(deps, user, c.req.valid("query").documentId)),
+    )
+    .delete("/api/me/clozes/:cardId", zValidator("param", z.object({ cardId: schemas.CardId }), badRequest("card id must be a UUID")), (c) =>
+      signedIn(c, (user) => cards.deleteCloze(deps, user, c.req.valid("param").cardId)),
+    )
     .get("/api/me/positions/:id", zValidator("param", z.object({ id: schemas.DocumentId }), badRequest(DOCUMENT_ID_MESSAGE)), (c) =>
       signedIn(c, (user) => positions.get(deps, user, c.req.valid("param").id)),
     )

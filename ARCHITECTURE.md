@@ -24,7 +24,7 @@ flowchart LR
       API["Hono app (api/src/app.ts)"]
       BA["Better Auth"]
     end
-    UDO["User DO, one per user: word, card, review, settings"]
+    UDO["User DO, one per user: word, card, cloze, review, settings"]
     DB[("D1 skolia: document, auth tables")]
     LX[("D1 skolia-lexicon-{lang}, one per language: entry, featureset, loaded")]
     R2[("R2 skolia: doc/{id}/..., versions/{lang}.json")]
@@ -49,7 +49,7 @@ flowchart LR
   API -->|"document metadata"| DB
   API -->|"text, status, analysis, bundle"| R2
   API -->|"job"| Q
-  API -->|"RPC: words, cards, reviews, settings"| UDO
+  API -->|"RPC: words, cards, clozes, reviews, settings"| UDO
   API -->|"entries for due cards"| LX
   API -->|"RPC: a document's place in the queue"| IDO
   Q --> CON

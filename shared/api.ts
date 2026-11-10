@@ -231,10 +231,19 @@ export interface DocumentList {
 export const WORD_STATUSES = ["active", "known", "ignored"] as const;
 export type WordStatus = (typeof WORD_STATUSES)[number];
 
-/** recognition: the lemma on the front, its glosses on the back. production: the other
- * way round. */
-export const CARD_KINDS = ["recognition", "production"] as const;
+/** A word's cards, one of each. recognition: the lemma on the front, its glosses on the
+ * back. production: the other way round. */
+export const WORD_CARD_KINDS = ["recognition", "production"] as const;
+
+/** cloze: a sentence from a text with a word blanked out, its lemma the hint. Made from the
+ * reader, any number per lemma, and not tied to the word's status. */
+export const CARD_KINDS = [...WORD_CARD_KINDS, "cloze"] as const;
 export type CardKind = (typeof CARD_KINDS)[number];
+
+/** Longest sentence a cloze card keeps, in characters. */
+export const MAX_CLOZE_SENTENCE = 2000;
+/** Longest explanation of the blanked word's form a cloze card keeps. */
+export const MAX_CLOZE_WHY = 500;
 
 /** ts-fsrs's grades: Again, Hard, Good, Easy. */
 export const RATINGS = [1, 2, 3, 4] as const;
@@ -327,6 +336,25 @@ export interface DueCard extends ScheduledCard {
 }
 
 export type ScheduledCard = z.output<typeof schemas.ScheduledCard>;
+
+/** A cloze card's sentence, copied from its text so the card outlives the text and its
+ * analysis. The blank is sentence.slice(blankStart, blankEnd); sentenceStart is where the
+ * sentence starts in the text, for going back to it. feats: the blanked word's, and why:
+ * the reader's explanation of its case, both from the analysis when the card was made. */
+export type Cloze = z.output<typeof schemas.Cloze>;
+export type NewCloze = z.output<typeof schemas.NewCloze>;
+/** What the reader sends: the same, before the API's validation brands its ids. */
+export type NewClozeInput = z.input<typeof schemas.NewCloze>;
+
+/** The cloze card made, or the one the sentence and word already had. */
+export interface ClozeMade {
+  cardId: CardId;
+}
+
+/** A text's cloze cards, by where their blanks start in it. */
+export interface ClozeList {
+  clozes: { cardId: CardId; start: number }[];
+}
 
 /** Cards due now, then new cards up to what's left of today's allowance. */
 export interface Due {

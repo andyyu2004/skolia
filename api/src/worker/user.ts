@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { CARD_KINDS, LANGS, MATURE_DAYS, timestamp, type CardCounts, type DocumentId, type Timestamp, type Lang, type LemmaId, type ReviewRequest, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
+import { LANGS, WORD_CARD_KINDS, MATURE_DAYS, timestamp, type CardCounts, type CardId as CardIdType, type ClozeList, type DocumentId, type NewCloze, type Timestamp, type Lang, type LemmaId, type ReviewRequest, type ScheduledCard, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
 import * as schemas from "@skolia/shared/schemas";
 import { CardId } from "@skolia/shared/schemas";
 import type { DueCards, ReviewOutcome, StoredPosition } from "../ports.ts";
@@ -14,6 +14,13 @@ export interface MigrationStatus {
 }
 
 let checksummed: Promise<Checksummed[]> | undefined;
+
+/** A row of due()'s query: a card, with its cloze's columns if it's a cloze card. */
+function scheduled(row: Record<string, SqlStorageValue>): ScheduledCard {
+  const { id, lemmaId, kind, dueAt, documentId, sentence, sentenceStart, blankStart, blankEnd, feats, why } = row;
+  const cloze = documentId === null ? null : { documentId, sentence, sentenceStart, blankStart, blankEnd, feats: JSON.parse(String(feats)), why };
+  return schemas.ScheduledCard.parse({ id, lemmaId, kind, dueAt, isNew: row["isNew"] === 1, cloze });
+}
 
 export class User extends DurableObject<object> {
   private readonly sql: SqlStorage;
@@ -65,13 +72,13 @@ export class User extends DurableObject<object> {
         now,
       );
       const active = status === "active" ? 1 : 0;
-      this.sql.exec(`UPDATE card SET active = ? WHERE lemma_id = ?`, active, lemmaId);
+      this.sql.exec(`UPDATE card SET active = ? WHERE lemma_id = ? AND kind != 'cloze'`, active, lemmaId);
       if (!active) return;
-      for (const kind of CARD_KINDS) {
+      for (const kind of WORD_CARD_KINDS) {
         const id = CardId.parse(crypto.randomUUID());
         this.sql.exec(
           `INSERT INTO card (id, lemma_id, kind, created, active, fsrs) VALUES (?, ?, ?, ?, 1, ?)
-           ON CONFLICT (lemma_id, kind) DO NOTHING`,
+           ON CONFLICT (lemma_id, kind) WHERE kind != 'cloze' DO NOTHING`,
           id,
           lemmaId,
           kind,
@@ -79,6 +86,59 @@ export class User extends DurableObject<object> {
           toJson(newCard(s, id, new Date(now))),
         );
       }
+    });
+  }
+
+  /** A new cloze card for the word in the sentence, or the one it already has: the same
+   * text, sentence and blank. Whether the card was made. */
+  async makeCloze(cloze: NewCloze, now: Timestamp): Promise<{ cardId: CardIdType; made: boolean }> {
+    const s = await fsrs();
+    return this.ctx.storage.transactionSync(() => {
+      const had = this.sql
+        .exec(`SELECT card_id FROM cloze WHERE document_id = ? AND sentence_start = ? AND blank_start = ?`, cloze.documentId, cloze.sentenceStart, cloze.blankStart)
+        .toArray()[0];
+      if (had !== undefined) return { cardId: CardId.parse(had["card_id"]), made: false };
+      const id = CardId.parse(crypto.randomUUID());
+      this.sql.exec(
+        `INSERT INTO card (id, lemma_id, kind, created, active, fsrs) VALUES (?, ?, 'cloze', ?, 1, ?)`,
+        id,
+        cloze.lemmaId,
+        now,
+        toJson(newCard(s, id, new Date(now))),
+      );
+      this.sql.exec(
+        `INSERT INTO cloze (card_id, document_id, sentence, sentence_start, blank_start, blank_end, feats, why)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        id,
+        cloze.documentId,
+        cloze.sentence,
+        cloze.sentenceStart,
+        cloze.blankStart,
+        cloze.blankEnd,
+        JSON.stringify(cloze.feats),
+        cloze.why,
+      );
+      return { cardId: id, made: true };
+    });
+  }
+
+  /** A text's cloze cards, by where their blanks start in it. */
+  clozes(documentId: DocumentId): ClozeList {
+    const rows = this.sql
+      .exec(`SELECT card_id, sentence_start + blank_start AS start FROM cloze WHERE document_id = ? ORDER BY start`, documentId)
+      .toArray();
+    return { clozes: rows.map((row) => ({ cardId: CardId.parse(row["card_id"]), start: Number(row["start"]) })) };
+  }
+
+  /** Deletes a cloze card and its reviews; a word's cards can only be taken out of reviews
+   * (setWord). Whether there was one. */
+  deleteCloze(cardId: CardIdType): boolean {
+    return this.ctx.storage.transactionSync(() => {
+      if (this.sql.exec(`SELECT 1 FROM cloze WHERE card_id = ?`, cardId).toArray().length === 0) return false;
+      this.sql.exec(`DELETE FROM review WHERE card_id = ?`, cardId);
+      this.sql.exec(`DELETE FROM cloze WHERE card_id = ?`, cardId);
+      this.sql.exec(`DELETE FROM card WHERE id = ?`, cardId);
+      return true;
     });
   }
 
@@ -96,7 +156,10 @@ export class User extends DurableObject<object> {
    * their words were added, up to what's left of the day's allowance. */
   due(lang: Lang, now: Timestamp, dayStart: Timestamp, limit: number): DueCards {
     const newLeft = this.#newLeft(lang, dayStart);
-    const select = `SELECT id, lemma_id AS "lemmaId", kind, schedule_status = 'new' AS "isNew", due_at AS "dueAt" FROM card`;
+    const select = `SELECT id, lemma_id AS "lemmaId", kind, schedule_status = 'new' AS "isNew", due_at AS "dueAt",
+        cloze.document_id AS "documentId", sentence, sentence_start AS "sentenceStart", blank_start AS "blankStart",
+        blank_end AS "blankEnd", feats, why
+      FROM card LEFT JOIN cloze ON cloze.card_id = card.id`;
     const rows = [
       ...this.sql
         .exec(`${select} WHERE lang = ? AND active = 1 AND schedule_status != 'new' AND due_at <= ? ORDER BY due_at LIMIT ?`, lang, now, limit)
@@ -109,7 +172,7 @@ export class User extends DurableObject<object> {
         )
         .toArray(),
     ];
-    return { cards: rows.slice(0, limit).map((row) => schemas.ScheduledCard.parse({ ...row, isNew: row["isNew"] === 1 })), newLeft };
+    return { cards: rows.slice(0, limit).map(scheduled), newLeft };
   }
 
   /** Each language's cards due by now, and new cards it would show today. */

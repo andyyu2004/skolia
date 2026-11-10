@@ -4,6 +4,8 @@
 import type {
   AvailableTag,
   CardCounts,
+  CardId,
+  ClozeList,
   DocumentId,
   Timestamp,
   UserId,
@@ -11,6 +13,7 @@ import type {
   LemmaId,
   Lookup,
   Licence,
+  NewCloze,
   ReadingPosition,
   Reviewed,
   ReviewRequest,
@@ -121,6 +124,11 @@ export interface UserData {
   due(userId: UserId, lang: Lang, now: Timestamp, dayStart: Timestamp, limit: number): Promise<DueCards>;
   counts(userId: UserId, now: Timestamp, dayStart: Timestamp): Promise<CardCounts[]>;
   review(userId: UserId, request: ReviewRequest, now: Timestamp): Promise<ReviewOutcome>;
+  /** The cloze card the text's sentence and word already had, if any, made: false. */
+  makeCloze(userId: UserId, cloze: NewCloze, now: Timestamp): Promise<{ cardId: CardId; made: boolean }>;
+  clozes(userId: UserId, documentId: DocumentId): Promise<ClozeList>;
+  /** False if the user has no such cloze card. */
+  deleteCloze(userId: UserId, cardId: CardId): Promise<boolean>;
   settings(userId: UserId): Promise<Settings>;
   setSettings(userId: UserId, settings: Settings): Promise<void>;
   position(userId: UserId, documentId: DocumentId): Promise<StoredPosition | null>;

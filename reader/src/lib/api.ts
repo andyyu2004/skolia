@@ -8,6 +8,8 @@ import {
   lemmaParam,
   type ApiError,
   type CardCounts,
+  type ClozeList,
+  type ClozeMade,
   type Due,
   type DocumentSummary,
   type AvailableTag,
@@ -15,6 +17,7 @@ import {
   type ImportRequest,
   type Lang,
   type LemmaId,
+  type NewClozeInput,
   type Rating,
   type ReadingPosition,
   type ReadingNames,
@@ -176,6 +179,26 @@ export async function review(cardId: string, rating: Rating): Promise<Reviewed> 
   const response = await api.me.reviews.$post({ json });
   if (!response.ok) throw await failure(response);
   return response.json();
+}
+
+/** A cloze card for the word in the sentence, or the one it already has. */
+export async function makeCloze(json: NewClozeInput): Promise<ClozeMade> {
+  const response = await api.me.clozes.$post({ json });
+  if (!response.ok) throw await failure(response);
+  return response.json();
+}
+
+/** The user's cloze cards from a text, or null when signed out. */
+export async function listClozes(documentId: string): Promise<ClozeList | null> {
+  const response = await api.me.clozes.$get({ query: { documentId } });
+  if (response.status === 401) return null;
+  if (!response.ok) throw await failure(response);
+  return response.json();
+}
+
+export async function deleteCloze(cardId: string): Promise<void> {
+  const response = await api.me.clozes[":cardId"].$delete({ param: { cardId } });
+  if (!response.ok) throw await failure(response);
 }
 
 export async function getSettings(): Promise<Settings> {

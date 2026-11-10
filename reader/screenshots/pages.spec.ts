@@ -62,6 +62,28 @@ test("review, answer", async ({ page }) => {
   await expect(page).toHaveScreenshot("review-answer.png", { fullPage: true });
 });
 
+/** Grades the cards before the cloze card Good, so it's the one shown. */
+async function toCloze(page: Page): Promise<void> {
+  await open(page, "#/review");
+  for (const _ of [0, 1]) {
+    await page.getByRole("button", { name: "Show answer" }).click();
+    await page.getByRole("button", { name: "Good" }).click();
+  }
+  await expect(page.getByText("(kolacja)")).toBeVisible();
+}
+
+test("review, cloze", async ({ page }) => {
+  await toCloze(page);
+  await expect(page).toHaveScreenshot("review-cloze.png", { fullPage: true });
+});
+
+test("review, cloze answer", async ({ page }) => {
+  await toCloze(page);
+  await page.getByRole("button", { name: "Show answer" }).click();
+  await page.getByText("Forms").click();
+  await expect(page).toHaveScreenshot("review-cloze-answer.png", { fullPage: true });
+});
+
 test("reader", async ({ page }) => {
   await open(page, `#/doc/${LALKA}`);
   await expect(page.locator("article")).toContainText("W początkach roku 1878");

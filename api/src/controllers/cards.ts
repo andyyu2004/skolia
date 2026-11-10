@@ -4,12 +4,17 @@ import {
   MAX_LOOKUP,
   timestamp,
   type CardCounts,
+  type CardId,
+  type ClozeList,
+  type ClozeMade,
+  type DocumentId,
   type Due,
   type FeatureSets,
   type Lang,
   type LemmaId,
   type LexiconEntry,
   type Lookup,
+  type NewCloze,
   type Reviewed,
   type ReviewRequest,
   type ScheduledCard,
@@ -20,7 +25,7 @@ import {
   type WordStatus,
 } from "@skolia/shared/api";
 import type { Deps, Lexicon } from "../ports.ts";
-import { NO_CONTENT, fail, ok, type Failed, type NoContent, type Ok } from "./result.ts";
+import { NO_CONTENT, fail, ok, type Failed, type Json, type NoContent, type Ok } from "./result.ts";
 
 /** Most cards one due list has: a session's worth. */
 const MAX_DUE = 200;
@@ -59,6 +64,20 @@ export async function review(deps: Deps, user: User, request: ReviewRequest): Pr
     case "id-reused":
       return fail(409, "review id is another card's");
   }
+}
+
+/** 201 for a new card, 200 when the sentence and word already had one. */
+export async function makeCloze(deps: Deps, user: User, cloze: NewCloze): Promise<Json<ClozeMade, 201> | Ok<ClozeMade>> {
+  const { cardId, made } = await deps.users.makeCloze(user.id, cloze, timestamp(deps.now()));
+  return made ? { status: 201, body: { cardId } } : ok({ cardId });
+}
+
+export async function clozes(deps: Deps, user: User, documentId: DocumentId): Promise<Ok<ClozeList>> {
+  return ok(await deps.users.clozes(user.id, documentId));
+}
+
+export async function deleteCloze(deps: Deps, user: User, cardId: CardId): Promise<NoContent | Failed<404>> {
+  return (await deps.users.deleteCloze(user.id, cardId)) ? NO_CONTENT : fail(404, "no such cloze card");
 }
 
 export async function settings(deps: Deps, user: User): Promise<Ok<Settings>> {
