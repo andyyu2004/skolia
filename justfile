@@ -108,14 +108,14 @@ migrate env:
 load-lexicon env *flags:
     #!/usr/bin/env bash
     set -euo pipefail
-    case {{ env }} in pr-*) sample=(--sample 3000) ;; *) sample=() ;; esac
+    case {{ env }} in pr-*) sample="--sample 3000" ;; *) sample= ;; esac
     for lang in {{ langs }}; do
       build="./analysis#cards-lexicon-$lang"
       out=$(nix eval --raw "$build.outPath")
-      state=$(infra/load-lexicon.py {{ env }} --lang "$lang" --built-from "$out" "${sample[@]}" {{ flags }})
+      state=$(infra/load-lexicon.py {{ env }} --lang "$lang" --built-from "$out" $sample {{ flags }})
       if [ "$state" = current ]; then echo "{{ env }}: $lang already serves $out"; continue; fi
       out=$(nix build --no-link --print-out-paths "$build")
-      infra/load-lexicon.py {{ env }} "$out/$lang.cards.sqlite" --built-from "$out" "${sample[@]}" {{ flags }}
+      infra/load-lexicon.py {{ env }} "$out/$lang.cards.sqlite" --built-from "$out" $sample {{ flags }}
     done
 
 # Terraform: storage, queue, ingest's R2 token, billing alerts
