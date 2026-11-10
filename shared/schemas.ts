@@ -10,15 +10,17 @@ import {
   MAX_SOURCE_LENGTH,
   MAX_TEXT_LENGTH,
   MAX_TITLE_LENGTH,
+  MAX_TAGS,
   RATINGS,
-  TAGS,
+  TAG_KIND,
+  TAG_VALUE,
   UPOS,
   USER_TYPES,
   VISIBILITIES,
   WORD_STATUSES,
   isShareable,
-  type TagFilter as TagFilterType,
-  type Tags as TagsType,
+  parseTag,
+  tagFilter,
 } from "./api.ts";
 import type { Status as StatusType, Versions as VersionsType } from "./schema.gen.ts";
 
@@ -95,18 +97,30 @@ const Source = z
   .max(MAX_SOURCE_LENGTH)
   .refine((s) => /^https?:\/\/\S+$/u.test(s), "source must be an http(s) URL");
 
-/** A text's tags (TAGS in api.ts). */
-export const Tags = z.strictObject({
-  level: z.enum(TAGS.level).optional(),
-}) satisfies z.ZodType<TagsType>;
+export const TagKind = z.string().regex(TAG_KIND, "a tag's kind is lowercase letters, digits and hyphens");
+export const TagValue = z.string().regex(TAG_VALUE, "a tag's value is letters, digits and . + -");
 
-/** A list's query: a kind of tag given once or more is a value or values to keep. */
+/** An entry's tags, each kind to its value; GET /api/tags has the ones skolia has. */
+export const Tags = z.record(TagKind, TagValue).refine((tags) => Object.keys(tags).length <= MAX_TAGS, `at most ${MAX_TAGS} tags`);
+
+export const AvailableTag = z.object({ kind: TagKind, value: TagValue, description: z.string().nullable() });
+
+/** A list's query: tag=kind:value, once or more, keeps entries with any of the values of
+ * each kind given. */
 export const DocumentsQuery = z.object({
-  level: z
-    .union([z.enum(TAGS.level), z.array(z.enum(TAGS.level))])
-    .transform((v) => (Array.isArray(v) ? v : [v]))
+  tag: z
+    .union([z.string(), z.array(z.string())])
+    .transform((tags, context) =>
+      tagFilter(
+        (Array.isArray(tags) ? tags : [tags]).flatMap((text) => {
+          const tag = parseTag(text);
+          if (tag === null) context.addIssue({ code: "custom", message: `${text} isn't a tag, kind:value` });
+          return tag === null ? [] : [tag];
+        }),
+      ),
+    )
     .optional(),
-}) satisfies z.ZodType<TagFilterType>;
+});
 
 export const ImportRequest = z
   .object({

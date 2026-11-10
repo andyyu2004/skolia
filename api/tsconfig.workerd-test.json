@@ -3,6 +3,6 @@
   "compilerOptions": {
     "types": ["node", "@cloudflare/workers-types"]
   },
-  "include": ["src/**/*.workerd.test.ts", "src/testing", "../shared"],
-  "exclude": ["../shared/**/*.test.ts", "../shared/scripts"]
+  "include": ["src/**/*.workerd.test.ts", "src/testing", "../shared", "../util"],
+  "exclude": ["../shared/**/*.test.ts", "../shared/scripts", "../util/**/*.test.ts"]
 }

@@ -14,6 +14,7 @@
     "@hono/zod-validator": "0.9.1",
     "@logtape/logtape": "2.4.2",
     "@skolia/shared": "workspace:*",
+    "@skolia/util": "workspace:*",
     "better-auth": "1.7.12",
     "hono": "4.13.13",
     "ts-fsrs": "6.0.0",

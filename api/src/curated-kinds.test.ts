@@ -59,8 +59,8 @@ test("a file that isn't YAML of a kind is refused, naming the file and what's wr
   refused("kind: inline\ntitle: A\ntext: B\n", /pl\/a\.yaml: licence: /u);
   refused("kind: inline\ntitle: A\nlicence: cc0\ntext: B\nyear: 1834\n", /pl\/a\.yaml: .*year/u);
   refused("kind: wolnelektury\nslug: Tuwim Rzepka\n", /pl\/a\.yaml: slug: slug must be/u);
-  refused("kind: wolnelektury\nslug: tuwim-rzepka\ntags:\n  level: D1\n", /pl\/a\.yaml: tags\.level: /u);
-  refused("kind: wolnelektury\nslug: tuwim-rzepka\ntags:\n  genre: poem\n", /pl\/a\.yaml: tags: .*genre/u);
+  refused("kind: wolnelektury\nslug: tuwim-rzepka\ntags:\n  level: B 1\n", /pl\/a\.yaml: tags\.level: /u);
+  refused("kind: wolnelektury\nslug: tuwim-rzepka\ntags:\n  Level: B1\n", /pl\/a\.yaml: tags\.Level: /u);
   refused("kind: wolnelektury\nslug: tuwim-rzepka\nlicence: cc0\n", /pl\/a\.yaml: .*licence/u);
 });
 

@@ -1,7 +1,9 @@
 <script lang="ts">
-  import type { DocumentSummary, Lang, TagKind, TagValue, Tags, User } from "@skolia/shared/api";
-  import { LANGS, LANGUAGE_INFO, LICENCE_INFO, TAGS, TAG_INFO, TAG_KINDS } from "@skolia/shared/api";
-  import { listDocuments } from "../lib/api.ts";
+  import type { AvailableTag, DocumentSummary, Lang, User } from "@skolia/shared/api";
+  import { LANGS, LANGUAGE_INFO, LICENCE_INFO, matchesTags, parseTag, tagFilter } from "@skolia/shared/api";
+  import { listDocuments, listTags } from "../lib/api.ts";
+  import { tagLabel } from "../lib/tags.ts";
+  import TagFilter from "../components/TagFilter.svelte";
   import { badge } from "../lib/reading.ts";
   import Page from "../components/Page.svelte";
 
@@ -12,17 +14,10 @@
   let query = $state("");
   let lang = $state<Lang | "all">("all");
   let importer = $state<"all" | "mine" | `by:${string}`>("all");
-  /** The value each kind of tag is narrowed to; a kind left out isn't. */
-  let tagged = $state<Tags>({});
-
-  function setTag(kind: TagKind, value: string): void {
-    const { [kind]: _, ...rest } = tagged;
-    tagged = value === "" ? rest : { ...rest, [kind]: value as TagValue };
-  }
-
-  function byTags(d: DocumentSummary): boolean {
-    return TAG_KINDS.every((kind) => tagged[kind] === undefined || d.tags[kind] === tagged[kind]);
-  }
+  /** The tags kept, as kind:value: any of one kind, all of the kinds. */
+  let tagged = $state<readonly string[]>([]);
+  let available = $state<readonly AvailableTag[]>([]);
+  const filter = $derived(tagFilter(tagged.flatMap((t) => parseTag(t) ?? [])));
 
   /** Others who imported what's listed, by id, since two can share a name. */
   const importers = $derived(
@@ -42,11 +37,19 @@
   const shown = $derived.by(() => {
     const q = query.trim().toLocaleLowerCase();
     return (documents ?? []).filter(
-      (d) => (lang === "all" || d.lang === lang) && byImporter(d) && byTags(d) && (q === "" || d.title.toLocaleLowerCase().includes(q)),
+      (d) => (lang === "all" || d.lang === lang) && byImporter(d) && matchesTags(d.tags, filter) && (q === "" || d.title.toLocaleLowerCase().includes(q)),
     );
   });
 
   const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
+
+  $effect(() => {
+    listTags().then(
+      (t) => (available = t),
+      // Without them there's no tag filter; the list still works
+      () => {},
+    );
+  });
 
   $effect(() => {
     listDocuments().then(
@@ -87,19 +90,7 @@
             <option value={`by:${id}`}>{name}</option>
           {/each}
         </select>
-        {#each TAG_KINDS as kind (kind)}
-          <select
-            class={{ active: tagged[kind] !== undefined }}
-            value={tagged[kind] ?? ""}
-            onchange={(event) => setTag(kind, event.currentTarget.value)}
-            aria-label={TAG_INFO[kind].label}
-          >
-            <option value="">Any {TAG_INFO[kind].label.toLocaleLowerCase()}</option>
-            {#each TAGS[kind] as value (value)}
-              <option {value}>{value} · {TAG_INFO[kind].values[value]}</option>
-            {/each}
-          </select>
-        {/each}
+        <TagFilter {available} bind:selected={tagged} />
       </div>
 
       {#if documents === null}
@@ -128,11 +119,8 @@
                   {#if status}
                     <span class={["badge", { failed: status.failed }]}>{status.text}</span>
                   {/if}
-                  {#each TAG_KINDS as kind (kind)}
-                    {@const value = doc.tags[kind]}
-                    {#if value !== undefined}
-                      <span class="badge tag" title="{TAG_INFO[kind].label}: {TAG_INFO[kind].values[value]}">{value}</span>
-                    {/if}
+                  {#each Object.entries(doc.tags) as [kind, value] (kind)}
+                    <span class="badge tag">{tagLabel({ kind, value })}</span>
                   {/each}
                 </span>
                 <span class="entry-meta">
@@ -192,10 +180,11 @@
     border-radius: 10px;
     background: var(--surface);
     box-shadow: var(--card-shadow);
-    overflow: hidden;
   }
 
+  /* Rounded here rather than clipped by .listing, so the tag menu can hang below it */
   .listing-head {
+    border-radius: 10px 10px 0 0;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -262,6 +251,10 @@
 
   .entry:hover {
     background: var(--bg);
+  }
+
+  .entries li:last-child .entry {
+    border-radius: 0 0 10px 10px;
   }
 
   .entry:hover .entry-title {

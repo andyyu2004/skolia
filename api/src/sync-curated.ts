@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { hc } from "hono/client";
 import { parse as parseYaml } from "yaml";
 import * as z from "zod";
-import { LANGS, TAG_KINDS, type DocumentId, type DocumentSummary, type DocumentUpdate, type Lang, type Tags } from "@skolia/shared/api";
+import { LANGS, type DocumentId, type DocumentSummary, type DocumentUpdate, type Lang, type Tags } from "@skolia/shared/api";
 import { docId } from "@skolia/shared/keys";
 import * as schemas from "@skolia/shared/schemas";
 import type { AppType } from "./app.ts";
@@ -130,7 +130,8 @@ export function plan(texts: readonly Curated[], mine: readonly DocumentSummary[]
 }
 
 function sameTags(a: Tags, b: Tags): boolean {
-  return TAG_KINDS.every((kind) => a[kind] === b[kind]);
+  const kinds = Object.keys(a);
+  return kinds.length === Object.keys(b).length && kinds.every((kind) => a[kind] === b[kind]);
 }
 
 function describe(change: Change): string {

@@ -2,6 +2,7 @@
 // Object per user (src/worker/adapters.ts), Better Auth (src/auth.ts), and fakes in the
 // tests.
 import type {
+  AvailableTag,
   CardCounts,
   DocumentId,
   Timestamp,
@@ -60,6 +61,8 @@ export interface DocumentStore {
   /** Every public entry, and the viewer's private ones, newest first, with any of the
    * values the filter gives for each kind of tag it names. */
   list(viewer: UserId | null, tags: TagFilter): Promise<readonly StoredDocument[]>;
+  /** Every tag that can be given, by kind, then in each kind's order. */
+  tags(): Promise<readonly AvailableTag[]>;
   /** This user's entries, public or private, newest first. */
   importedBy(user: UserId): Promise<readonly StoredDocument[]>;
   /** The entry the viewer sees for a text: their own, else its earliest public one. Null

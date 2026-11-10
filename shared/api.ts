@@ -108,46 +108,61 @@ export const LICENCE_INFO: Record<Licence, LicenceInfo> = {
   unknown: { short: "Licence unknown", label: "Unknown", url: null },
 };
 
-/** The kinds of tag a text can have, each with the values it allows. A text has at most
- * one value of each kind. A new kind, or value, needs a migration too: document_tag's
- * CHECK lists them. */
-export const TAGS = {
-  /** How hard the text is to read for a learner of its language: a CEFR level, A1 to C2,
-   * or past either end of it, A0 (for a learner just starting) or C3 (harder than C2,
-   * such as old literary language that natives find hard too). */
-  level: ["A0", "A1", "A2", "B1", "B2", "C1", "C2", "C3"],
-} as const;
-export type TagKind = keyof typeof TAGS;
-export type TagValue<K extends TagKind = TagKind> = (typeof TAGS)[K][number];
-export type Tags = { readonly [K in TagKind]?: TagValue<K> | undefined };
-export const TAG_KINDS = Object.keys(TAGS) as readonly TagKind[];
-
-/** Narrows a list of documents to those with any of the values given for each kind of
- * tag, as GET /api/documents?level=A1&level=A2 asks. */
-export type TagFilter = { readonly [K in TagKind]?: readonly TagValue<K>[] | undefined };
-
-export interface TagInfo<K extends TagKind> {
-  /** The kind's name, for filters and forms. */
-  label: string;
-  /** Each value's name, beside the value itself. */
-  values: Record<TagValue<K>, string>;
+/** A tag, a kind and a value: level:B1. Only the tags skolia has (GET /api/tags) can be
+ * given, and an entry has at most one of each kind. */
+export interface Tag {
+  kind: string;
+  value: string;
 }
 
-export const TAG_INFO: { readonly [K in TagKind]: TagInfo<K> } = {
-  level: {
-    label: "Level",
-    values: {
-      A0: "Starter",
-      A1: "Beginner",
-      A2: "Elementary",
-      B1: "Intermediate",
-      B2: "Upper intermediate",
-      C1: "Advanced",
-      C2: "Proficient",
-      C3: "Beyond proficient",
-    },
-  },
-};
+/** A tag that can be given, and what it means: level:B1, "Intermediate". */
+export interface AvailableTag extends Tag {
+  description: string | null;
+}
+
+/** Every tag that can be given, by kind, then in each kind's own order (A0 before A1). */
+export interface TagList {
+  tags: AvailableTag[];
+}
+
+/** An entry's tags, each kind to its value. */
+export type Tags = Readonly<Record<string, string>>;
+
+/** A list's tags to keep: each kind to its values. An entry is kept when, for every kind,
+ * its tag of that kind is one of the values: any of one kind, all of the kinds. */
+export type TagFilter = Readonly<Record<string, readonly string[]>>;
+
+export const TAG_KIND = /^[a-z][a-z0-9-]{0,31}$/u;
+export const TAG_VALUE = /^[A-Za-z0-9][A-Za-z0-9.+-]{0,31}$/u;
+export const MAX_TAGS = 16;
+
+/** kind:value, as GET /api/documents?tag= takes it. */
+export function formatTag({ kind, value }: Tag): string {
+  return `${kind}:${value}`;
+}
+
+/** A tag from kind:value; null for anything else. */
+export function parseTag(text: string): Tag | null {
+  const colon = text.indexOf(":");
+  const kind = text.slice(0, colon);
+  const value = text.slice(colon + 1);
+  return colon > 0 && TAG_KIND.test(kind) && TAG_VALUE.test(value) ? { kind, value } : null;
+}
+
+/** The tags, as a filter keeping entries with any of them of each kind. */
+export function tagFilter(tags: readonly Tag[]): TagFilter {
+  return tags.reduce<Record<string, readonly string[]>>(
+    (filter, { kind, value }) => ({ ...filter, [kind]: [...new Set([...(filter[kind] ?? []), value])] }),
+    {},
+  );
+}
+
+export function matchesTags(tags: Tags, filter: TagFilter): boolean {
+  return Object.entries(filter).every(([kind, values]) => {
+    const value = tags[kind];
+    return value !== undefined && values.includes(value);
+  });
+}
 
 export const MAX_TITLE_LENGTH = 200;
 export const MAX_AUTHOR_LENGTH = 200;

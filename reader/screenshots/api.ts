@@ -61,6 +61,20 @@ const PETIT_PRINCE = stored(1, { title: "Le Petit Prince, chapitre I", lang: "fr
 const NOTATKI = stored(2, { title: "Notatki", visibility: "private", licence: "cc-by", author: null, user: user.id, importerName: user.name, words: 38, tags: {} });
 const PETER_RABBIT = stored(3, { title: "The Tale of Peter Rabbit", lang: "en", author: "Beatrix Potter", words: 951, tags: { level: "A2" } });
 
+/** The levels migration 0008 makes. */
+const LEVELS = (
+  [
+    ["A0", "Starter"],
+    ["A1", "Beginner"],
+    ["A2", "Elementary"],
+    ["B1", "Intermediate"],
+    ["B2", "Upper intermediate"],
+    ["C1", "Advanced"],
+    ["C2", "Proficient"],
+    ["C3", "Beyond proficient"],
+  ] as const
+).map(([value, description]) => ({ kind: "level", value, description }));
+
 /** Explore's list: one of each badge and licence the listing shows. */
 const documents: readonly StoredDocument[] = [lalka, PETIT_PRINCE, NOTATKI, PETER_RABBIT];
 
@@ -122,6 +136,7 @@ function deps(signedIn: boolean): Deps {
     },
     documents: {
       list: async (viewer) => visible(viewer),
+      tags: async () => LEVELS,
       importedBy: async (userId) => documents.filter((d) => d.user === userId),
       visible: async (id, viewer) => visible(viewer).find((d) => d.id === id) ?? null,
       has: async (id) => documents.some((d) => d.id === id),

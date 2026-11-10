@@ -17,6 +17,6 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["src", "../shared"],
+  "include": ["src", "../shared", "../util"],
   "exclude": ["src/worker", "src/testing", "src/**/*.workerd.test.ts", "../shared/**/*.test.ts", "../shared/scripts"]
 }

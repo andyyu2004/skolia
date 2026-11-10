@@ -14,9 +14,10 @@ import {
   type Lookup,
   type Timestamp,
   type UserId,
-  type ReviewRequest, type Settings, type TagFilter, type Tags, type Word, type WordStatus } from "@skolia/shared/api";
+  type ReviewRequest, type Settings, type AvailableTag, type TagFilter, type Tags, type Word, type WordStatus } from "@skolia/shared/api";
 import type { BundleParadigm, IngestJob, Pronunciation, Relation, Sense } from "@skolia/shared/schema";
-import { DocumentRow, LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
+import { AvailableTag as AvailableTagSchema, DocumentRow, LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
+import { sql, type Sql } from "@skolia/util/sql";
 import type {
   BlobStore,
   DocumentContent,
@@ -179,32 +180,32 @@ const SELECT_DOCUMENT = `SELECT entry.document_id AS id, entry.user_id AS "user"
   JOIN document ON document.id = entry.document_id
   JOIN "user" ON "user"."id" = entry.user_id`;
 
-/** The list's query, ?1 the viewer, narrowed to entries with any of the values the
- * filter gives for each kind of tag it names: each kind looks its values up in
- * user_document_tag_value_idx. */
-export function listQuery(tags: TagFilter): { readonly sql: string; readonly params: readonly string[] } {
-  let narrowed = "";
-  const params: string[] = [];
-  for (const [kind, values] of Object.entries(tags)) {
-    if (values === undefined || values.length === 0) continue;
-    const at = (param: string) => `?${params.push(param) + 1}`;
-    narrowed += ` AND (entry.user_id, entry.document_id) IN (SELECT user_id, document_id FROM user_document_tag
-      WHERE kind = ${at(kind)} AND value IN (${values.map(at).join(", ")}))`;
-  }
+/** The list's query: every public entry and the viewer's private ones, narrowed to those
+ * with any of the values the filter gives for each kind of tag it names. Each kind looks
+ * its values up in user_document_tag_value_idx. */
+export function listQuery(viewer: UserId | null, tags: TagFilter): Sql {
+  const narrowed = sql.join(
+    Object.entries(tags)
+      .filter(([, values]) => values.length > 0)
+      .map(
+        ([kind, values]) => sql` AND (entry.user_id, entry.document_id) IN (SELECT user_id, document_id FROM user_document_tag
+          WHERE kind = ${kind} AND value IN (${sql.join(values, ", ")}))`,
+      ),
+    "",
+  );
+  const select = sql.raw(SELECT_DOCUMENT);
   // A UNION rather than an OR, so each half searches its own index
-  return {
-    sql: `${SELECT_DOCUMENT} WHERE entry.visibility = 'public'${narrowed}
-    UNION ALL ${SELECT_DOCUMENT} WHERE entry.user_id = ?1 AND entry.visibility = 'private'${narrowed}
-    ORDER BY imported DESC`,
-    params,
-  };
+  return sql`${select} WHERE entry.visibility = 'public'${narrowed}
+    UNION ALL ${select} WHERE entry.user_id = ${viewer} AND entry.visibility = 'private'${narrowed}
+    ORDER BY imported DESC`;
 }
 
 /** D1Documents' queries, exported for the test that checks each one uses an index. */
 export const DOCUMENT_QUERIES = {
-  list: listQuery({}).sql,
+  list: listQuery(null, {}).text,
   /** The list narrowed to one kind of tag, two of its values */
-  listTagged: listQuery({ level: ["A1", "B1"] }).sql,
+  listTagged: listQuery(null, { level: ["A1", "B1"] }).text,
+  tags: "SELECT kind, value, description FROM tag ORDER BY kind, position",
   importedBy: `${SELECT_DOCUMENT} WHERE entry.user_id = ?1 ORDER BY entry.imported_at DESC`,
   visible: `${SELECT_DOCUMENT} WHERE entry.document_id = ?1 AND (entry.user_id = ?2 OR entry.visibility = 'public')
     ORDER BY entry.user_id IS ?2 DESC, entry.imported_at LIMIT 1`,
@@ -226,12 +227,17 @@ export class D1Documents implements DocumentStore {
   }
 
   async list(viewer: UserId | null, tags: TagFilter): Promise<readonly StoredDocument[]> {
-    const { sql, params } = listQuery(tags);
+    const { text, params } = listQuery(viewer, tags);
     const { results } = await this.db
-      .prepare(sql)
-      .bind(viewer, ...params)
+      .prepare(text)
+      .bind(...params)
       .all();
     return results.map((row) => DocumentRow.parse(row));
+  }
+
+  async tags(): Promise<readonly AvailableTag[]> {
+    const { results } = await this.db.prepare(DOCUMENT_QUERIES.tags).all();
+    return results.map((row) => AvailableTagSchema.parse(row));
   }
 
   async importedBy(user: UserId): Promise<readonly StoredDocument[]> {

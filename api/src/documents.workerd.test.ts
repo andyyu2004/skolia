@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { hc } from "hono/client";
-import { MAX_TEXT_LENGTH, type DocumentId, type DocumentSummary, type TagValue, type DocumentUpdate, type ImportRequest } from "@skolia/shared/api";
+import { MAX_TEXT_LENGTH, type DocumentId, type DocumentSummary, type DocumentUpdate, type ImportRequest } from "@skolia/shared/api";
 import { docId, statusKey, textKey } from "@skolia/shared/keys";
 import type { AppType } from "./app.ts";
 import type { IngestJobs } from "./ports.ts";
@@ -252,14 +252,11 @@ test("an entry has the tags it was imported with, which its user replaces", asyn
   assert.deepEqual(await tags(), { level: "C2" });
   await expectStatus("no tags", patch(app, importer, id, { tags: {} }), 200);
   assert.deepEqual(await tags(), {});
-  // Tags the typed client can't express
-  for (const [method, path, json] of [
-    ["PATCH", `/api/documents/${id}`, { tags: { level: "D1" } }],
-    ["PATCH", `/api/documents/${id}`, { tags: { genre: "poem" } }],
-    ["POST", "/api/documents", { text: "Inny tekst.", lang: "pl", tags: { level: "D1" } }],
-  ] as const) {
-    assert.equal((await raw(app, method, path, importer, json)).status, 400, JSON.stringify(json));
-  }
+  await expectStatus("a tag skolia hasn't", patch(app, importer, id, { tags: { level: "D1" } }), 400);
+  await expectStatus("a kind skolia hasn't", patch(app, importer, id, { tags: { genre: "poem" } }), 400);
+  await expectStatus("not a tag", patch(app, importer, id, { tags: { level: "B 1" } }), 400);
+  await expectStatus("import, a tag skolia hasn't", client(app, importer).documents.$post({ json: { text: "Inny tekst.", lang: "pl", tags: { level: "D1" } } }), 400);
+  assert.deepEqual(await tags(), {});
   assert.deepEqual((await body("get", view(app, importer, await imported(app, importer, "Bez tagów.")))).tags, {});
 });
 
@@ -284,14 +281,26 @@ test("a list narrows to entries with any of the values asked for each kind of ta
   const b1 = await imported(app, importer, "Drugi tekst.", { ...shared, tags: { level: "B1" } });
   await imported(app, importer, "Trzeci tekst.", shared);
   const own = await imported(app, alice, "Czwarty tekst.", { tags: { level: "B1" } });
-  const narrowed = async (headers: Headers | undefined, level: TagValue<"level"> | TagValue<"level">[]) =>
-    (await body("list", client(app, headers).documents.$get({ query: { level } }))).documents.map((d) => d.id).sort();
-  assert.deepEqual(await narrowed(undefined, "B1"), [b1]);
-  assert.deepEqual(await narrowed(alice, "B1"), [b1, own].sort());
-  assert.deepEqual(await narrowed(undefined, ["A1", "B1"]), [a1, b1].sort());
-  assert.deepEqual(await narrowed(undefined, "C3"), []);
+  const narrowed = async (headers: Headers | undefined, tag: string | string[]) =>
+    (await body("list", client(app, headers).documents.$get({ query: { tag } }))).documents.map((d) => d.id).sort();
+  assert.deepEqual(await narrowed(undefined, "level:B1"), [b1]);
+  assert.deepEqual(await narrowed(alice, "level:B1"), [b1, own].sort());
+  assert.deepEqual(await narrowed(undefined, ["level:A1", "level:B1"]), [a1, b1].sort());
+  assert.deepEqual(await narrowed(undefined, "level:C3"), []);
+  assert.deepEqual(await narrowed(undefined, ["level:B1", "form:poem"]), []);
   assert.equal((await listed(app)).length, 3);
-  assert.equal((await app.request(`${ORIGIN}/api/documents?level=D1`)).status, 400);
+  for (const tag of ["level", "level:", ":B1", "level:B 1"]) {
+    await expectStatus(tag, client(app).documents.$get({ query: { tag } }), 400);
+  }
+});
+
+test("the tags skolia has are listed, each kind's in its order", async () => {
+  const { tags } = await body("tags", client(setup()).tags.$get());
+  assert.deepEqual(
+    tags.filter((t) => t.kind === "level").map((t) => t.value),
+    ["A0", "A1", "A2", "B1", "B2", "C1", "C2", "C3"],
+  );
+  assert.equal(tags.find((t) => t.value === "B1")?.description, "Intermediate");
 });
 
 test("the importer makes a document public under a shareable licence, and private again", async () => {

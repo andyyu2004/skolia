@@ -4,6 +4,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import * as z from "zod";
 import {
   MAX_TITLE_LENGTH,
+  formatTag,
   isShareable,
   timestamp,
   type DocumentId,
@@ -12,6 +13,8 @@ import {
   type Lang,
   type QueuePlace,
   type TagFilter,
+  type TagList,
+  type Tags,
   type User,
 } from "@skolia/shared/api";
 import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
@@ -27,10 +30,24 @@ const NAME = /^[a-z0-9-]{1,64}$/;
 const JSON_TYPE = "application/json";
 
 /** The entries the viewer can see, narrowed to those with these tags. */
-export async function list(deps: Deps, viewer: User | null, tags: TagFilter = {}): Promise<Ok<DocumentList>> {
+export async function list(deps: Deps, viewer: User | null, tags: TagFilter): Promise<Ok<DocumentList>> {
   const records = await deps.documents.list(viewer?.id ?? null, tags);
   const versions = versionsOf(deps.blobs);
   return ok({ documents: await Promise.all(records.map((r) => current(deps, r, versions, viewer))) });
+}
+
+/** Every tag that can be given. */
+export async function tags(deps: Deps): Promise<Ok<TagList>> {
+  return ok({ tags: [...(await deps.documents.tags())] });
+}
+
+/** A 400 naming the first of the tags skolia doesn't have, or null if it has them all. */
+async function unknownTag(deps: Deps, tags: Tags): Promise<Failed<400> | null> {
+  const given = Object.entries(tags).map(([kind, value]) => ({ kind, value }));
+  if (given.length === 0) return null;
+  const known = new Set((await deps.documents.tags()).map(formatTag));
+  const unknown = given.map(formatTag).find((tag) => !known.has(tag));
+  return unknown === undefined ? null : fail(400, `no tag ${unknown}`);
 }
 
 /** 202 if the text is queued, 200 if it's already here and not failed (a failed import is
@@ -40,7 +57,9 @@ export async function importText(
   deps: Deps,
   user: User,
   body: z.output<typeof schemas.ImportRequest>,
-): Promise<Json<DocumentSummary, 200> | Json<DocumentSummary, 202>> {
+): Promise<Json<DocumentSummary, 200> | Json<DocumentSummary, 202> | Failed<400>> {
+  const unknown = await unknownTag(deps, body.tags);
+  if (unknown !== null) return unknown;
   const fields: EntryFields = {
     title: body.title?.trim().slice(0, MAX_TITLE_LENGTH) || firstWords(body.text),
     visibility: body.visibility,
@@ -96,6 +115,8 @@ export async function update(
   if (fields.visibility === "public" && !isShareable(fields.licence)) {
     return fail(400, "a public text needs a licence that allows sharing it");
   }
+  const unknown = await unknownTag(deps, fields.tags);
+  if (unknown !== null) return unknown;
   await deps.documents.update(record.id, user.id, fields);
   return ok(await current(deps, { ...record, ...fields }, versionsOf(deps.blobs), user));
 }
