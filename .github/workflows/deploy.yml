@@ -14,6 +14,10 @@ on:
       env:
         type: string
         required: true
+    outputs:
+      url:
+        description: The environment's URL, set once the skolia Worker's deployed, even if a later step fails
+        value: ${{ jobs.deploy-web.outputs.url }}
 
 permissions:
   contents: read
@@ -83,6 +87,8 @@ jobs:
     concurrency:
       group: deploy-web-${{ inputs.env }}
       cancel-in-progress: false
+    outputs:
+      url: ${{ steps.url.outputs.url }}
     # A preview's wrangler config is made in each job that needs it (infra/wrangler.sh)
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_ACCESS_KEY_ID }}
@@ -98,6 +104,8 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup
       - run: just deploy-web ${{ inputs.env }}
+      - id: url
+        run: echo "url=$(just url ${{ inputs.env }})" >> "$GITHUB_OUTPUT"
       - name: End-to-end tests
         run: just e2e ${{ inputs.env }}
       - name: Sync the curated texts
