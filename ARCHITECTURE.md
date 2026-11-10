@@ -46,7 +46,7 @@ flowchart LR
   API --> BA
   BA -->|"users, sessions, API keys"| DB
   BA -->|"sign-in"| G
-  API -->|"document metadata, daily cap"| DB
+  API -->|"document metadata"| DB
   API -->|"text, status, analysis, bundle"| R2
   API -->|"job"| Q
   API -->|"RPC: words, cards, reviews, settings"| UDO
@@ -60,7 +60,7 @@ flowchart LR
   CEN -->|"S3 API"| R2
 ```
 
-- **Open a document:** D1 has its metadata and R2's `status.json` the names of its current analysis and bundle, which the reader then fetches from R2 through the API, as stored. Browsers cache them by HTTP (`immutable`); there's no IndexedDB yet.
+- **Open a document:** D1 has its metadata and R2's `status.json` the names of its current analysis and bundle, which the reader then fetches from R2 through the API, as stored. Browsers cache them by HTTP (`no-cache` with the blob's key as its ETag), asking before each use, so the API checks the viewer may still see the text and answers 304 without reading R2; there's no IndexedDB yet.
 - **Tap a word:** local, from the bundle already loaded (`shared/lexicon`, `shared/paradigm`). Setting a word's status goes to the User DO.
 - **Review:** the User DO gives the due cards and the API adds their entries from its language's lexicon D1. The DO never reads the lexicon, and the reader's word sheet never reads the lexicon D1s, so the two can show different lexicon versions until a document is re-bundled.
 - **Import:** the API puts the text in R2, the metadata in D1, a queued `status.json` and the job on the queue. The consumer hands it to the Ingester named after its language's image, so a deploy that changes an image starts a new container. While it waits, the importer's summary says where it is: the API asks the language's Ingester (a Durable Object binding to the ingest Worker), which asks a running container for its jobs (`GET /jobs`) and never starts one.
@@ -218,11 +218,11 @@ versions/{lang}.json                                    -- what ingest produces 
 ```
 
 - Analyses and bundles are JSON compressed with Brotli (quality 11), stored with `Content-Encoding: br` and sent as stored to clients that accept it (the API decompresses for those that don't). On *Kamizelka*, Brotli was 41% (analysis) and 59% (bundle) the size of gzip, and smaller than zstd at level 22; MessagePack was no smaller than JSON once compressed.
-- Texts are limited to 20,000 characters per import (about 3,000 words, roughly a minute of analysis), checked by the API and again by ingest. The API also accepts at most `MAX_IMPORTS_PER_DAY` new texts per UTC day across all standard users (`api/wrangler.jsonc`, 50; a text already imported doesn't count), so container time is bounded whoever is importing. System users (`user.type`, skolia.io's own accounts, the end-to-end tests' importer and the curated texts') aren't capped and don't count toward it.
-- Everything about a document is under one prefix, so it can be inspected or deleted in one place. `{analyzer}` and `{lexicon}` are short hashes of the version strings. Stale analyses and bundles are the ones `status.json` doesn't point at; clean them up by that rule, not by age (an old document's current analysis is old too).
-- Documents are deduped by a hash of language and text (`sha256("{lang}\n{text}")`): if many users import the same text, it's analyzed once. A user only sees texts they imported themselves or texts in the shared library.
+- Texts are limited to 20,000 characters per import (about 3,000 words, roughly a minute of analysis), checked by the API and again by ingest. Imports aren't rate-limited yet.
+- Everything about a document is under one prefix, so it can be inspected in one place. `{analyzer}` and `{lexicon}` are short hashes of the version strings. Stale analyses and bundles are the ones `status.json` doesn't point at; clean them up by that rule, not by age (an old document's current analysis is old too).
+- Documents are deduped by a hash of language and text (`sha256("{lang}\n{text}")`): if many users import the same text, it's analyzed once. The text is stored once (`document`), and each user who imports it has their own entry (`user_document`) with their title, licence and visibility. A user sees their own entries and everyone's public ones; a text with no public entry is a 404 to anyone without an entry. Deleting an entry deletes only the entry: texts and their blobs are never deleted, so importing one again needn't analyse it again.
 - An analysis or bundle is named by everything it depends on: the blob shape (`SCHEMA`, `BUNDLE_SCHEMA`), the analyser (plugin version, models, Morfeusz, snap policy, Walenty) and, for the bundle, the bundle-making code (`BUNDLER_VERSION`) and the lexicon. Bump `PLUGIN_VERSION` whenever the analysis output changes, `BUNDLER_VERSION` whenever the bundle for the same analysis and lexicon does (lookup fallbacks, how paradigms are made), and the shape numbers whenever the JSON shape does. The generated `schema.gen.ts` carries the shape numbers, and the reader refuses a shape it doesn't know.
-- The reader fetches the analysis and bundle by those names (`/api/documents/{id}/analysis/{name}`), so what's at a URL never changes and is cached forever, and an analysis and bundle always belong together.
+- The reader fetches the analysis and bundle by those names (`/api/documents/{id}/analysis/{name}`), so what's at a URL never changes and a browser's copy only needs confirming, and an analysis and bundle always belong together.
 - Migration: when the API lists or opens a ready document whose analysis or bundle name isn't the one in `versions/{lang}.json`, it queues the document again. Until the new analysis is ready, the status keeps the old keys, so the reader shows the old analysis and says it's updating. Ingest reuses an analysis and bundle whose keys already exist, so a document queued twice costs nothing, and a new lexicon or bundler only re-bundles (about 2 s for 5,000 words, against about 30 s to analyse them). A document queued or analysing for over 30 minutes has lost its job and is queued again. A storage failure puts the job back on the queue; an analysis that fails is recorded and not retried. Ingest fails a job whose analysis names another analyser than it published, so a mismatch can't loop. Not done yet: backfilling the shared library ahead of time, and several ingest versions running at once during a deploy (each publishes its own versions). Add read-time upgrade functions only if re-analysis gets expensive.
 
 Token shape in the blob:

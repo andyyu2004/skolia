@@ -30,17 +30,15 @@ export const ALICE = { name: "Alice", email: "alice@example.com" };
 
 /** jobsOf: what the ingest container answers about its jobs; none is running unless given. */
 export function setup({
-  maxImportsPerDay = 100,
   auth = local.auth,
   at = NOW,
   jobsOf = async () => null,
-}: { maxImportsPerDay?: number; auth?: Auth; at?: string; jobsOf?: JobsOf } = {}) {
+}: { auth?: Auth; at?: string; jobsOf?: JobsOf } = {}) {
   const { env } = local;
   return createApp({
     auth,
     users: new DurableObjectUsers(env.USER),
     lexicon: new D1Lexicon(lexiconsOf(env)),
-    maxImportsPerDay,
     documents: new D1Documents(env.DB),
     blobs: new R2Blobs(env.BLOBS),
     queue: new CloudflareQueue(env.INGEST, jobsOf),
@@ -144,6 +142,7 @@ export function publish(v: string): Promise<void> {
   return putJson(versionsKey("pl"), { analyzer: `pl/${v}`, lexicon: "lex/1", analysis: `s2-a${v}`, bundle: `b1-a${v}-l1` });
 }
 
-export async function summaryOf(app: App, id: string): Promise<DocumentSummary> {
-  return (await (await app.request(`/api/documents/${id}`)).json()) as DocumentSummary;
+/** The summary as the importer sees it, since a private document is only theirs to see. */
+export async function summaryOf(app: App, id: string, headers: HeadersInit = importer): Promise<DocumentSummary> {
+  return (await (await app.request(`/api/documents/${id}`, { headers })).json()) as DocumentSummary;
 }

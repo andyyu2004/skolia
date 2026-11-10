@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { timestamp, type DocumentSummary, type QueuePlace } from "@skolia/shared/api";
-import { DocumentId } from "@skolia/shared/schemas";
+import { DocumentId, UserId } from "@skolia/shared/schemas";
 import { MAX_RETRY_MS, POLL_MS, afterPoll, badge, notice, queueText, retryAfter } from "./reading.ts";
 
 const OLD = { analysis: "s2-a1", bundle: "b1-a1-l1" };
 const NEW = { analysis: "s2-a2", bundle: "b1-a2-l1" };
 
 function summary(state: DocumentSummary["state"], reading?: typeof OLD, error?: string): DocumentSummary {
-  const base: DocumentSummary = { id: DocumentId.parse("d".repeat(64)), title: "t", lang: "pl", imported: timestamp(new Date(0)), words: 1, visibility: "public", licence: "cc-by", author: null, source: null, importerName: "Ivy", mine: false, state };
+  const base: DocumentSummary = { id: DocumentId.parse("d".repeat(64)), title: "t", lang: "pl", imported: timestamp(new Date(0)), words: 1, visibility: "public", licence: "cc-by", author: null, source: null, importer: { id: UserId.parse("ivy"), name: "Ivy" }, mine: false, state };
   if (reading) base.reading = reading;
   if (error) base.error = error;
   return base;

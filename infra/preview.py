@@ -25,8 +25,6 @@ type Json = str | int | float | bool | None | list[Json] | dict[str, Json]
 type JsonObject = dict[str, Json]
 
 API = Path(__file__).resolve().parent.parent / "api"
-# The end-to-end tests take one per language, so ten deploys a day
-MAX_IMPORTS_PER_DAY = "20"
 # A preview's only jobs are its deploy's (the end-to-end tests, then the curated sync), so its
 # containers needn't wait long for more
 PREVIEW_SLEEP_AFTER = "10s"
@@ -93,7 +91,7 @@ def config(env: str) -> None:
     web = promote("wrangler.jsonc", env)
     web["workers_dev"] = True
     web["preview_urls"] = False
-    web["vars"] = {**as_object(web.get("vars"), "vars"), "MAX_IMPORTS_PER_DAY": MAX_IMPORTS_PER_DAY, "BASE_URL": url(env)}
+    web["vars"] = {**as_object(web.get("vars"), "vars"), "BASE_URL": url(env)}
     ingest = promote("wrangler.ingest.jsonc", env)
     ingest["vars"] = {**as_object(ingest.get("vars"), "vars"), "SLEEP_AFTER": PREVIEW_SLEEP_AFTER}
     configs = {f"wrangler.{env}.json": web, f"wrangler.ingest.{env}.json": ingest}

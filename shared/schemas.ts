@@ -143,11 +143,10 @@ export const DocumentRow = z.object({
   lang: Lang,
   imported: Timestamp,
   words: z.number().int(),
-  importer: UserId,
+  user: UserId,
   visibility: Visibility,
   licence: Licence,
   author: z.string().nullable(),
   source: z.string().nullable(),
-  licensor: UserId,
   importerName: z.string(),
 });

@@ -3,22 +3,45 @@ import { test } from "node:test";
 import { brotliDecompressSync } from "node:zlib";
 import type { DocumentList } from "@skolia/shared/api";
 import { docId, statusKey, versionsKey } from "@skolia/shared/keys";
-import { TEXT, importText, local, publish, putJson, readyAt, setup, summaryOf, useLocal } from "./testing/app.ts";
+import { TEXT, importText, importer, local, publish, putJson, readyAt, setup, summaryOf, useLocal } from "./testing/app.ts";
 
 useLocal();
 
-test("brotli blobs are sent as stored when accepted, refused otherwise, cached forever", async () => {
+test("brotli blobs are sent as stored when accepted, refused otherwise", async () => {
   const app = setup();
-  await importText(app);
+  await importText(app, TEXT, { visibility: "public", licence: "cc0" });
   const id = await docId("pl", TEXT);
   await readyAt(id, "1");
   const url = `/api/documents/${id}/bundle/b1-a1-l1`;
   const accepted = await app.request(url, { headers: { "accept-encoding": "gzip, br" } });
   assert.equal(accepted.headers.get("content-encoding"), "br");
-  assert.equal(accepted.headers.get("cache-control"), "private, max-age=31536000, immutable");
   assert.equal(brotliDecompressSync(new Uint8Array(await accepted.arrayBuffer())).toString(), '{"bundle":"1"}');
   const plain = await app.request(url, { headers: { "accept-encoding": "gzip" } });
   assert.equal(plain.status, 406);
+});
+
+test("a blob is cached, and asked for again each time: 304 while the viewer may still see it, 404 once not", async () => {
+  const app = setup();
+  await importText(app, TEXT);
+  const id = await docId("pl", TEXT);
+  await readyAt(id, "1");
+  const get = (url: string, headers: Headers, etag?: string) =>
+    app.request(url, { headers: { ...Object.fromEntries(headers), "accept-encoding": "br", ...(etag === undefined ? {} : { "if-none-match": etag }) } });
+  for (const url of [`/api/documents/${id}/text`, `/api/documents/${id}/bundle/b1-a1-l1`]) {
+    const first = await get(url, importer);
+    assert.equal(first.status, 200);
+    assert.equal(first.headers.get("cache-control"), "private, no-cache");
+    const etag = first.headers.get("etag") ?? "";
+    assert.match(etag, /^"doc\//u);
+    const again = await get(url, importer, `W/"other", ${etag}`);
+    assert.equal(again.status, 304);
+    assert.equal(again.headers.get("etag"), etag);
+    assert.equal(again.headers.get("cache-control"), "private, no-cache");
+    assert.equal(await again.text(), "");
+    assert.equal((await get(url, importer, '"other"')).status, 200);
+    // Private to Ivy: signed out, the cached copy isn't confirmed
+    assert.equal((await get(url, new Headers(), etag)).status, 404);
+  }
 });
 
 test("the summary names the reading once there is one, and it's served by name", async () => {

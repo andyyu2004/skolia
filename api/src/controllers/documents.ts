@@ -1,5 +1,6 @@
 // Documents: importing a text, listing and opening them, and their text, analysis and
 // bundle, queueing a document again when ingest makes other versions or its job is lost.
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import * as z from "zod";
 import {
   MAX_TITLE_LENGTH,
@@ -12,12 +13,12 @@ import {
   type QueuePlace,
   type User,
 } from "@skolia/shared/api";
-import { PART_ENCODING, docId, docPrefix, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
+import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { Status, Versions } from "@skolia/shared/schema";
 import * as schemas from "@skolia/shared/schemas";
 import { log } from "../log.ts";
-import type { BlobStore, Deps, DocumentRecord, IngestJobs, Sharing, StoredDocument } from "../ports.ts";
-import { NO_CONTENT, fail, ok, type BlobResult, type Failed, type Json, type NoContent, type Ok } from "./result.ts";
+import type { BlobStore, Deps, EntryFields, IngestJobs, StoredDocument } from "../ports.ts";
+import { NO_CONTENT, fail, ok, type BlobResult, type Failed, type Json, type NoContent, type NotModified, type Ok } from "./result.ts";
 
 const logger = log("documents");
 
@@ -31,49 +32,36 @@ export async function list(deps: Deps, viewer: User | null): Promise<Ok<Document
 }
 
 /** 202 if the text is queued, 200 if it's already here and not failed (a failed import is
- * retried by importing the same text again). */
+ * retried by importing the same text again). A text someone else imported gets the user's
+ * own entry, with their title, visibility and licence. */
 export async function importText(
   deps: Deps,
   user: User,
   body: z.output<typeof schemas.ImportRequest>,
-): Promise<Json<DocumentSummary, 200> | Json<DocumentSummary, 202> | Failed<429>> {
-  const request = { ...body, title: body.title?.trim().slice(0, MAX_TITLE_LENGTH) || firstWords(body.text) };
-  const sharing: Sharing = {
+): Promise<Json<DocumentSummary, 200> | Json<DocumentSummary, 202>> {
+  const fields: EntryFields = {
+    title: body.title?.trim().slice(0, MAX_TITLE_LENGTH) || firstWords(body.text),
+    visibility: body.visibility,
     licence: body.licence,
     author: body.author?.trim() || null,
     source: body.source ?? null,
-    licensor: user.id,
   };
-  const id = await docId(request.lang, request.text);
-  let existing = await deps.documents.get(id);
-  if (existing?.visibility === "private" && request.visibility === "public") {
-    await deps.documents.share(id, sharing);
-    existing = { ...existing, ...sharing, visibility: "public" };
+  const id = await docId(body.lang, body.text);
+  const known = await deps.documents.has(id);
+  const own = known ? await ownEntry(deps, id, user) : null;
+  if (own === null) {
+    if (!known) await deps.blobs.put(textKey(id), body.text, "text/plain; charset=utf-8");
+    await deps.documents.add({ id, lang: body.lang, words: countWords(body.text) }, { id, user: user.id, imported: timestamp(deps.now()), ...fields });
+  } else if (own.visibility === "private" && fields.visibility === "public") {
+    await deps.documents.update(id, user.id, { ...fields, title: own.title });
   }
-  if (existing) {
-    const summary = await current(deps, existing, versionsOf(deps.blobs), user);
-    if (summary.state !== "failed") return ok(summary);
-  } else {
-    const today = new Date(deps.now());
-    today.setUTCHours(0, 0, 0, 0);
-    if (user.type !== "system" && (await deps.documents.countImportedSince(timestamp(today))) >= deps.maxImportsPerDay) {
-      return fail(429, "Today's imports are used up. Try again tomorrow.");
-    }
-    await deps.blobs.put(textKey(id), request.text, "text/plain; charset=utf-8");
-    await deps.documents.add({
-      id,
-      title: request.title,
-      lang: request.lang,
-      imported: timestamp(deps.now()),
-      words: countWords(request.text),
-      importer: user.id,
-      visibility: request.visibility,
-      ...sharing,
-    });
-  }
-  const record = existing ?? (await deps.documents.get(id));
+  const record = await ownEntry(deps, id, user);
   if (!record) throw new Error(`document ${id} vanished after insert`);
-  const queued = await requeue(deps, record, await readStatus(deps.blobs, id), deps.now(), existing ? "reimported" : "imported");
+  if (known) {
+    const summary = await current(deps, record, versionsOf(deps.blobs), user);
+    if (summary.state !== "failed") return ok(summary);
+  }
+  const queued = await requeue(deps, record, await readStatus(deps.blobs, id), deps.now(), known ? "reimported" : "imported");
   return { status: 202, body: summarize(record, queued, user) };
 }
 
@@ -84,47 +72,42 @@ export async function mine(deps: Deps, user: User): Promise<Ok<DocumentList>> {
   return ok({ documents: await Promise.all(records.map((r) => current(deps, r, versions, user))) });
 }
 
-/** Its importer changes its title, licence, author, source or visibility. Changing the
- * licence, or making it public, makes them its licensor. */
+/** A user changes the title, licence, author, source or visibility of their own entry. */
 export async function update(
   deps: Deps,
   user: User,
   id: string,
   body: z.output<typeof schemas.DocumentUpdate>,
 ): Promise<Ok<DocumentSummary> | Failed<400 | 403 | 404>> {
-  const record = await findDocument(deps, id);
+  const record = await findDocument(deps, id, user);
   if (!record) return noSuchDocument();
-  if (record.importer !== user.id) return fail(403, "only the document's importer can change it");
-  const visibility = body.visibility ?? record.visibility;
-  const claimed = body.licence !== undefined || (visibility === "public" && record.visibility === "private");
-  const fields = {
+  if (record.user !== user.id) return fail(403, "only the document's importer can change it");
+  const fields: EntryFields = {
     title: body.title ?? record.title,
+    visibility: body.visibility ?? record.visibility,
     licence: body.licence ?? record.licence,
     author: body.author === undefined ? record.author : body.author || null,
     source: body.source === undefined ? record.source : body.source,
-    visibility,
-    licensor: claimed ? user.id : record.licensor,
   };
-  if (visibility === "public" && !isShareable(fields.licence)) {
+  if (fields.visibility === "public" && !isShareable(fields.licence)) {
     return fail(400, "a public text needs a licence that allows sharing it");
   }
-  await deps.documents.update(record.id, fields);
+  await deps.documents.update(record.id, user.id, fields);
   return ok(await current(deps, { ...record, ...fields }, versionsOf(deps.blobs), user));
 }
 
-/** Its importer deletes it: its record, then its text, status, analyses and bundles. Its
- * id is then unknown, like one never imported. */
+/** A user deletes their entry. The text, its analyses and bundles stay, so importing it
+ * again needn't analyse it again. */
 export async function remove(deps: Deps, user: User, id: string): Promise<NoContent | Failed<403 | 404>> {
-  const record = await findDocument(deps, id);
+  const record = await findDocument(deps, id, user);
   if (!record) return noSuchDocument();
-  if (record.importer !== user.id) return fail(403, "only the document's importer can delete it");
-  await deps.documents.delete(record.id);
-  await deps.blobs.deletePrefix(docPrefix(record.id));
+  if (record.user !== user.id) return fail(403, "only the document's importer can delete it");
+  await deps.documents.remove(record.id, user.id);
   return NO_CONTENT;
 }
 
 export async function get(deps: Deps, id: string, viewer: User | null): Promise<Ok<DocumentSummary> | Failed<404>> {
-  const record = await findDocument(deps, id);
+  const record = await findDocument(deps, id, viewer);
   if (!record) return noSuchDocument();
   const summary = await current(deps, record, versionsOf(deps.blobs), viewer);
   if (summary.mine && (summary.state === "queued" || summary.state === "analysing")) {
@@ -141,32 +124,56 @@ export function placeIn(jobs: IngestJobs | null, id: DocumentId): QueuePlace {
 }
 
 /** The id is the text's hash, so the text at this URL never changes. */
-export async function text(deps: Deps, id: string): Promise<BlobResult | Failed<404 | 500>> {
-  const record = await findDocument(deps, id);
+export async function text(deps: Deps, id: string, viewer: User | null, ifNoneMatch: string | undefined): Promise<BlobResult | NotModified | Failed<404 | 500>> {
+  const record = await findDocument(deps, id, viewer);
   if (!record) return noSuchDocument();
-  const blob = await deps.blobs.get(textKey(record.id));
-  if (!blob) return fail(500, "missing text");
-  return { status: 200, blob, encoding: undefined };
+  return stored(deps, textKey(record.id), undefined, ifNoneMatch, fail(500, "missing text"));
 }
 
 /** An analysis or bundle by name (DocumentSummary.reading): a name is a version, so
  * what's at the URL never changes, and the reader gets an analysis and bundle that
  * belong together. */
-export async function part(deps: Deps, id: string, which: "analysis" | "bundle", name: string): Promise<BlobResult | Failed<404>> {
-  const record = await findDocument(deps, id);
+export async function part(
+  deps: Deps,
+  id: string,
+  viewer: User | null,
+  which: "analysis" | "bundle",
+  name: string,
+  ifNoneMatch: string | undefined,
+): Promise<BlobResult | NotModified | Failed<404>> {
+  const record = await findDocument(deps, id, viewer);
   if (!record || !NAME.test(name)) return noSuchDocument();
-  const blob = await deps.blobs.get(partKey(record.id, which, name));
-  if (!blob) return fail(404, `no ${which} ${name}`);
-  return { status: 200, blob, encoding: PART_ENCODING };
+  return stored(deps, partKey(record.id, which, name), PART_ENCODING, ifNoneMatch, fail(404, `no ${which} ${name}`));
+}
+
+/** The blob at a key that never changes, or 304 without reading it when the client has it. */
+async function stored<S extends ContentfulStatusCode>(
+  deps: Deps,
+  key: string,
+  encoding: typeof PART_ENCODING | undefined,
+  ifNoneMatch: string | undefined,
+  missing: Failed<S>,
+): Promise<BlobResult | NotModified | Failed<S>> {
+  const etag = `"${key}"`;
+  if (ifNoneMatch?.split(",").some((tag) => tag.trim().replace(/^W\//u, "") === etag)) return { status: 304, etag, encoding };
+  const blob = await deps.blobs.get(key);
+  return blob ? { status: 200, etag, blob, encoding } : missing;
 }
 
 function noSuchDocument(): Failed<404> {
   return fail(404, "no such document");
 }
 
-async function findDocument(deps: Deps, id: string): Promise<StoredDocument | null> {
+/** The entry the viewer sees: theirs, else a public one. A text private to others is
+ * unknown to them. */
+async function findDocument(deps: Deps, id: string, viewer: User | null): Promise<StoredDocument | null> {
   const parsed = schemas.DocumentId.safeParse(id);
-  return parsed.success ? deps.documents.get(parsed.data) : null;
+  return parsed.success ? deps.documents.visible(parsed.data, viewer?.id ?? null) : null;
+}
+
+async function ownEntry(deps: Deps, id: DocumentId, user: User): Promise<StoredDocument | null> {
+  const entry = await deps.documents.visible(id, user.id);
+  return entry?.user === user.id ? entry : null;
 }
 
 /** The summary, after queueing the document again if ingest now produces other
@@ -184,7 +191,7 @@ async function current(deps: Deps, record: StoredDocument, versions: VersionsOf,
 type RequeueReason = "imported" | "reimported" | "stuck" | "outdated";
 
 /** Queue the document, keeping the last analysis readable until the new one is ready. */
-async function requeue(deps: Deps, record: DocumentRecord, status: Status | null, at: Date, reason: RequeueReason): Promise<Status> {
+async function requeue(deps: Deps, record: Pick<StoredDocument, "id" | "lang">, status: Status | null, at: Date, reason: RequeueReason): Promise<Status> {
   logger.info("queueing document", { doc: record.id, lang: record.lang, reason, previous: status?.state ?? null, since: status?.updated ?? null });
   const queued: Status = { state: "queued", updated: timestamp(at) };
   for (const key of ["analyzer", "lexicon", "analysis", "bundle"] as const) {
@@ -251,8 +258,8 @@ export function parseVersions(raw: string): Versions | null {
   return parseJson(schemas.Versions, raw);
 }
 
-function summarize({ importer, licensor: _, ...record }: StoredDocument, status: Status | null, viewer: User | null): DocumentSummary {
-  const summary: DocumentSummary = { ...record, mine: importer === viewer?.id, state: status?.state ?? "failed" };
+function summarize({ user, importerName, ...record }: StoredDocument, status: Status | null, viewer: User | null): DocumentSummary {
+  const summary: DocumentSummary = { ...record, importer: { id: user, name: importerName }, mine: user === viewer?.id, state: status?.state ?? "failed" };
   const analysis = nameOf(status?.analysis);
   const bundle = nameOf(status?.bundle);
   if (analysis !== undefined && bundle !== undefined) summary.reading = { analysis, bundle };

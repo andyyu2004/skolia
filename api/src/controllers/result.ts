@@ -4,8 +4,8 @@ import type { PART_ENCODING } from "@skolia/shared/keys";
 import type { StoredBlob } from "../ports.ts";
 
 /** What a controller returns and the app sends: JSON with its status, no content, or a
- * stored blob. */
-export type Result = Json<unknown, ContentfulStatusCode> | NoContent | BlobResult;
+ * stored blob or that the client's copy of it is current. */
+export type Result = Json<unknown, ContentfulStatusCode> | NoContent | BlobResult | NotModified;
 
 export interface Json<T, S extends ContentfulStatusCode> {
   status: S;
@@ -19,11 +19,20 @@ export interface NoContent {
   status: 204;
 }
 
-/** A blob whose URL names its version, so it can be cached forever. encoding: how it's
- * stored (PART_ENCODING for an analysis or bundle). */
+/** A blob whose URL names its version, so what's there never changes and its key is its
+ * ETag. Who may see it can change, so a client asks again each time it's used, and an
+ * If-None-Match that matches gets 304 once access is checked. encoding: how it's stored
+ * (PART_ENCODING for an analysis or bundle). */
 export interface BlobResult {
   status: 200;
+  etag: string;
   blob: StoredBlob;
+  encoding: typeof PART_ENCODING | undefined;
+}
+
+export interface NotModified {
+  status: 304;
+  etag: string;
   encoding: typeof PART_ENCODING | undefined;
 }
 

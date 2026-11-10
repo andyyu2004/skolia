@@ -5,7 +5,7 @@
 // keys in the status.
 import type { DocumentId, Lang } from "./api.ts";
 
-export function docPrefix(doc: DocumentId): string {
+function docPrefix(doc: DocumentId): string {
   return `doc/${doc}/`;
 }
 

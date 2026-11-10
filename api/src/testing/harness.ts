@@ -96,7 +96,7 @@ export async function startLocal(): Promise<Local> {
     signIn: (userId) => test.getAuthHeaders({ userId }),
     takeQueued,
     async reset() {
-      const tables = ["document", "apikey", "session", "account", "verification"];
+      const tables = ["user_document", "document", "apikey", "session", "account", "verification"];
       await env.DB.batch([
         ...tables.map((t) => env.DB.prepare(`DELETE FROM "${t}"`)),
         // The system users are the migrations'

@@ -5,7 +5,7 @@ import { MAX_TEXT_LENGTH, type DocumentId, type DocumentSummary, type DocumentUp
 import { docId, statusKey, textKey } from "@skolia/shared/keys";
 import type { AppType } from "./app.ts";
 import type { IngestJobs } from "./ports.ts";
-import { ALICE, TEXT, client, importText, importer, listed, local, putJson, readyAt, setup, summaryOf, useLocal, type App } from "./testing/app.ts";
+import { ALICE, NOW, TEXT, client, importText, importer, listed, local, putJson, readyAt, setup, summaryOf, useLocal, type App } from "./testing/app.ts";
 import { ORIGIN } from "./testing/harness.ts";
 import { body, expectStatus } from "./testing/responses.ts";
 
@@ -56,33 +56,11 @@ test("importing the same text again doesn't queue it twice, unless it failed", a
   const again = await importText(app);
   assert.equal(again.status, 200);
   assert.equal((await local.takeQueued()).length, 1);
-  await putJson(statusKey(await docId("pl", TEXT)), { state: "failed", updated: "x", error: "boom" });
+  const id = await docId("pl", TEXT);
+  await putJson(statusKey(id), { state: "failed", updated: "x", error: "boom" });
   const retry = await importText(app);
   assert.equal(retry.status, 202);
   assert.equal((await local.takeQueued()).length, 1);
-});
-
-test("new texts past the daily cap are refused; texts already here still open", async () => {
-  const app = setup({ maxImportsPerDay: 2 });
-  assert.equal((await importText(app, "Pierwszy tekst.")).status, 202);
-  assert.equal((await importText(app, "Drugi tekst.")).status, 202);
-  const refused = await importText(app, "Trzeci tekst.");
-  assert.equal(refused.status, 429);
-  assert.match(((await refused.json()) as { error: string }).error, /tomorrow/);
-  assert.equal((await importText(app, "Pierwszy tekst.")).status, 200);
-  assert.equal((await local.takeQueued()).length, 2);
-});
-
-test("system users import past the daily cap, and their imports don't count toward it", async () => {
-  const app = setup({ maxImportsPerDay: 1 });
-  const { id } = await local.signUp({ name: "Seed", email: "seed@skolia.io" });
-  await local.env.DB.prepare(`UPDATE "user" SET "type" = 'system' WHERE "id" = ?`).bind(id).run();
-  const system = { headers: await local.signIn(id) };
-  assert.equal((await importText(app, "Pierwszy tekst.", system)).status, 202);
-  assert.equal((await importText(app, "Drugi tekst.", system)).status, 202);
-  assert.equal((await importText(app, "Trzeci tekst.")).status, 202);
-  assert.equal((await importText(app, "Czwarty tekst.", system)).status, 202);
-  assert.equal((await importText(app, "Piąty tekst.")).status, 429);
 });
 
 test("texts over the limit are refused, oversized bodies without being parsed", async () => {
@@ -126,10 +104,10 @@ test("the importer is recorded, and a private text is in only its importer's lib
   assert.equal(response.status, 202);
   const summary = (await response.json()) as DocumentSummary;
   assert.equal(summary.visibility, "private");
-  assert.equal(summary.importerName, "Ivy");
-  assert.equal("importer" in summary, false);
-  const row = await local.env.DB.prepare("select importer, visibility from document where id = ?").bind(summary.id).first();
-  assert.deepEqual(row, { importer: (await local.auth.user(importer))?.id, visibility: "private" });
+  const ivy = (await local.auth.user(importer))?.id;
+  assert.deepEqual(summary.importer, { id: ivy, name: "Ivy" });
+  const row = await local.env.DB.prepare("select user_id, visibility from user_document where document_id = ?").bind(summary.id).first();
+  assert.deepEqual(row, { user_id: ivy, visibility: "private" });
   const alice = await local.signIn((await local.signUp(ALICE)).id);
   assert.deepEqual(await listed(app), []);
   assert.deepEqual(await listed(app, alice), []);
@@ -165,23 +143,71 @@ test("a public text needs a licence that allows sharing it", async () => {
   assert.equal("licensor" in summary, false);
 });
 
-test("a public import of a private text makes it public under the new licence claim", async () => {
+test("a public import of the user's own private text makes it public under the new licence claim", async () => {
   const app = setup();
   await importText(app, TEXT, { visibility: "private", licence: "all-rights-reserved", author: "someone" });
-  const aliceId = (await local.signUp(ALICE)).id;
-  const alice = await local.signIn(aliceId);
-  const again = await importText(app, TEXT, { headers: alice, visibility: "public", licence: "public-domain" });
+  const again = await importText(app, TEXT, { visibility: "public", licence: "public-domain" });
   assert.equal(again.status, 200);
   const summary = (await again.json()) as DocumentSummary;
-  assert.deepEqual([summary.visibility, summary.licence, summary.author], ["public", "public-domain", null]);
-  assert.equal(summary.importerName, "Ivy");
-  const row = await local.env.DB.prepare("select licensor from document where id = ?").bind(summary.id).first();
-  assert.deepEqual(row, { licensor: aliceId });
-  assert.deepEqual(await listed(app), [await docId("pl", TEXT)]);
-  // A private import of a public text doesn't hide it or change its licence
+  assert.deepEqual([summary.visibility, summary.licence, summary.author, summary.title], ["public", "public-domain", null, "Idę do starego psa."]);
+  assert.deepEqual(await listed(app), [summary.id]);
+  // A private import of their public text doesn't hide it or change its licence
   await importText(app, TEXT, { visibility: "private", licence: "cc-by-nd" });
-  assert.deepEqual(await listed(app), [await docId("pl", TEXT)]);
+  assert.deepEqual(await listed(app), [summary.id]);
   assert.equal((await summaryOf(app, summary.id)).licence, "public-domain");
+});
+
+test("another user importing the same text gets their own entry, and the first stays private", async () => {
+  const app = setup();
+  const id = await imported(app, importer, TEXT, { title: "Ivy's", licence: "all-rights-reserved", author: "someone" });
+  await local.takeQueued();
+  const alice = await local.signIn((await local.signUp(ALICE)).id);
+  const theirs = await body("import", client(app, alice).documents.$post({ json: { text: TEXT, lang: "pl", title: "Alice's", visibility: "public", licence: "cc0" } }), 200);
+  assert.deepEqual([theirs.id, theirs.title, theirs.visibility, theirs.licence, theirs.importer.name, theirs.mine], [id, "Alice's", "public", "cc0", "Alice", true]);
+  assert.deepEqual(await local.takeQueued(), []);
+  const ivys = await summaryOf(app, id);
+  assert.deepEqual([ivys.title, ivys.visibility, ivys.licence, ivys.author, ivys.mine], ["Ivy's", "private", "all-rights-reserved", "someone", true]);
+  const signedOut = await summaryOf(app, id, {});
+  assert.deepEqual([signedOut.title, signedOut.importer.name, signedOut.mine], ["Alice's", "Alice", false]);
+  const { documents } = await body("list", client(app).documents.$get());
+  assert.deepEqual(documents.map((d) => d.title), ["Alice's"]);
+  const both = await body("list", client(app, importer).documents.$get());
+  assert.deepEqual(both.documents.map((d) => d.title).sort(), ["Alice's", "Ivy's"]);
+});
+
+test("a text only privately imported is unknown to everyone else, its text, analysis, bundle and position too", async () => {
+  const app = setup();
+  const id = await imported(app, importer, TEXT);
+  await readyAt(id, "1");
+  const { reading } = await summaryOf(app, id);
+  if (!reading) throw new Error("not ready");
+  const alice = await local.signIn((await local.signUp(ALICE)).id);
+  for (const [who, headers] of [["signed out", undefined], ["someone else", alice]] as const) {
+    const api = client(app, headers).documents[":id"];
+    await expectStatus(`${who}: get`, api.$get({ param: { id } }), 404);
+    await expectStatus(`${who}: text`, api.text.$get({ param: { id } }), 404);
+    await expectStatus(`${who}: analysis`, api.analysis[":name"].$get({ param: { id, name: reading.analysis } }), 404);
+    await expectStatus(`${who}: bundle`, api.bundle[":name"].$get({ param: { id, name: reading.bundle } }), 404);
+    await expectStatus(`${who}: patch`, patch(app, headers, id, { title: "Mój" }), headers ? 404 : 401);
+  }
+  const position = { sentence: 0, token: 0, at: NOW };
+  await expectStatus("someone else's position", client(app, alice).me.positions[":id"].$put({ param: { id }, json: position }), 404);
+  await expectStatus("the importer's position", client(app, importer).me.positions[":id"].$put({ param: { id }, json: position }), 204);
+  await expectStatus("the importer's text", client(app, importer).documents[":id"].text.$get({ param: { id } }), 200);
+});
+
+test("deleting entries keeps the text for others, and keeps it stored once nobody has one", async () => {
+  const app = setup();
+  const id = await imported(app, importer, TEXT);
+  const alice = await local.signIn((await local.signUp(ALICE)).id);
+  await body("import", client(app, alice).documents.$post({ json: { text: TEXT, lang: "pl" } }), 200);
+  await expectStatus("Ivy deletes", remove(app, importer, id), 204);
+  await expectStatus("Ivy's is gone", view(app, importer, id), 404);
+  assert.equal((await body("Alice's stays", view(app, alice, id))).mine, true);
+  await expectStatus("Alice deletes", remove(app, alice, id), 204);
+  await expectStatus("nobody sees it", view(app, alice, id), 404);
+  assert.notDeepEqual((await local.env.BLOBS.list({ prefix: `doc/${id}/` })).objects, []);
+  assert.notEqual(await local.env.DB.prepare("select id from document where id = ?").bind(id).first(), null);
 });
 
 /** Imports the text as the signed-in user, with these fields, and returns its id. */
@@ -237,21 +263,22 @@ test("a summary says whether the viewer imported it", async () => {
   assert.deepEqual(documents.map((d) => d.mine), [true]);
 });
 
-test("the importer deletes a document and everything stored for it; nobody else can", async () => {
+test("the importer deletes their entry; nobody else can", async () => {
   const app = setup();
   const id = await imported(app, importer, TEXT);
   await local.takeQueued();
   const alice = await local.signIn((await local.signUp(ALICE)).id);
-  await expectStatus("someone else", remove(app, alice, id), 403);
+  await expectStatus("someone else, private", remove(app, alice, id), 404);
+  await expectStatus("public", patch(app, importer, id, { visibility: "public", licence: "cc0" }), 200);
+  await expectStatus("someone else, public", remove(app, alice, id), 403);
   await expectStatus("signed out", remove(app, undefined, id), 401);
   await expectStatus("delete", remove(app, importer, id), 204);
   await expectStatus("get after delete", view(app, importer, id), 404);
   await expectStatus("delete again", remove(app, importer, id), 404);
-  assert.deepEqual((await local.env.BLOBS.list({ prefix: `doc/${id}/` })).objects, []);
   assert.deepEqual(await listed(app, importer), []);
-  // Importing it again starts over
-  await imported(app, importer, TEXT);
-  assert.equal((await local.takeQueued()).length, 1);
+  // Importing it again finds it already analysed
+  await body("import again", client(app, importer).documents.$post({ json: { text: TEXT, lang: "pl" } }), 200);
+  assert.deepEqual(await local.takeQueued(), []);
 });
 
 test("a user's own documents are listed for them, private ones too, and nobody else's", async () => {
