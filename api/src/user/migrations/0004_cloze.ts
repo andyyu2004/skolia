@@ -1,20 +1,24 @@
 // Cloze cards: a sentence from a text with one word blanked out, made from the reader.
 // A lemma can have many (one per sentence), and one can be made before its word has a
 // status, so card is rebuilt without UNIQUE (lemma_id, kind) and the foreign key to word. Recognition
-// and production cards stay one per word, by a partial unique index.
+// and production cards stay one per word, by a partial unique index. A cloze row belongs to a
+// card of kind cloze, by a foreign key on (card_id, kind), and deleting a card deletes its
+// cloze row and its reviews.
 const iso = (column: string) => `CHECK (${column} IS strftime('%Y-%m-%dT%H:%M:%fZ', ${column}))`;
 
-/** card as it is with these kinds; word: the version 2 table's foreign key and UNIQUE.
- * review references card, so its rows are set aside while card is rebuilt: dropping card
- * with them in place fails the foreign key at the commit, even with the check deferred
- * and the same ids in the new card, as SQLite counts the violations as they happen. */
-const card = (kinds: string, word: boolean) => `CREATE TABLE review_kept AS SELECT * FROM review;
-DELETE FROM review;
+/** card and review as version 3 has them (cloze false: no cloze kind, card's foreign key to
+ * word and UNIQUE (lemma_id, kind), reviews kept when their card goes) or as this version
+ * does. review references card, so it's set aside and dropped while card is rebuilt:
+ * dropping card with reviews in place fails the foreign key at the commit, even with the
+ * check deferred and the same ids in the new card, as SQLite counts the violations as they
+ * happen. */
+const rebuild = (cloze: boolean) => `CREATE TABLE review_kept AS SELECT * FROM review;
+DROP TABLE review;
 CREATE TABLE card_next (
   id TEXT NOT NULL PRIMARY KEY,
-  lemma_id TEXT NOT NULL${word ? " REFERENCES word (lemma_id)" : ""},
+  lemma_id TEXT NOT NULL${cloze ? "" : " REFERENCES word (lemma_id)"},
   lang TEXT GENERATED ALWAYS AS (substr(lemma_id, 1, instr(lemma_id, ':') - 1)) STORED NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN (${kinds})),
+  kind TEXT NOT NULL CHECK (kind IN ('recognition', 'production'${cloze ? ", 'cloze'" : ""})),
   created TEXT NOT NULL ${iso("created")},
   active INTEGER NOT NULL CHECK (active IN (0, 1)),
   fsrs TEXT NOT NULL CHECK (json_valid(fsrs)),
@@ -22,7 +26,8 @@ CREATE TABLE card_next (
   schedule_status TEXT GENERATED ALWAYS AS (fsrs ->> '$.scheduleStatus') STORED NOT NULL
     CHECK (schedule_status IN ('new', 'learning', 'review')),
   scheduled_days REAL GENERATED ALWAYS AS (fsrs ->> '$.scheduledDays') STORED NOT NULL,
-  first_reviewed TEXT CHECK (first_reviewed IS NULL OR first_reviewed IS strftime('%Y-%m-%dT%H:%M:%fZ', first_reviewed))${word ? ",\n  UNIQUE (lemma_id, kind)" : ""}
+  first_reviewed TEXT CHECK (first_reviewed IS NULL OR first_reviewed IS strftime('%Y-%m-%dT%H:%M:%fZ', first_reviewed)),
+  UNIQUE (${cloze ? "id, kind" : "lemma_id, kind"})
 ) STRICT, WITHOUT ROWID;
 INSERT INTO card_next (id, lemma_id, kind, created, active, fsrs, first_reviewed)
   SELECT id, lemma_id, kind, created, active, fsrs, first_reviewed FROM card;
@@ -31,13 +36,21 @@ ALTER TABLE card_next RENAME TO card;
 CREATE INDEX card_due ON card (lang, due_at) WHERE active = 1 AND schedule_status != 'new';
 CREATE INDEX card_new ON card (lang, created, lemma_id, kind DESC) WHERE active = 1 AND schedule_status = 'new';
 CREATE INDEX card_first_reviewed ON card (lang, first_reviewed) WHERE first_reviewed IS NOT NULL;
+CREATE TABLE review (
+  id TEXT NOT NULL PRIMARY KEY,
+  card_id TEXT NOT NULL REFERENCES card (id)${cloze ? " ON DELETE CASCADE" : ""},
+  rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 4),
+  review_time TEXT NOT NULL ${iso("review_time")}
+) STRICT, WITHOUT ROWID;
+CREATE INDEX review_card ON review (card_id, review_time);
 INSERT INTO review SELECT * FROM review_kept;
 DROP TABLE review_kept;`;
 
-export const up = `${card("'recognition', 'production', 'cloze'", false)}
+export const up = `${rebuild(true)}
 CREATE UNIQUE INDEX card_word ON card (lemma_id, kind) WHERE kind != 'cloze';
 CREATE TABLE cloze (
-  card_id TEXT NOT NULL PRIMARY KEY REFERENCES card (id),
+  card_id TEXT NOT NULL PRIMARY KEY,
+  kind TEXT NOT NULL DEFAULT 'cloze' CHECK (kind = 'cloze'),
   document_id TEXT NOT NULL,
   sentence TEXT NOT NULL CHECK (sentence != ''),
   sentence_start INTEGER NOT NULL CHECK (sentence_start >= 0),
@@ -45,10 +58,10 @@ CREATE TABLE cloze (
   blank_end INTEGER NOT NULL CHECK (blank_end > blank_start),
   feats TEXT NOT NULL CHECK (json_valid(feats) AND json_type(feats) = 'object'),
   why TEXT,
-  UNIQUE (document_id, sentence_start, blank_start)
+  UNIQUE (document_id, sentence_start, blank_start),
+  FOREIGN KEY (card_id, kind) REFERENCES card (id, kind) ON DELETE CASCADE
 ) STRICT, WITHOUT ROWID`;
 
-export const down = `DELETE FROM review WHERE card_id IN (SELECT card_id FROM cloze);
-DROP TABLE cloze;
+export const down = `DROP TABLE cloze;
 DELETE FROM card WHERE kind = 'cloze';
-${card("'recognition', 'production'", true)}`;
+${rebuild(false)}`;

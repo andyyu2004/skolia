@@ -174,16 +174,10 @@ export class User extends DurableObject<object> {
     return { clozes: rows.map((row) => ({ cardId: CardId.parse(row["card_id"]), start: Number(row["start"]) })) };
   }
 
-  /** Deletes a cloze card and its reviews; a word's cards can only be taken out of reviews
-   * (setWord). Whether there was one. */
+  /** Deletes a cloze card, and by the foreign keys its cloze row and reviews; a word's
+   * cards can only be taken out of reviews (setWord). Whether there was one. */
   deleteCloze(cardId: CardIdType): boolean {
-    return this.ctx.storage.transactionSync(() => {
-      if (this.sql.exec(`SELECT 1 FROM cloze WHERE card_id = ?`, cardId).toArray().length === 0) return false;
-      this.sql.exec(`DELETE FROM review WHERE card_id = ?`, cardId);
-      this.sql.exec(`DELETE FROM cloze WHERE card_id = ?`, cardId);
-      this.sql.exec(`DELETE FROM card WHERE id = ?`, cardId);
-      return true;
-    });
+    return this.sql.exec(`DELETE FROM card WHERE id = ? AND kind = 'cloze'`, cardId).rowsWritten > 0;
   }
 
   /** What a language has left of today's allowances: the daily limits are per language.
@@ -213,7 +207,7 @@ export class User extends DurableObject<object> {
   due(lang: Lang, now: Timestamp, dayStart: Timestamp, limit: number, group: CardGroup | undefined): DueCards {
     const newLeft = this.#newLeft(lang, dayStart);
     const groups = group === undefined ? CARD_GROUPS : [group];
-    const select = `SELECT id, lemma_id AS "lemmaId", kind, schedule_status = 'new' AS "isNew", due_at AS "dueAt",
+    const select = `SELECT card.id, card.lemma_id AS "lemmaId", card.kind, card.schedule_status = 'new' AS "isNew", due_at AS "dueAt",
         cloze.document_id AS "documentId", sentence, sentence_start AS "sentenceStart", blank_start AS "blankStart",
         blank_end AS "blankEnd", feats, why
       FROM card LEFT JOIN cloze ON cloze.card_id = card.id`;
@@ -223,7 +217,7 @@ export class User extends DurableObject<object> {
       .toArray();
     const fresh = groups.flatMap((g) => {
       const { where, params, cap } = freshCards(g, lang, newLeft);
-      return this.sql.exec(`${select} WHERE ${where} ORDER BY created, lemma_id, kind DESC LIMIT ?`, ...params, Math.min(cap, limit)).toArray();
+      return this.sql.exec(`${select} WHERE ${where} ORDER BY card.created, card.lemma_id, card.kind DESC LIMIT ?`, ...params, Math.min(cap, limit)).toArray();
     });
     return { cards: [...due, ...fresh].slice(0, limit).map(scheduled), newLeft };
   }

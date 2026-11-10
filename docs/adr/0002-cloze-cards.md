@@ -30,7 +30,9 @@ The back shows the sentence filled in, the word's grammar (accusative · singula
 cloze(card_id, document_id, sentence, sentence_start, blank_start, blank_end, feats, why)
 ```
 
-`blank_start` and `blank_end` are offsets in `sentence`, as the analysis gives them (JavaScript string indices); `sentence_start` is the sentence's offset in the text.
+`blank_start` and `blank_end` are offsets in `sentence`, as the analysis gives them; `sentence_start` is the sentence's offset in the text. The analysis counts code points and the reader UTF-16 units, which differ outside the BMP (a git-bug).
+
+`cloze` has a constant `kind = 'cloze'` and a foreign key on `(card_id, kind)` to `card (id, kind)`, so a cloze row belongs to a cloze card; deleting a card deletes its cloze row, and its reviews, by `ON DELETE CASCADE`.
 
 `card` had `UNIQUE (lemma_id, kind)` and a foreign key to `word`, so migration 4 rebuilds it: a partial unique index (`card_word`, `WHERE kind != 'cloze'`) keeps a word to one card of each of its kinds, and the foreign key goes, as a cloze card can be made for a lemma that isn't a word yet. SQLite can't drop a constraint in place, and a Durable Object can't turn `foreign_keys` off, so `review`'s rows are set aside in a table while `card` is rebuilt. `PRAGMA defer_foreign_keys` isn't enough: dropping `card` counts each review as a violation, and the new table taking its name doesn't uncount them, so the commit fails.
 

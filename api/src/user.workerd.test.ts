@@ -165,6 +165,22 @@ test("cloze's migration keeps the word cards and their reviews, and down takes t
   };
   const { cardId } = await judy.makeCloze(cloze, at);
   await judy.review({ id: schemas.ReviewId.parse(crypto.randomUUID()), cardId, rating: 3, at }, at);
+  const clozeRow = "insert into cloze (card_id, document_id, sentence, sentence_start, blank_start, blank_end, feats) values (?, ?, 'Widzę psa.', 0, 0, 5, '{}')";
+  // A cloze row belongs to a cloze card, not a word's card or none
+  await assert.rejects(storage.exec(clozeRow, "c0", cloze.documentId));
+  await assert.rejects(storage.exec(clozeRow, "nope", cloze.documentId));
+  await assert.rejects(storage.exec("insert into cloze (card_id, kind, document_id, sentence, sentence_start, blank_start, blank_end, feats) values (?, 'recognition', ?, 'Widzę psa.', 0, 0, 5, '{}')", "c0", cloze.documentId));
+
+  // Deleting a card deletes its cloze row and reviews
+  await storage.exec("insert into review values ('r1', 'c1', 3, ?)", at);
+  await storage.exec("delete from card where id = 'c1'");
+  assert.deepEqual(await storage.exec("select id from review where card_id = 'c1'"), []);
+  const { cardId: other } = await judy.makeCloze({ ...cloze, blankStart: 0, blankEnd: 5 }, at);
+  await judy.review({ id: schemas.ReviewId.parse(crypto.randomUUID()), cardId: other, rating: 3, at }, at);
+  await storage.exec("delete from card where id = ?", other);
+  assert.deepEqual(await storage.exec("select count(*) as n from cloze where card_id = ?", other), [{ n: 0 }]);
+  assert.deepEqual(await storage.exec("select count(*) as n from review where card_id = ?", other), [{ n: 0 }]);
+  await storage.exec("insert into card (id, lemma_id, kind, created, active, fsrs) values ('c1', 'pl:pies:NOUN', ?, ?, 1, ?)", fsrs[1]!.kind, at, fsrs[1]!.fsrs);
 
   await judy.migrate(3);
   assert.deepEqual(await storage.exec(cards), before);
