@@ -58,12 +58,9 @@ test("importing the same text again doesn't queue it twice, unless it failed", a
   assert.equal((await local.takeQueued()).length, 1);
   const id = await docId("pl", TEXT);
   await putJson(statusKey(id), { state: "failed", updated: "x", error: "boom" });
-  await local.env.BLOBS.delete(textKey(id));
   const retry = await importText(app);
   assert.equal(retry.status, 202);
   assert.equal((await local.takeQueued()).length, 1);
-  // Its text is stored again, in case a deletion took it
-  assert.equal(await (await local.env.BLOBS.get(textKey(id)))?.text(), TEXT);
 });
 
 test("new texts past the daily cap are refused; texts already here still open", async () => {
@@ -222,15 +219,16 @@ test("a text only privately imported is unknown to everyone else, its text, anal
   await expectStatus("the importer's text", client(app, importer).documents[":id"].text.$get({ param: { id } }), 200);
 });
 
-test("a text another user already imported doesn't count toward the daily cap", async () => {
+test("the daily cap is each user's, and a text someone else imported counts toward it", async () => {
   const app = setup({ maxImportsPerDay: 1 });
   await imported(app, importer, TEXT);
+  await expectStatus("Ivy's second", client(app, importer).documents.$post({ json: { text: "Inny tekst.", lang: "pl" } }), 429);
   const alice = await local.signIn((await local.signUp(ALICE)).id);
-  await expectStatus("known text", client(app, alice).documents.$post({ json: { text: TEXT, lang: "pl" } }), 200);
-  await expectStatus("new text", client(app, alice).documents.$post({ json: { text: "Inny tekst.", lang: "pl" } }), 429);
+  await expectStatus("Alice's first, a known text", client(app, alice).documents.$post({ json: { text: TEXT, lang: "pl" } }), 200);
+  await expectStatus("Alice's second", client(app, alice).documents.$post({ json: { text: "Inny tekst.", lang: "pl" } }), 429);
 });
 
-test("deleting an entry keeps the text for others; the last one takes everything stored for it", async () => {
+test("deleting entries keeps the text for others, and keeps it stored once nobody has one", async () => {
   const app = setup();
   const id = await imported(app, importer, TEXT);
   const alice = await local.signIn((await local.signUp(ALICE)).id);
@@ -238,10 +236,10 @@ test("deleting an entry keeps the text for others; the last one takes everything
   await expectStatus("Ivy deletes", remove(app, importer, id), 204);
   await expectStatus("Ivy's is gone", view(app, importer, id), 404);
   assert.equal((await body("Alice's stays", view(app, alice, id))).mine, true);
-  assert.notDeepEqual((await local.env.BLOBS.list({ prefix: `doc/${id}/` })).objects, []);
   await expectStatus("Alice deletes", remove(app, alice, id), 204);
-  assert.deepEqual((await local.env.BLOBS.list({ prefix: `doc/${id}/` })).objects, []);
-  assert.equal(await local.env.DB.prepare("select id from document_content where id = ?").bind(id).first(), null);
+  await expectStatus("nobody sees it", view(app, alice, id), 404);
+  assert.notDeepEqual((await local.env.BLOBS.list({ prefix: `doc/${id}/` })).objects, []);
+  assert.notEqual(await local.env.DB.prepare("select id from document where id = ?").bind(id).first(), null);
 });
 
 /** Imports the text as the signed-in user, with these fields, and returns its id. */
@@ -297,7 +295,7 @@ test("a summary says whether the viewer imported it", async () => {
   assert.deepEqual(documents.map((d) => d.mine), [true]);
 });
 
-test("the importer deletes a document and everything stored for it; nobody else can", async () => {
+test("the importer deletes their entry; nobody else can", async () => {
   const app = setup();
   const id = await imported(app, importer, TEXT);
   await local.takeQueued();
@@ -309,11 +307,10 @@ test("the importer deletes a document and everything stored for it; nobody else 
   await expectStatus("delete", remove(app, importer, id), 204);
   await expectStatus("get after delete", view(app, importer, id), 404);
   await expectStatus("delete again", remove(app, importer, id), 404);
-  assert.deepEqual((await local.env.BLOBS.list({ prefix: `doc/${id}/` })).objects, []);
   assert.deepEqual(await listed(app, importer), []);
-  // Importing it again starts over
-  await imported(app, importer, TEXT);
-  assert.equal((await local.takeQueued()).length, 1);
+  // Importing it again finds it already analysed
+  await body("import again", client(app, importer).documents.$post({ json: { text: TEXT, lang: "pl" } }), 200);
+  assert.deepEqual(await local.takeQueued(), []);
 });
 
 test("a user's own documents are listed for them, private ones too, and nobody else's", async () => {

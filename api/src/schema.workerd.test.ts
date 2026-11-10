@@ -21,20 +21,18 @@ test("every D1 table is STRICT, and timestamps must be toISOString()'s", async (
   ).all();
   assert.deepEqual(
     results,
-    ["account", "apikey", "document_content", "session", "user", "user_document", "verification"].map((name) => ({ name, strict: 1 })),
+    ["account", "apikey", "document", "session", "user", "user_document", "verification"].map((name) => ({ name, strict: 1 })),
   );
   const user = await local.signUp(ALICE);
-  const content = env.DB.prepare(`insert into document_content (id, lang, words, added, added_by) values (?, 'pl', ?, ?, ?)`);
-  await content.bind("a", 1, "2026-11-07T00:00:00.000Z", user.id).run();
-  for (const added of ["2026-11-07T00:00:00Z", "2026-11-07 00:00:00", "yesterday"]) {
-    await assert.rejects(content.bind("b", 1, added, user.id).run(), /CHECK constraint failed/);
-  }
-  await assert.rejects(content.bind("c", "many", "2026-11-07T00:00:00.000Z", user.id).run(), /cannot store TEXT/);
-  await assert.rejects(content.bind("d", 1, "2026-11-07T00:00:00.000Z", "nobody").run(), /FOREIGN KEY constraint failed/);
+  const document = env.DB.prepare(`insert into document (id, lang, words) values (?, 'pl', ?)`);
+  await document.bind("a", 1).run();
+  await assert.rejects(document.bind("b", "many").run(), /cannot store TEXT/);
   const entry = (document: string, visibility: string, licence: string, { source = null, imported = "2026-11-07T00:00:00.000Z", owner = user.id }: { source?: string | null; imported?: string; owner?: string } = {}) =>
     env.DB.prepare(`insert or replace into user_document values (?, ?, 't', ?, ?, ?, null, ?)`).bind(owner, document, imported, visibility, licence, source).run();
   await entry("a", "public", "cc0");
-  await assert.rejects(entry("a", "public", "cc0", { imported: "yesterday" }), /CHECK constraint failed/);
+  for (const imported of ["2026-11-07T00:00:00Z", "2026-11-07 00:00:00", "yesterday"]) {
+    await assert.rejects(entry("a", "public", "cc0", { imported }), /CHECK constraint failed/);
+  }
   await assert.rejects(entry("missing", "public", "cc0"), /FOREIGN KEY constraint failed/);
   await assert.rejects(entry("a", "public", "cc0", { owner: "nobody" }), /FOREIGN KEY constraint failed/);
   await assert.rejects(entry("a", "secret", "cc0"), /CHECK constraint failed/);

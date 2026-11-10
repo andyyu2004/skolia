@@ -171,10 +171,10 @@ export class D1Lexicon implements Lexicon {
   }
 }
 
-const SELECT_DOCUMENT = `SELECT entry.document_id AS id, entry.user_id AS "user", entry.title, entry.imported, entry.visibility,
-    entry.licence, entry.author, entry.source, content.lang, content.words, "user"."name" AS importerName
+const SELECT_DOCUMENT = `SELECT entry.document_id AS id, entry.user_id AS "user", entry.title, entry.imported_at AS imported,
+    entry.visibility, entry.licence, entry.author, entry.source, document.lang, document.words, "user"."name" AS importerName
   FROM user_document AS entry
-  JOIN document_content AS content ON content.id = entry.document_id
+  JOIN document ON document.id = entry.document_id
   JOIN "user" ON "user"."id" = entry.user_id`;
 
 /** D1Documents' queries, exported for the test that checks each one uses an index. */
@@ -183,18 +183,16 @@ export const DOCUMENT_QUERIES = {
   list: `${SELECT_DOCUMENT} WHERE entry.visibility = 'public'
     UNION ALL ${SELECT_DOCUMENT} WHERE entry.user_id = ?1 AND entry.visibility = 'private'
     ORDER BY imported DESC`,
-  importedBy: `${SELECT_DOCUMENT} WHERE entry.user_id = ?1 ORDER BY entry.imported DESC`,
+  importedBy: `${SELECT_DOCUMENT} WHERE entry.user_id = ?1 ORDER BY entry.imported_at DESC`,
   visible: `${SELECT_DOCUMENT} WHERE entry.document_id = ?1 AND (entry.user_id = ?2 OR entry.visibility = 'public')
-    ORDER BY entry.user_id IS ?2 DESC, entry.imported LIMIT 1`,
-  has: "SELECT 1 FROM document_content WHERE id = ?1",
-  addContent: "INSERT OR IGNORE INTO document_content (id, lang, words, added, added_by) VALUES (?1, ?2, ?3, ?4, ?5)",
-  addEntry: `INSERT OR IGNORE INTO user_document (user_id, document_id, title, imported, visibility, licence, author, source)
+    ORDER BY entry.user_id IS ?2 DESC, entry.imported_at LIMIT 1`,
+  has: "SELECT 1 FROM document WHERE id = ?1",
+  addContent: "INSERT OR IGNORE INTO document (id, lang, words) VALUES (?1, ?2, ?3)",
+  addEntry: `INSERT OR IGNORE INTO user_document (user_id, document_id, title, imported_at, visibility, licence, author, source)
     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
   update: "UPDATE user_document SET title = ?3, visibility = ?4, licence = ?5, author = ?6, source = ?7 WHERE document_id = ?1 AND user_id = ?2",
-  removeEntry: "DELETE FROM user_document WHERE document_id = ?1 AND user_id = ?2",
-  removeOrphan: "DELETE FROM document_content WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM user_document WHERE document_id = ?1) RETURNING id",
-  countAddedSince: `SELECT COUNT(*) AS n FROM document_content AS content JOIN "user" ON "user"."id" = content.added_by
-    WHERE content.added >= ?1 AND "user"."type" != 'system'`,
+  remove: "DELETE FROM user_document WHERE document_id = ?1 AND user_id = ?2",
+  countImportedSince: "SELECT COUNT(*) AS n FROM user_document WHERE user_id = ?1 AND imported_at >= ?2",
 } as const;
 
 export class D1Documents implements DocumentStore {
@@ -225,7 +223,7 @@ export class D1Documents implements DocumentStore {
 
   async add(c: DocumentContent, e: DocumentEntry): Promise<void> {
     await this.db.batch([
-      this.db.prepare(DOCUMENT_QUERIES.addContent).bind(c.id, c.lang, c.words, c.added, c.addedBy),
+      this.db.prepare(DOCUMENT_QUERIES.addContent).bind(c.id, c.lang, c.words),
       this.db.prepare(DOCUMENT_QUERIES.addEntry).bind(e.user, e.id, e.title, e.imported, e.visibility, e.licence, e.author, e.source),
     ]);
   }
@@ -234,16 +232,12 @@ export class D1Documents implements DocumentStore {
     await this.db.prepare(DOCUMENT_QUERIES.update).bind(id, user, title, visibility, licence, author, source).run();
   }
 
-  async remove(id: DocumentId, user: UserId): Promise<boolean> {
-    const [, orphan] = await this.db.batch([
-      this.db.prepare(DOCUMENT_QUERIES.removeEntry).bind(id, user),
-      this.db.prepare(DOCUMENT_QUERIES.removeOrphan).bind(id),
-    ]);
-    return (orphan?.results.length ?? 0) > 0;
+  async remove(id: DocumentId, user: UserId): Promise<void> {
+    await this.db.prepare(DOCUMENT_QUERIES.remove).bind(id, user).run();
   }
 
-  async countAddedSince(since: Timestamp): Promise<number> {
-    const row = await this.db.prepare(DOCUMENT_QUERIES.countAddedSince).bind(since).first();
+  async countImportedSince(user: UserId, since: Timestamp): Promise<number> {
+    const row = await this.db.prepare(DOCUMENT_QUERIES.countImportedSince).bind(user, since).first();
     return z.object({ n: z.number() }).parse(row).n;
   }
 }
@@ -266,15 +260,6 @@ export class R2Blobs implements BlobStore {
 
   async put(key: string, body: Uint8Array<ArrayBuffer> | string, contentType: string): Promise<void> {
     await this.bucket.put(key, body, { httpMetadata: { contentType } });
-  }
-
-  async deletePrefix(prefix: string): Promise<void> {
-    let cursor: string | undefined;
-    do {
-      const listed = await this.bucket.list(cursor === undefined ? { prefix } : { prefix, cursor });
-      if (listed.objects.length > 0) await this.bucket.delete(listed.objects.map((o) => o.key));
-      cursor = listed.truncated ? listed.cursor : undefined;
-    } while (cursor !== undefined);
   }
 }
 

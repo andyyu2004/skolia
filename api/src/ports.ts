@@ -22,14 +22,12 @@ import type {
 } from "@skolia/shared/api";
 import type { IngestJob } from "@skolia/shared/schema";
 
-/** A text, stored once however many users import it. Its state lives in the status blob. */
+/** A text, stored once however many users import it, and never deleted. Its state lives in
+ * the status blob. */
 export interface DocumentContent {
   readonly id: DocumentId;
   readonly lang: Lang;
   readonly words: number;
-  readonly added: Timestamp;
-  /** The user who first imported it, whose import the daily cap counts. */
-  readonly addedBy: UserId;
 }
 
 /** What a user says about a text they imported. The licence is their claim. */
@@ -68,10 +66,10 @@ export interface DocumentStore {
   /** Insert the entry, and the content unless it's already there. An existing entry is kept. */
   add(content: DocumentContent, entry: DocumentEntry): Promise<void>;
   update(id: DocumentId, user: UserId, fields: EntryFields): Promise<void>;
-  /** Delete the user's entry, and the content once no entry is left. True if the content went. */
-  remove(id: DocumentId, user: UserId): Promise<boolean>;
-  /** How many texts were first imported at or after this time, by users who aren't system users. */
-  countAddedSince(since: Timestamp): Promise<number>;
+  /** Delete the user's entry. The text stays, for anyone who imports it again. */
+  remove(id: DocumentId, user: UserId): Promise<void>;
+  /** How many entries this user has imported at or after this time. */
+  countImportedSince(user: UserId, since: Timestamp): Promise<number>;
 }
 
 export interface StoredBlob {
@@ -82,8 +80,6 @@ export interface StoredBlob {
 export interface BlobStore {
   get(key: string): Promise<StoredBlob | null>;
   put(key: string, body: Uint8Array<ArrayBuffer> | string, contentType: string): Promise<void>;
-  /** Every blob whose key starts with this. */
-  deletePrefix(prefix: string): Promise<void>;
 }
 
 /** A language's ingest container's jobs (analysis/src/skolia_analysis/ingest/http.py

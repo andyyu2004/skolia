@@ -126,13 +126,12 @@ function deps(signedIn: boolean): Deps {
       has: async (id) => documents.some((d) => d.id === id),
       add: async () => {},
       update: async () => {},
-      remove: async () => false,
-      countAddedSince: async () => 0,
+      remove: async () => {},
+      countImportedSince: async () => 0,
     },
     blobs: {
       get: async (key) => blobs.get(key) ?? null,
       put: async () => {},
-      deletePrefix: async () => {},
     },
     queue: {
       send: async () => {},

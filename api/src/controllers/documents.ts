@@ -12,7 +12,7 @@ import {
   type QueuePlace,
   type User,
 } from "@skolia/shared/api";
-import { PART_ENCODING, docId, docPrefix, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
+import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { Status, Versions } from "@skolia/shared/schema";
 import * as schemas from "@skolia/shared/schemas";
 import { log } from "../log.ts";
@@ -32,8 +32,8 @@ export async function list(deps: Deps, viewer: User | null): Promise<Ok<Document
 
 /** 202 if the text is queued, 200 if it's already here and not failed (a failed import is
  * retried by importing the same text again). A text someone else imported gets the user's
- * own entry, with their title, visibility and licence; only a new text counts toward the
- * daily cap, since analysing it is what costs. */
+ * own entry, with their title, visibility and licence. Each new entry counts toward the
+ * user's daily cap. */
 export async function importText(
   deps: Deps,
   user: User,
@@ -49,17 +49,14 @@ export async function importText(
   const id = await docId(body.lang, body.text);
   const known = await deps.documents.has(id);
   const own = known ? await ownEntry(deps, id, user) : null;
-  if (!known) {
+  if (own === null) {
     const today = new Date(deps.now());
     today.setUTCHours(0, 0, 0, 0);
-    if (user.type !== "system" && (await deps.documents.countAddedSince(timestamp(today))) >= deps.maxImportsPerDay) {
+    if (user.type !== "system" && (await deps.documents.countImportedSince(user.id, timestamp(today))) >= deps.maxImportsPerDay) {
       return fail(429, "Today's imports are used up. Try again tomorrow.");
     }
-    await deps.blobs.put(textKey(id), body.text, "text/plain; charset=utf-8");
-  }
-  const now = timestamp(deps.now());
-  if (own === null) {
-    await deps.documents.add({ id, lang: body.lang, words: countWords(body.text), added: now, addedBy: user.id }, { id, user: user.id, imported: now, ...fields });
+    if (!known) await deps.blobs.put(textKey(id), body.text, "text/plain; charset=utf-8");
+    await deps.documents.add({ id, lang: body.lang, words: countWords(body.text) }, { id, user: user.id, imported: timestamp(deps.now()), ...fields });
   } else if (own.visibility === "private" && fields.visibility === "public") {
     await deps.documents.update(id, user.id, { ...fields, title: own.title });
   }
@@ -68,8 +65,6 @@ export async function importText(
   if (known) {
     const summary = await current(deps, record, versionsOf(deps.blobs), user);
     if (summary.state !== "failed") return ok(summary);
-    // A deletion racing an import can have taken it (remove)
-    await deps.blobs.put(textKey(id), body.text, "text/plain; charset=utf-8");
   }
   const queued = await requeue(deps, record, await readStatus(deps.blobs, id), deps.now(), known ? "reimported" : "imported");
   return { status: 202, body: summarize(record, queued, user) };
@@ -106,15 +101,13 @@ export async function update(
   return ok(await current(deps, { ...record, ...fields }, versionsOf(deps.blobs), user));
 }
 
-/** A user deletes their entry. The last entry's deletion takes the text, status, analyses
- * and bundles with it, and its id is then unknown, like one never imported. */
+/** A user deletes their entry. The text, its analyses and bundles stay, so importing it
+ * again needn't analyse it again. */
 export async function remove(deps: Deps, user: User, id: string): Promise<NoContent | Failed<403 | 404>> {
   const record = await findDocument(deps, id, user);
   if (!record) return noSuchDocument();
   if (record.user !== user.id) return fail(403, "only the document's importer can delete it");
-  // An import of the same text between these two can lose its text blob; it then shows as
-  // failed, and importing it again retries
-  if (await deps.documents.remove(record.id, user.id)) await deps.blobs.deletePrefix(docPrefix(record.id));
+  await deps.documents.remove(record.id, user.id);
   return NO_CONTENT;
 }
 
