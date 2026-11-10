@@ -11,7 +11,7 @@ CREATE TABLE document (
 
 -- private: seen only by its user. A text is seen by anyone once one entry for it is public.
 CREATE TABLE user_document (
-  user_id TEXT NOT NULL REFERENCES "user" ("id"),
+  user_id TEXT NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
   document_id TEXT NOT NULL REFERENCES document (id),
   title TEXT NOT NULL,
   imported_at TEXT NOT NULL CHECK (imported_at IS strftime('%Y-%m-%dT%H:%M:%fZ', imported_at)),

@@ -42,6 +42,10 @@ test("every D1 table is STRICT, and timestamps must be toISOString()'s", async (
   await entry("a", "private", "all-rights-reserved");
   await entry("a", "public", "cc-by-nc-sa", { source: "https://example.org" });
   await entry("a", "public", "cc-by-nd");
+  // Deleting a user takes their entries, and leaves the text
+  await env.DB.prepare(`delete from "user" where "id" = ?`).bind(user.id).run();
+  assert.equal(await env.DB.prepare("select 1 from user_document where document_id = 'a'").first(), null);
+  assert.notEqual(await env.DB.prepare("select 1 from document where id = 'a'").first(), null);
 });
 
 // A SCAN that names an index walks it in order, as list does over the public entries' partial index
