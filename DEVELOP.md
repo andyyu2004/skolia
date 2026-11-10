@@ -17,17 +17,23 @@ reader (Vite, :5173) → wrangler dev (:8787): skolia → local queue → skolia
 
 `wrangler dev` runs both Workers from their configs, with local D1, R2 and Queue in `api/.wrangler/state`, and runs each language's ingest container in Docker from the image Nix builds (`analysis/flake.nix`), which `just images` loads as `skolia-ingest-{lang}:dev` (`analysis/image/Dockerfile` is just that image). The container reaches the local bucket through the dev server's S3 endpoint (`api/.env`, which wrangler dev loads for both Workers; `--env-file` would reach only the first config, and an `api/.dev.vars` would replace it).
 
-Once: install Nix, direnv (with nix-direnv), the JavaScript packages and Docker, and run `direnv allow` in the repo. `.envrc` loads the flake's dev shell, which puts `just`, terraform, sops and age on PATH (`flake.nix`), and tells sops where your age key is. The images are built by Nix in a container (`analysis/scripts/nix.sh`), or by this machine's Nix on x86-64 Linux or with `SKOLIA_NIX=host` (on a Mac, Determinate Nix's Linux builder, after `cachix use andyyu2004`).
+Once: install Nix, direnv (with nix-direnv) and Docker, and run `direnv allow` in the repo. `.envrc` loads the flake's dev shell, which puts `just`, terraform, sops and age on PATH (`flake.nix`), and tells sops where your age key is. The images and lexicons are `x86_64-linux` builds. On a Mac that needs [Determinate Nix](https://docs.determinate.systems/), whose native Linux builder builds them: run `determinate-nixd login` (the builder needs a FlakeHub login). Everywhere, add the `andyyu2004` Cachix cache, which has everything but the models, to `/etc/nix/nix.custom.conf` (Determinate Nix) or `/etc/nix/nix.conf`, and restart the Nix daemon:
+
+```
+extra-substituters = https://andyyu2004.cachix.org
+extra-trusted-public-keys = andyyu2004.cachix.org-1:NgqnQARhcBguLqfW/INkdJd8SZjtunkNUENFbQrAwW4=
+```
+
+`just dev` and `just e2e` install the JavaScript packages (`just install`) and build everything else they need.
 
 ```fish
 direnv allow                 # once: .envrc loads the dev shell
-pnpm install                 # from the repo root: api, reader and shared
 just dev                     # http://localhost:5173 (Vite), or :8787 for the built reader
 just e2e                     # fresh local state, lexicon samples: the end-to-end tests (just e2e staging: against staging)
 ```
 
 - `just e2e` needs port 8787 free, so stop `just dev` first. Its log is `api/.wrangler/e2e.log`.
-- `just dev` and `just e2e` first run `just images`, which loads an image into Docker only when Docker doesn't have it under its Nix hash yet. The first build downloads the models (about 2 GB per language) and the lexicon inputs (`scripts/fetch_inputs.sh`, which needs `wrangler login`) and builds the lexicons; in the container, later builds reuse its store (the Docker volume `skolia-nix-store`).
+- `just dev` and `just e2e` first run `just images`, which loads an image into Docker only when Docker doesn't have it under its Nix hash yet. The first build downloads the models (about 2 GB per language) and gets the rest from Cachix; what Cachix doesn't have needs the lexicon inputs (`scripts/fetch_inputs.sh`, which needs `wrangler login`). Both then load each language's cards lexicon into local D1 (`just load-lexicon local`), skipping one D1 already has.
 - The images are `linux/amd64` only, as wrangler dev (4.151.2) builds and pulls containers for amd64, so on Apple Silicon they run under emulation. Morfeusz is PyPI's `morfeusz2` x86-64 wheel, with SGJP's dictionary from the same release (1.99.15, 2026-06-01).
 - On a phone on the same network: `pnpm --filter @skolia/reader dev --host` and open the address it prints.
 - Without signing in you can read, but not import or make flashcards. `just dev` writes the dev OAuth client's credentials (infra/README.md), `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, to `api/.env.local` (git-ignored, loaded with `api/.env`) if it's missing, decrypting them from `secrets/dev.env` with sops and your age key. Without them only API keys sign in (`just e2e` writes one for the system user). Sign in from http://localhost:5173, the origin `BASE_URL` names.
@@ -148,10 +154,8 @@ Large inputs and outputs live in `data/` at the repo root (git-ignored). The lex
 
 ```fish
 scripts/fetch_inputs.sh pl
-scripts/nix.sh nix build .#lexicon-pl   # → result/pl.sqlite and pl-valency.json
+nix build .#lexicon-pl   # → result/pl.sqlite and pl-valency.json
 ```
-
-When `nix.sh` runs Nix in a container, `result` points into the container's store, so read it there (`scripts/nix.sh cat result/pl-valency.json`).
 
 The lexicon's version names the extract by its hash, so the same extract gives the same version on any machine. To move to a newer extract (this re-bundles every document once):
 

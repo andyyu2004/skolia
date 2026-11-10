@@ -59,36 +59,16 @@ dev-sync-curated:
 
 # wrangler dev on :8787 with local state in api/.wrangler/state
 [working-directory('api')]
-dev-api: images env-local
+dev-api: install images env-local
     pnpm --filter @skolia/reader build
     pnpm exec wrangler d1 migrations apply DB --local --env='' </dev/null
     for lang in {{ langs }}; do pnpm exec wrangler d1 migrations apply "LEXICON_$(tr a-z A-Z <<<"$lang")" --local --env='' </dev/null; done
-    just lexicon-local
+    just load-lexicon local
     pnpm exec wrangler dev -c wrangler.jsonc -c wrangler.ingest.jsonc --port 8787
 
-# An unchanged one is skipped.
-# Load each data/lexicon/{lang}.cards.sqlite into wrangler dev's lexicon databases for cards
-lexicon-local: cards-local
-    #!/usr/bin/env bash
-    set -euo pipefail
-    for lang in {{ langs }}; do
-      cards=data/lexicon/$lang.cards.sqlite
-      [ ! -f "$cards" ] || infra/load-lexicon.py local "$cards"
-    done
-
-# Rebuilt when the lexicon is newer; a language without one has none, so its cards will have no meanings.
-# Build data/lexicon/{lang}.cards.sqlite from {lang}.sqlite (DEVELOP.md says how to build them)
-cards-local:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    for lang in {{ langs }}; do
-      lexicon=data/lexicon/$lang.sqlite cards=data/lexicon/$lang.cards.sqlite
-      if [ -f "$lexicon" ]; then
-        [ "$cards" -nt "$lexicon" ] || (cd analysis && uv run skolia-build-cards "$lang" "../$lexicon" "../$cards")
-      else
-        echo "cards-local: no data/lexicon/$lang.sqlite; cards in $lang will have no meanings" >&2
-      fi
-    done
+# The Node packages, as pnpm-lock.yaml has them
+install:
+    pnpm install --frozen-lockfile
 
 # api/.env.local, the dev Google OAuth client, from secrets/dev.env if it's missing. sops finds the
 # age key through .envrc.
@@ -99,13 +79,13 @@ env-local:
     [ -f .env.local ] && exit
     if ! sops decrypt ../secrets/dev.env > .env.local.tmp; then
       rm -f .env.local.tmp
-      echo "env-local: can't decrypt secrets/dev.env; DEVELOP.md says how to get your age key added" >&2
-      exit 1
+      echo "env-local: can't decrypt secrets/dev.env, so only API keys sign in; DEVELOP.md says how to get your age key added" >&2
+      exit 0
     fi
     mv .env.local.tmp .env.local
 
 # Vite on :5173, proxying /api to :8787
-dev-reader:
+dev-reader: install
     pnpm --filter @skolia/reader dev --port 5173 --strictPort
 
 # Build each language's ingest image with Nix and load it into Docker for wrangler dev
@@ -121,21 +101,21 @@ migrate env:
     infra/wrangler.sh {{ env }} d1 migrations apply DB --remote
     for lang in {{ langs }}; do infra/wrangler.sh {{ env }} d1 migrations apply "LEXICON_$(tr a-z A-Z <<<"$lang")" --remote; done
 
-# The Nix store path must be readable here: Linux, or SKOLIA_NIX=host (analysis/scripts/nix.sh).
 # Load each language's lexicon into its database (staging, production, pr-N or local), from its Nix build for cards.
 # A preview gets each language's entries for wordfreq's 3,000 most common words (infra/load-lexicon.py --sample).
 # A language whose build evaluates to the Nix output D1 last loaded is skipped without building it.
-load-lexicon env:
+# flags go to infra/load-lexicon.py (api/scripts/e2e.sh: --sample, --persist-to).
+load-lexicon env *flags:
     #!/usr/bin/env bash
     set -euo pipefail
-    case {{ env }} in pr-*) langs=({{ langs }}) sample=(--sample 3000) ;; *) langs=({{ langs }}) sample=() ;; esac
-    for lang in "${langs[@]}"; do
+    case {{ env }} in pr-*) sample=(--sample 3000) ;; *) sample=() ;; esac
+    for lang in {{ langs }}; do
       build="./analysis#cards-lexicon-$lang"
-      out=$(analysis/scripts/nix.sh nix eval --raw "$build.outPath")
-      state=$(infra/load-lexicon.py {{ env }} --lang "$lang" --built-from "$out" "${sample[@]}")
+      out=$(nix eval --raw "$build.outPath")
+      state=$(infra/load-lexicon.py {{ env }} --lang "$lang" --built-from "$out" "${sample[@]}" {{ flags }})
       if [ "$state" = current ]; then echo "{{ env }}: $lang already serves $out"; continue; fi
-      out=$(analysis/scripts/nix.sh nix build --no-link --print-out-paths "$build")
-      infra/load-lexicon.py {{ env }} "$out/$lang.cards.sqlite" --built-from "$out" "${sample[@]}"
+      out=$(nix build --no-link --print-out-paths "$build")
+      infra/load-lexicon.py {{ env }} "$out/$lang.cards.sqlite" --built-from "$out" "${sample[@]}" {{ flags }}
     done
 
 # Terraform: storage, queue, ingest's R2 token, billing alerts
@@ -177,7 +157,7 @@ e2e env="local":
     #!/usr/bin/env bash
     set -euo pipefail
     if [ {{ env }} = local ]; then
-      just build images cards-local
+      just install build images
       exec api/scripts/e2e.sh {{ langs }}
     fi
     url=$(just url {{ env }})
