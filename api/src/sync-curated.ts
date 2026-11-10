@@ -1,27 +1,29 @@
 // Makes the curated user's documents match curated/: imports each text there publicly,
 // updates the title, licence, author or source of those already imported, and deletes the
 // curated user's documents that aren't there any more. A document's id is its text's hash,
-// so an edited text is a new document and the old one is deleted. With --check, only
-// lists what it would do, and fails if that's anything.
-// curated/{lang}/{name}.txt: "key: value" lines (title and licence; author and source if
-// known), a line "---", then the text.
-// usage: SYNC_CURATED_API_KEY=<key> node src/sync-curated.ts <base url> <texts dir> [--check]
+// so an edited text, in the file or at its source, is a new document and the old one is
+// deleted. With --check, only lists what it would do, and fails if that's anything.
+// curated/{lang}/{name}.yaml: one text, of a kind (curated-kinds.ts) that has it inline or
+// names where to fetch it.
+// usage: SYNC_CURATED_API_KEY=<key> node src/sync-curated.ts <base url> <curated dir> [--check]
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { hc } from "hono/client";
+import { parse as parseYaml } from "yaml";
 import * as z from "zod";
 import { LANGS, type DocumentId, type DocumentSummary, type DocumentUpdate, type Lang } from "@skolia/shared/api";
 import { docId } from "@skolia/shared/keys";
 import * as schemas from "@skolia/shared/schemas";
 import type { AppType } from "./app.ts";
 import { API_KEY_HEADER } from "./auth.ts";
+import { CuratedSpec, resolve, type Fetch, type Resolved } from "./curated-kinds.ts";
 
-const Header = z.strictObject({
-  title: z.string(),
-  licence: z.string(),
-  author: z.string().optional(),
-  source: z.string().optional(),
-});
+/** A curated file, checked but not yet resolved. */
+export interface CuratedFile {
+  readonly path: string;
+  readonly lang: Lang;
+  readonly spec: CuratedSpec;
+}
 
 export interface Curated {
   path: string;
@@ -34,37 +36,64 @@ export type Change =
   | { kind: "update"; text: Curated; id: DocumentId; update: DocumentUpdate }
   | { kind: "delete"; document: DocumentSummary };
 
-/** A text file's header and text, as a public import. Throws, naming the file, if it isn't one. */
-export async function parseCurated(path: string, lang: Lang, raw: string): Promise<Curated> {
-  const [head, ...rest] = raw.split(/^---$/mu);
-  if (head === undefined || rest.length === 0) throw new Error(`${path}: no "---" line after the header`);
-  const fields: Record<string, string> = {};
-  for (const line of head.split("\n")) {
-    if (line.trim() === "") continue;
-    const match = /^([a-z]+):\s*(.*)$/u.exec(line);
-    if (!match?.[1] || match[2] === undefined) throw new Error(`${path}: "${line}" isn't "key: value"`);
-    fields[match[1]] = match[2].trim();
+/** A curated file's YAML, checked against its kind. Throws, naming the file, if it isn't one. */
+export function parseCurated(path: string, lang: Lang, raw: string): CuratedFile {
+  let yaml: unknown;
+  try {
+    yaml = parseYaml(raw);
+  } catch (error) {
+    throw new Error(`${path}: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const header = Header.safeParse(fields);
-  if (!header.success) throw new Error(`${path}: ${header.error.issues[0]?.message ?? "bad header"}`);
-  const text = rest.join("---").trim();
-  const request = schemas.ImportRequest.safeParse({ ...header.data, text, lang, visibility: "public" });
+  const spec = CuratedSpec.safeParse(yaml);
+  if (!spec.success) {
+    const issue = spec.error.issues[0];
+    throw new Error(`${path}: ${issue ? `${issue.path.join(".") || "kind"}: ${issue.message}` : "not a curated file"}`);
+  }
+  return { path, lang, spec: spec.data };
+}
+
+/** A resolved text as a public import. Throws, naming the file, if it isn't one. */
+export async function toCurated(path: string, lang: Lang, resolved: Resolved): Promise<Curated> {
+  const text = resolved.text.trim();
+  const request = schemas.ImportRequest.safeParse({ ...resolved, text, lang, visibility: "public" });
   if (!request.success) throw new Error(`${path}: ${request.error.issues[0]?.message ?? "not a valid import"}`);
   return { path, id: await docId(lang, text), request: request.data };
 }
 
-export async function readCurated(dir: string): Promise<Curated[]> {
-  const texts: Curated[] = [];
-  for (const entry of (await readdir(dir, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
-    if (!entry.isDirectory()) continue;
-    const lang = LANGS.find((l) => l === entry.name);
-    if (lang === undefined) throw new Error(`${join(dir, entry.name)}: not a language (${LANGS.join(", ")})`);
-    for (const file of (await readdir(join(dir, lang))).sort()) {
-      if (!file.endsWith(".txt")) continue;
-      const path = join(dir, lang, file);
-      texts.push(await parseCurated(path, lang, await readFile(path, "utf8")));
-    }
-  }
+/** Every file in curated/{lang}/, checked; nothing is fetched. */
+export async function readCurated(dir: string): Promise<CuratedFile[]> {
+  const langs = (await readdir(dir, { withFileTypes: true })).filter((e) => e.isDirectory()).sort((a, b) => a.name.localeCompare(b.name));
+  const files = await Promise.all(
+    langs.map(async (entry) => {
+      const lang = LANGS.find((l) => l === entry.name);
+      if (lang === undefined) throw new Error(`${join(dir, entry.name)}: not a language (${LANGS.join(", ")})`);
+      const names = (await readdir(join(dir, lang))).sort();
+      return Promise.all(
+        names.map(async (name) => {
+          const path = join(dir, lang, name);
+          if (!name.endsWith(".yaml")) throw new Error(`${path}: not a .yaml file`);
+          return parseCurated(path, lang, await readFile(path, "utf8"));
+        }),
+      );
+    }),
+  );
+  return files.flat();
+}
+
+/** The files' texts, fetching those their kind names a source for. Throws, naming the
+ * file, if one can't be had or two are the same text. */
+export async function resolveCurated(files: readonly CuratedFile[], fetch: Fetch = globalThis.fetch): Promise<Curated[]> {
+  const texts = await Promise.all(
+    files.map(async ({ path, lang, spec }) => {
+      let resolved: Resolved;
+      try {
+        resolved = await resolve(spec, lang, fetch);
+      } catch (error) {
+        throw new Error(`${path}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return toCurated(path, lang, resolved);
+    }),
+  );
   const seen = new Map<DocumentId, string>();
   for (const text of texts) {
     const other = seen.get(text.id);
@@ -137,11 +166,11 @@ async function main(): Promise<void> {
   const [, , url, dir, flag] = process.argv;
   const key = process.env["SYNC_CURATED_API_KEY"];
   if (!url || !dir || !key || (flag !== undefined && flag !== "--check")) {
-    console.error("usage: SYNC_CURATED_API_KEY=<key> node src/sync-curated.ts <base url> <texts dir> [--check]");
+    console.error("usage: SYNC_CURATED_API_KEY=<key> node src/sync-curated.ts <base url> <curated dir> [--check]");
     process.exit(2);
   }
   const api = hc<AppType>(url.replace(/\/$/u, ""), { headers: { [API_KEY_HEADER]: key } }).api;
-  const texts = await readCurated(dir);
+  const texts = await resolveCurated(await readCurated(dir));
   const check = flag === "--check";
   const changes = await sync(api, texts, { check });
   console.log(`${texts.length} texts, ${changes.length} ${check ? "to make" : "made"}`);
