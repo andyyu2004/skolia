@@ -172,7 +172,8 @@
           ln -s ${stanzaModels.${lang}}/${lang} $out/${lang}
           ln -s ${
             pkgs.fetchurl {
-              url = "https://raw.githubusercontent.com/stanfordnlp/stanza-resources/main/resources_1.15.0.json";
+              # A commit, as main's copy changes (it did on 2026-11-09)
+              url = "https://raw.githubusercontent.com/stanfordnlp/stanza-resources/967b3ec9bc08ff876e351c4364f27455b3f0a2b6/resources_1.15.0.json";
               sha256 = "ed01f17735f351e8f08fda331c3208091657d79420a2a10b4f9cfbc685f3d65d";
             }
           } $out/resources.json

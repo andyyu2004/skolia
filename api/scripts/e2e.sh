@@ -2,9 +2,8 @@
 # Local end to end: wrangler dev with both Workers, the ingest containers and empty local
 # D1, R2 and queue, each language's lexicon sample (as a preview has) loaded, then the
 # end-to-end tests (src/e2e.ts) and the curated texts' sync (src/sync-curated.ts, twice: the second run must find
-# nothing to do) against it. Needs Docker, the reader build, the ingest images (just images)
-# and data/lexicon/{lang}.cards.sqlite (just cards-local). Port 8787 must be free: api/.env
-# points the containers at it.
+# nothing to do) against it. Needs Docker, the reader build and the ingest images (just
+# images). Port 8787 must be free: api/.env points the containers at it.
 # usage: e2e.sh <lang>...
 set -euo pipefail
 
@@ -23,15 +22,8 @@ d1() {
   pnpm exec wrangler d1 "$@" --local --persist-to "$state" --env='' >/dev/null
 }
 d1 migrations apply DB
-for lang in "$@"; do
-  cards=../data/lexicon/$lang.cards.sqlite
-  if [ ! -f "$cards" ]; then
-    echo "no data/lexicon/$lang.cards.sqlite; just cards-local makes it" >&2
-    exit 1
-  fi
-  d1 migrations apply "LEXICON_$(tr a-z A-Z <<<"$lang")"
-  ../infra/load-lexicon.py local "$cards" --sample 3000 --persist-to "$state"
-done
+for lang in "$@"; do d1 migrations apply "LEXICON_$(tr a-z A-Z <<<"$lang")"; done
+just load-lexicon local --sample 3000 --persist-to "$api/$state"
 
 pnpm exec wrangler dev -c wrangler.jsonc -c wrangler.ingest.jsonc --persist-to "$state" --port "$port" --show-interactive-dev-session=false >"$log" 2>&1 &
 dev=$!
