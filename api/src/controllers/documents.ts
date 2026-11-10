@@ -11,6 +11,7 @@ import {
   type DocumentSummary,
   type Lang,
   type QueuePlace,
+  type TagFilter,
   type User,
 } from "@skolia/shared/api";
 import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
@@ -25,8 +26,9 @@ const logger = log("documents");
 const NAME = /^[a-z0-9-]{1,64}$/;
 const JSON_TYPE = "application/json";
 
-export async function list(deps: Deps, viewer: User | null): Promise<Ok<DocumentList>> {
-  const records = await deps.documents.list(viewer?.id ?? null);
+/** The entries the viewer can see, narrowed to those with these tags. */
+export async function list(deps: Deps, viewer: User | null, tags: TagFilter = {}): Promise<Ok<DocumentList>> {
+  const records = await deps.documents.list(viewer?.id ?? null, tags);
   const versions = versionsOf(deps.blobs);
   return ok({ documents: await Promise.all(records.map((r) => current(deps, r, versions, viewer))) });
 }
@@ -45,6 +47,7 @@ export async function importText(
     licence: body.licence,
     author: body.author?.trim() || null,
     source: body.source ?? null,
+    tags: body.tags,
   };
   const id = await docId(body.lang, body.text);
   const known = await deps.documents.has(id);
@@ -53,7 +56,7 @@ export async function importText(
     if (!known) await deps.blobs.put(textKey(id), body.text, "text/plain; charset=utf-8");
     await deps.documents.add({ id, lang: body.lang, words: countWords(body.text) }, { id, user: user.id, imported: timestamp(deps.now()), ...fields });
   } else if (own.visibility === "private" && fields.visibility === "public") {
-    await deps.documents.update(id, user.id, { ...fields, title: own.title });
+    await deps.documents.update(id, user.id, { ...fields, title: own.title, tags: own.tags });
   }
   const record = await ownEntry(deps, id, user);
   if (!record) throw new Error(`document ${id} vanished after insert`);
@@ -72,7 +75,7 @@ export async function mine(deps: Deps, user: User): Promise<Ok<DocumentList>> {
   return ok({ documents: await Promise.all(records.map((r) => current(deps, r, versions, user))) });
 }
 
-/** A user changes the title, licence, author, source or visibility of their own entry. */
+/** A user changes the title, licence, author, source, visibility or tags of their own entry. */
 export async function update(
   deps: Deps,
   user: User,
@@ -88,6 +91,7 @@ export async function update(
     licence: body.licence ?? record.licence,
     author: body.author === undefined ? record.author : body.author || null,
     source: body.source === undefined ? record.source : body.source,
+    tags: body.tags ?? record.tags,
   };
   if (fields.visibility === "public" && !isShareable(fields.licence)) {
     return fail(400, "a public text needs a licence that allows sharing it");

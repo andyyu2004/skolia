@@ -11,11 +11,14 @@ import {
   MAX_TEXT_LENGTH,
   MAX_TITLE_LENGTH,
   RATINGS,
+  TAGS,
   UPOS,
   USER_TYPES,
   VISIBILITIES,
   WORD_STATUSES,
   isShareable,
+  type TagFilter as TagFilterType,
+  type Tags as TagsType,
 } from "./api.ts";
 import type { Status as StatusType, Versions as VersionsType } from "./schema.gen.ts";
 
@@ -92,6 +95,19 @@ const Source = z
   .max(MAX_SOURCE_LENGTH)
   .refine((s) => /^https?:\/\/\S+$/u.test(s), "source must be an http(s) URL");
 
+/** A text's tags (TAGS in api.ts). */
+export const Tags = z.strictObject({
+  level: z.enum(TAGS.level).optional(),
+}) satisfies z.ZodType<TagsType>;
+
+/** A list's query: a kind of tag given once or more is a value or values to keep. */
+export const DocumentsQuery = z.object({
+  level: z
+    .union([z.enum(TAGS.level), z.array(z.enum(TAGS.level))])
+    .transform((v) => (Array.isArray(v) ? v : [v]))
+    .optional(),
+}) satisfies z.ZodType<TagFilterType>;
+
 export const ImportRequest = z
   .object({
     title: z.string().optional(),
@@ -104,6 +120,7 @@ export const ImportRequest = z
     licence: Licence.default("unknown"),
     author: z.string().max(MAX_AUTHOR_LENGTH).optional(),
     source: Source.optional(),
+    tags: Tags.default({}),
   })
   .refine((r) => r.visibility === "private" || isShareable(r.licence), {
     message: "a public text needs a licence that allows sharing it",
@@ -116,6 +133,7 @@ export const DocumentUpdate = z.object({
   author: z.string().trim().max(MAX_AUTHOR_LENGTH).nullable().optional(),
   source: Source.nullable().optional(),
   visibility: Visibility.optional(),
+  tags: Tags.optional(),
 });
 
 export const State = z.enum(["queued", "analysing", "ready", "failed"]);
@@ -149,4 +167,9 @@ export const DocumentRow = z.object({
   author: z.string().nullable(),
   source: z.string().nullable(),
   importerName: z.string(),
+  /** The entry's user_document_tag rows, as a JSON object of kind to value. */
+  tags: z
+    .string()
+    .transform((json) => JSON.parse(json) as unknown)
+    .pipe(Tags),
 });

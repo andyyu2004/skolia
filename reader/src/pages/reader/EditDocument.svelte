@@ -1,13 +1,14 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import type { DocumentSummary, Licence } from "@skolia/shared/api";
+  import type { DocumentSummary, Licence, Tags } from "@skolia/shared/api";
   import { MAX_TITLE_LENGTH, isShareable } from "@skolia/shared/api";
   import { deleteDocument, updateDocument } from "../../lib/api.ts";
   import Button from "../../components/Button.svelte";
   import Field from "../../components/Field.svelte";
   import SourceFields from "../../components/SourceFields.svelte";
+  import TagFields from "../../components/TagFields.svelte";
 
-  /** The importer changes a text's title, licence, author, source and whether it's
+  /** The importer changes a text's title, licence, author, source, tags and whether it's
    * shared, or deletes it, in a modal dialog. */
   let {
     summary,
@@ -23,6 +24,7 @@
   let author = $state(initial.author ?? "");
   let source = $state(initial.source ?? "");
   let share = $state(initial.visibility === "public");
+  let tags = $state<Tags>(initial.tags);
   let busy = $state(false);
   let confirmingDelete = $state(false);
   let error = $state<string | null>(null);
@@ -49,6 +51,7 @@
           author: by === "" ? null : by,
           source: source.trim() === "" ? null : source.trim(),
           visibility: share && shareable ? "public" : "private",
+          tags,
         }),
       );
     } catch (e: unknown) {
@@ -93,6 +96,7 @@
         <input id="edit-title" bind:value={title} maxlength={MAX_TITLE_LENGTH} required />
       </Field>
       <SourceFields bind:licence bind:ownWork bind:author bind:source bind:share />
+      <TagFields bind:tags id="edit" />
 
       <div class="danger-zone">
         {#if confirmingDelete}

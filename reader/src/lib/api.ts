@@ -67,7 +67,7 @@ export async function signOut(): Promise<void> {
 }
 
 export async function listDocuments(): Promise<DocumentSummary[]> {
-  const response = await api.documents.$get();
+  const response = await api.documents.$get({ query: {} });
   if (!response.ok) throw await failure(response);
   return (await response.json()).documents;
 }

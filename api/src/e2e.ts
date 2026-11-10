@@ -77,9 +77,9 @@ async function documents(base: string, key: string, lang: Lang): Promise<void> {
   const request: ImportRequest = { title: `end-to-end test ${at}`, text: `${TEXTS[lang]} Test ${at}.`, lang, visibility: "private" };
   const { id } = await body(`${lang} import`, api.documents.$post({ json: request }), 202);
   console.log(`${lang}: imported ${id}`);
-  const library = await body("library", anonymous.documents.$get());
+  const library = await body("library", anonymous.documents.$get({ query: {} }));
   assert.ok(!library.documents.some((d) => d.id === id), `${lang}: a private text is in the library`);
-  const mine = await body("the importer's documents", api.documents.$get());
+  const mine = await body("the importer's documents", api.documents.$get({ query: {} }));
   assert.ok(mine.documents.some((d) => d.id === id), `${lang}: the importer's list hasn't their private text`);
 
   const deadline = Date.now() + TIMEOUT_MS;

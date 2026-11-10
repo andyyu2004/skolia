@@ -31,8 +31,9 @@ export { MAX_TEXT_LENGTH } from "./schema.gen.ts";
 
 export type ImportRequest = z.input<typeof schemas.ImportRequest>;
 
-/** A change to a document's title, licence, author, source or visibility, by its
- * importer. A field left out stays as it is; null clears author or source. */
+/** A change to a document's title, licence, author, source, visibility or tags, by its
+ * importer. A field left out stays as it is; null clears author or source; tags replace
+ * all of its tags. */
 export type DocumentUpdate = z.input<typeof schemas.DocumentUpdate>;
 
 /** A user's entry for a text. private: only that user sees it. A text no entry makes
@@ -107,6 +108,47 @@ export const LICENCE_INFO: Record<Licence, LicenceInfo> = {
   unknown: { short: "Licence unknown", label: "Unknown", url: null },
 };
 
+/** The kinds of tag a text can have, each with the values it allows. A text has at most
+ * one value of each kind. A new kind, or value, needs a migration too: document_tag's
+ * CHECK lists them. */
+export const TAGS = {
+  /** How hard the text is to read for a learner of its language: a CEFR level, A1 to C2,
+   * or past either end of it, A0 (for a learner just starting) or C3 (harder than C2,
+   * such as old literary language that natives find hard too). */
+  level: ["A0", "A1", "A2", "B1", "B2", "C1", "C2", "C3"],
+} as const;
+export type TagKind = keyof typeof TAGS;
+export type TagValue<K extends TagKind = TagKind> = (typeof TAGS)[K][number];
+export type Tags = { readonly [K in TagKind]?: TagValue<K> | undefined };
+export const TAG_KINDS = Object.keys(TAGS) as readonly TagKind[];
+
+/** Narrows a list of documents to those with any of the values given for each kind of
+ * tag, as GET /api/documents?level=A1&level=A2 asks. */
+export type TagFilter = { readonly [K in TagKind]?: readonly TagValue<K>[] | undefined };
+
+export interface TagInfo<K extends TagKind> {
+  /** The kind's name, for filters and forms. */
+  label: string;
+  /** Each value's name, beside the value itself. */
+  values: Record<TagValue<K>, string>;
+}
+
+export const TAG_INFO: { readonly [K in TagKind]: TagInfo<K> } = {
+  level: {
+    label: "Level",
+    values: {
+      A0: "Starter",
+      A1: "Beginner",
+      A2: "Elementary",
+      B1: "Intermediate",
+      B2: "Upper intermediate",
+      C1: "Advanced",
+      C2: "Proficient",
+      C3: "Beyond proficient",
+    },
+  },
+};
+
 export const MAX_TITLE_LENGTH = 200;
 export const MAX_AUTHOR_LENGTH = 200;
 export const MAX_SOURCE_LENGTH = 2000;
@@ -136,6 +178,7 @@ export interface DocumentSummary {
   author: string | null;
   /** An http(s) URL of where the text is from. */
   source: string | null;
+  tags: Tags;
   /** The entry's user: with id, the summary is one (document, user) pair. */
   importer: { id: UserId; name: string };
   /** Whether it's the viewer's entry, so they can change or delete it. */

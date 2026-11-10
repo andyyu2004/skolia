@@ -50,15 +50,16 @@ const lalka: StoredDocument = {
   licence: "public-domain",
   author: "Bolesław Prus",
   source: "https://wolnelektury.pl/katalog/lektura/lalka-tom-pierwszy.html",
+  tags: { level: "C1" },
 };
 
 function stored(n: number, fields: Partial<StoredDocument>): StoredDocument {
   return { ...lalka, id: DocumentId.parse(String(n).repeat(64)), user: SKOLIA, importerName: "skolia", ...fields };
 }
 
-const PETIT_PRINCE = stored(1, { title: "Le Petit Prince, chapitre I", lang: "fr", licence: "cc-by-sa", author: "Antoine de Saint-Exupéry", words: 412 });
-const NOTATKI = stored(2, { title: "Notatki", visibility: "private", licence: "cc-by", author: null, user: user.id, importerName: user.name, words: 38 });
-const PETER_RABBIT = stored(3, { title: "The Tale of Peter Rabbit", lang: "en", author: "Beatrix Potter", words: 951 });
+const PETIT_PRINCE = stored(1, { title: "Le Petit Prince, chapitre I", lang: "fr", licence: "cc-by-sa", author: "Antoine de Saint-Exupéry", words: 412, tags: { level: "B1" } });
+const NOTATKI = stored(2, { title: "Notatki", visibility: "private", licence: "cc-by", author: null, user: user.id, importerName: user.name, words: 38, tags: {} });
+const PETER_RABBIT = stored(3, { title: "The Tale of Peter Rabbit", lang: "en", author: "Beatrix Potter", words: 951, tags: { level: "A2" } });
 
 /** Explore's list: one of each badge and licence the listing shows. */
 const documents: readonly StoredDocument[] = [lalka, PETIT_PRINCE, NOTATKI, PETER_RABBIT];

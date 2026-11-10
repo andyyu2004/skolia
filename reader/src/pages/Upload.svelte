@@ -1,11 +1,12 @@
 <script lang="ts">
-  import type { Lang, Licence, User } from "@skolia/shared/api";
+  import type { Lang, Licence, Tags, User } from "@skolia/shared/api";
   import { LANGS, LANGUAGE_INFO, MAX_TEXT_LENGTH, isShareable } from "@skolia/shared/api";
   import { importDocument, signIn } from "../lib/api.ts";
   import Button from "../components/Button.svelte";
   import Field from "../components/Field.svelte";
   import Page from "../components/Page.svelte";
   import SourceFields from "../components/SourceFields.svelte";
+  import TagFields from "../components/TagFields.svelte";
 
   let { user }: { user: User | null | undefined } = $props();
 
@@ -17,6 +18,7 @@
   let author = $state("");
   let source = $state("");
   let share = $state(false);
+  let tags = $state<Tags>({});
   let importing = $state(false);
   let error = $state<string | null>(null);
 
@@ -35,6 +37,7 @@
         lang,
         licence,
         visibility: share && shareable ? "public" : "private",
+        tags,
         ...(by === "" ? {} : { author: by }),
         ...(source.trim() === "" ? {} : { source: source.trim() }),
       });
@@ -81,6 +84,7 @@
             required
           ></textarea>
         </Field>
+        <TagFields bind:tags id="upload" />
       </section>
 
       <section class="panel">

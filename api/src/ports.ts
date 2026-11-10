@@ -17,6 +17,8 @@ import type {
   Settings,
   User,
   Visibility,
+  TagFilter,
+  Tags,
   Word,
   WordStatus,
 } from "@skolia/shared/api";
@@ -37,6 +39,7 @@ export interface EntryFields {
   readonly licence: Licence;
   readonly author: string | null;
   readonly source: string | null;
+  readonly tags: Tags;
 }
 
 /** A user's entry for a text they imported. */
@@ -54,8 +57,9 @@ export interface StoredDocument extends DocumentEntry {
 }
 
 export interface DocumentStore {
-  /** Every public entry, and the viewer's private ones, newest first. */
-  list(viewer: UserId | null): Promise<readonly StoredDocument[]>;
+  /** Every public entry, and the viewer's private ones, newest first, with any of the
+   * values the filter gives for each kind of tag it names. */
+  list(viewer: UserId | null, tags: TagFilter): Promise<readonly StoredDocument[]>;
   /** This user's entries, public or private, newest first. */
   importedBy(user: UserId): Promise<readonly StoredDocument[]>;
   /** The entry the viewer sees for a text: their own, else its earliest public one. Null
@@ -65,6 +69,7 @@ export interface DocumentStore {
   has(id: DocumentId): Promise<boolean>;
   /** Insert the entry, and the content unless it's already there. An existing entry is kept. */
   add(content: DocumentContent, entry: DocumentEntry): Promise<void>;
+  /** Its tags replace all the entry had. */
   update(id: DocumentId, user: UserId, fields: EntryFields): Promise<void>;
   /** Delete the user's entry. The text stays, for anyone who imports it again. */
   remove(id: DocumentId, user: UserId): Promise<void>;

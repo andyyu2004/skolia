@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { DocumentSummary, Lang, User } from "@skolia/shared/api";
-  import { LANGS, LANGUAGE_INFO, LICENCE_INFO } from "@skolia/shared/api";
+  import type { DocumentSummary, Lang, TagKind, TagValue, Tags, User } from "@skolia/shared/api";
+  import { LANGS, LANGUAGE_INFO, LICENCE_INFO, TAGS, TAG_INFO, TAG_KINDS } from "@skolia/shared/api";
   import { listDocuments } from "../lib/api.ts";
   import { badge } from "../lib/reading.ts";
   import Page from "../components/Page.svelte";
@@ -12,6 +12,17 @@
   let query = $state("");
   let lang = $state<Lang | "all">("all");
   let importer = $state<"all" | "mine" | `by:${string}`>("all");
+  /** The value each kind of tag is narrowed to; a kind left out isn't. */
+  let tagged = $state<Tags>({});
+
+  function setTag(kind: TagKind, value: string): void {
+    const { [kind]: _, ...rest } = tagged;
+    tagged = value === "" ? rest : { ...rest, [kind]: value as TagValue };
+  }
+
+  function byTags(d: DocumentSummary): boolean {
+    return TAG_KINDS.every((kind) => tagged[kind] === undefined || d.tags[kind] === tagged[kind]);
+  }
 
   /** Others who imported what's listed, by id, since two can share a name. */
   const importers = $derived(
@@ -31,7 +42,7 @@
   const shown = $derived.by(() => {
     const q = query.trim().toLocaleLowerCase();
     return (documents ?? []).filter(
-      (d) => (lang === "all" || d.lang === lang) && byImporter(d) && (q === "" || d.title.toLocaleLowerCase().includes(q)),
+      (d) => (lang === "all" || d.lang === lang) && byImporter(d) && byTags(d) && (q === "" || d.title.toLocaleLowerCase().includes(q)),
     );
   });
 
@@ -76,6 +87,19 @@
             <option value={`by:${id}`}>{name}</option>
           {/each}
         </select>
+        {#each TAG_KINDS as kind (kind)}
+          <select
+            class={{ active: tagged[kind] !== undefined }}
+            value={tagged[kind] ?? ""}
+            onchange={(event) => setTag(kind, event.currentTarget.value)}
+            aria-label={TAG_INFO[kind].label}
+          >
+            <option value="">Any {TAG_INFO[kind].label.toLocaleLowerCase()}</option>
+            {#each TAGS[kind] as value (value)}
+              <option {value}>{value} · {TAG_INFO[kind].values[value]}</option>
+            {/each}
+          </select>
+        {/each}
       </div>
 
       {#if documents === null}
@@ -104,6 +128,12 @@
                   {#if status}
                     <span class={["badge", { failed: status.failed }]}>{status.text}</span>
                   {/if}
+                  {#each TAG_KINDS as kind (kind)}
+                    {@const value = doc.tags[kind]}
+                    {#if value !== undefined}
+                      <span class="badge tag" title="{TAG_INFO[kind].label}: {TAG_INFO[kind].values[value]}">{value}</span>
+                    {/if}
+                  {/each}
                 </span>
                 <span class="entry-meta">
                   <span>{LANGUAGE_INFO[doc.lang].flag} {LANGUAGE_INFO[doc.lang].name}</span>
@@ -264,6 +294,12 @@
     padding: 0.05rem 0.45rem;
     border-radius: 99px;
     background: var(--line);
+  }
+
+  .badge.tag {
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--accent);
+    font-weight: 600;
   }
 
   .badge.failed {
