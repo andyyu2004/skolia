@@ -10,14 +10,14 @@ const DAY_START = "2026-11-03T23:00:00.000Z";
 const DOC = "a".repeat(64);
 const SENTENCE = "Szukam pracy od roku.";
 
-/** pracy blanked out of SENTENCE, 40 characters into DOC. */
+/** pracy blanked out of SENTENCE, 40 characters into DOC; offsets are in the text. */
 const PRACY: NewClozeInput = {
   lemmaId: "pl:praca:NOUN",
   documentId: DOC,
   sentence: SENTENCE,
   sentenceStart: 40,
-  blankStart: 7,
-  blankEnd: 12,
+  blankStart: 47,
+  blankEnd: 52,
   feats: { Case: "Gen", Number: "Sing" },
   why: "szukać governs the genitive for its object.",
 };
@@ -60,6 +60,8 @@ test("a cloze card keeps its sentence and blank, is due with its lemma's entry, 
   await loadLexicon("pl", "lex/1", [{ lemmaId: "pl:praca:NOUN", lemma: "praca", upos: "NOUN", gloss: "work, job" }]);
   const { cardId } = await body("made", make(app, headers, PRACY), 201);
   assert.deepEqual(await body("made again", make(app, headers, { ...PRACY, why: null }), 200), { cardId });
+  // The same word in the text, with its sentence split elsewhere, as a redone analysis might
+  assert.deepEqual(await body("split elsewhere", make(app, headers, { ...PRACY, sentence: "pracy od roku.", sentenceStart: 47 }), 200), { cardId });
   assert.deepEqual((await due(app, headers)).cards, []);
   await start(app, headers, "pl:praca:NOUN");
   const { cards } = await due(app, headers, "forms");
@@ -80,7 +82,7 @@ test("a lemma can have many cloze cards, and its word's status takes them out of
   const headers = await signedIn();
   await mark(app, headers, "pl:praca:NOUN", "active");
   await body("first", make(app, headers, PRACY), 201);
-  await body("second", make(app, headers, { ...PRACY, sentence: "Mam pracę.", sentenceStart: 90, blankStart: 4, blankEnd: 9 }), 201);
+  await body("second", make(app, headers, { ...PRACY, sentence: "Mam pracę.", sentenceStart: 90, blankStart: 94, blankEnd: 99 }), 201);
   const kinds = async () => (await due(app, headers)).cards.map((c) => c.kind).sort();
   assert.deepEqual(await kinds(), ["production", "recognition"]);
   await start(app, headers, "pl:praca:NOUN");
@@ -96,9 +98,9 @@ test("a cloze card is reviewed if its word has no status or is active, not if it
   const headers = await signedIn();
   const noStatus = await body("no status", make(app, headers, PRACY), 201);
   await mark(app, headers, "pl:dom:NOUN", "known");
-  const known = await body("known", make(app, headers, { ...PRACY, lemmaId: "pl:dom:NOUN", sentence: "Idę do domu.", sentenceStart: 100, blankStart: 7, blankEnd: 11 }), 201);
+  const known = await body("known", make(app, headers, { ...PRACY, lemmaId: "pl:dom:NOUN", sentence: "Idę do domu.", sentenceStart: 100, blankStart: 107, blankEnd: 111 }), 201);
   await mark(app, headers, "pl:Ola:NOUN", "ignored");
-  const ignored = await body("ignored", make(app, headers, { ...PRACY, lemmaId: "pl:Ola:NOUN", sentence: "Widzę Olę.", sentenceStart: 200, blankStart: 6, blankEnd: 9 }), 201);
+  const ignored = await body("ignored", make(app, headers, { ...PRACY, lemmaId: "pl:Ola:NOUN", sentence: "Widzę Olę.", sentenceStart: 200, blankStart: 206, blankEnd: 209 }), 201);
   // New, they wait for their words to be started
   assert.deepEqual((await due(app, headers)).cards, []);
   // Again makes them due within minutes
@@ -163,9 +165,10 @@ test("cloze cards need a session, and a blank that's a word inside its sentence"
   assert.equal((await client(app).me.clozes.$get({ query: { documentId: DOC } })).status, 401);
   const headers = await signedIn();
   const refused: NewClozeInput[] = [
-    { ...PRACY, blankEnd: SENTENCE.length + 1 },
-    { ...PRACY, blankStart: 12, blankEnd: 12 },
-    { ...PRACY, blankStart: 6, blankEnd: 7 },
+    { ...PRACY, blankEnd: PRACY.sentenceStart + SENTENCE.length + 1 },
+    { ...PRACY, blankStart: 39, blankEnd: 47 },
+    { ...PRACY, blankStart: 52, blankEnd: 52 },
+    { ...PRACY, blankStart: 46, blankEnd: 47 },
     { ...PRACY, sentence: "" },
     { ...PRACY, sentence: "x".repeat(2001) },
     { ...PRACY, why: "x".repeat(501) },

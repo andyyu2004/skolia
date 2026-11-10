@@ -345,9 +345,9 @@ export interface DueCard extends ScheduledCard {
 export type ScheduledCard = z.output<typeof schemas.ScheduledCard>;
 
 /** A cloze card's sentence, copied from its text so the card outlives the text and its
- * analysis. The blank is sentence.slice(blankStart, blankEnd); sentenceStart is where the
- * sentence starts in the text, for going back to it. feats: the blanked word's, and why:
- * the reader's explanation of its case, both from the analysis when the card was made. */
+ * analysis. sentenceStart, blankStart and blankEnd are offsets in the text (blankParts
+ * cuts the sentence at the blank). feats: the blanked word's, and why: the reader's
+ * explanation of its case, both from the analysis when the card was made. */
 export type Cloze = z.output<typeof schemas.Cloze>;
 export type NewCloze = z.output<typeof schemas.NewCloze>;
 /** What the reader sends: the same, before the API's validation brands its ids. */
@@ -361,10 +361,21 @@ export function blankOut(
   return {
     sentence: sentence.text,
     sentenceStart: sentence.start,
-    blankStart: token.start - sentence.start,
-    blankEnd: token.end - sentence.start,
+    blankStart: token.start,
+    blankEnd: token.end,
     feats: { ...token.feats } as Record<string, string>,
   };
+}
+
+/** A cloze card's sentence before, at and after its blank. */
+export function blankParts(cloze: Pick<Cloze, "sentence" | "sentenceStart" | "blankStart" | "blankEnd">): {
+  readonly before: string;
+  readonly blank: string;
+  readonly after: string;
+} {
+  const start = cloze.blankStart - cloze.sentenceStart;
+  const end = cloze.blankEnd - cloze.sentenceStart;
+  return { before: cloze.sentence.slice(0, start), blank: cloze.sentence.slice(start, end), after: cloze.sentence.slice(end) };
 }
 
 /** The cloze card made, or the one the sentence and word already had. */

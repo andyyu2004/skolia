@@ -137,7 +137,7 @@ export class User extends DurableObject<object> {
     const s = await fsrs();
     return this.ctx.storage.transactionSync(() => {
       const had = this.sql
-        .exec(`SELECT card_id FROM cloze WHERE document_id = ? AND sentence_start = ? AND blank_start = ?`, cloze.documentId, cloze.sentenceStart, cloze.blankStart)
+        .exec(`SELECT card_id FROM cloze WHERE document_id = ? AND blank_start = ?`, cloze.documentId, cloze.blankStart)
         .toArray()[0];
       if (had !== undefined) return { cardId: CardId.parse(had["card_id"]), made: false };
       const id = CardId.parse(crypto.randomUUID());
@@ -169,9 +169,9 @@ export class User extends DurableObject<object> {
   /** A text's cloze cards, by where their blanks start in it. */
   clozes(documentId: DocumentId): ClozeList {
     const rows = this.sql
-      .exec(`SELECT card_id, sentence_start + blank_start AS start FROM cloze WHERE document_id = ? ORDER BY start`, documentId)
+      .exec(`SELECT card_id, blank_start FROM cloze WHERE document_id = ? ORDER BY blank_start`, documentId)
       .toArray();
-    return { clozes: rows.map((row) => ({ cardId: CardId.parse(row["card_id"]), start: Number(row["start"]) })) };
+    return { clozes: rows.map((row) => ({ cardId: CardId.parse(row["card_id"]), start: Number(row["blank_start"]) })) };
   }
 
   /** Deletes a cloze card, and by the foreign keys its cloze row and reviews; a word's

@@ -3,7 +3,9 @@
 // status, so card is rebuilt without UNIQUE (lemma_id, kind) and the foreign key to word. Recognition
 // and production cards stay one per word, by a partial unique index. A cloze row belongs to a
 // card of kind cloze, by a foreign key on (card_id, kind), and deleting a card deletes its
-// cloze row and its reviews.
+// cloze row and its reviews. sentence_start, blank_start and blank_end are offsets in the
+// text, which never changes (its id is its hash), so a word's place in it is the same
+// however the analysis splits sentences.
 const iso = (column: string) => `CHECK (${column} IS strftime('%Y-%m-%dT%H:%M:%fZ', ${column}))`;
 
 /** card and review as version 3 has them (cloze false: no cloze kind, card's foreign key to
@@ -54,11 +56,11 @@ CREATE TABLE cloze (
   document_id TEXT NOT NULL,
   sentence TEXT NOT NULL CHECK (sentence != ''),
   sentence_start INTEGER NOT NULL CHECK (sentence_start >= 0),
-  blank_start INTEGER NOT NULL CHECK (blank_start >= 0),
+  blank_start INTEGER NOT NULL CHECK (blank_start >= sentence_start),
   blank_end INTEGER NOT NULL CHECK (blank_end > blank_start),
   feats TEXT NOT NULL CHECK (json_valid(feats) AND json_type(feats) = 'object'),
   why TEXT,
-  UNIQUE (document_id, sentence_start, blank_start),
+  UNIQUE (document_id, blank_start),
   FOREIGN KEY (card_id, kind) REFERENCES card (id, kind) ON DELETE CASCADE
 ) STRICT, WITHOUT ROWID`;
 

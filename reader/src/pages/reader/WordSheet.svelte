@@ -229,7 +229,7 @@
     });
     for (const { lemmaId, cloze } of fresh) {
       if (lemmaId) tried.add(lemmaId);
-      if (cloze) triedClozes.add(cloze.sentenceStart + cloze.blankStart);
+      if (cloze) triedClozes.add(cloze.blankStart);
     }
     untrack(() => {
       void (async () => {
@@ -309,7 +309,7 @@
   let clozeError = $state<{ start: number; message: string } | null>(null);
 
   async function cloze(request: ClozeRequest): Promise<void> {
-    const start = request.sentenceStart + request.blankStart;
+    const start = request.blankStart;
     try {
       await addCloze(request);
     } catch (e: unknown) {

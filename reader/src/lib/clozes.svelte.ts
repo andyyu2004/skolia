@@ -23,7 +23,7 @@ export async function addCloze(cloze: NewClozeInput): Promise<void> {
   const { cardId } = await makeCloze(cloze);
   if (clozes.documentId !== cloze.documentId) return;
   if (clozes.byStart === null) return loadClozes(cloze.documentId);
-  clozes.byStart = new Map([...clozes.byStart, [cloze.sentenceStart + cloze.blankStart, cardId]]);
+  clozes.byStart = new Map([...clozes.byStart, [cloze.blankStart, cardId]]);
 }
 
 /** Deletes the text's cloze card at start, with its reviews. */

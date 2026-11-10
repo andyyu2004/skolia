@@ -33,8 +33,8 @@ function makeCloze(app: App, headers: Headers, lemmaId: LemmaId, n: number) {
     documentId: "a".repeat(64),
     sentence: "Widzę psa.",
     sentenceStart: n * 100,
-    blankStart: 6,
-    blankEnd: 9,
+    blankStart: n * 100 + 6,
+    blankEnd: n * 100 + 9,
     feats: { Case: "Acc" },
     why: null,
   };

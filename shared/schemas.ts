@@ -98,9 +98,14 @@ export const Cloze = z.object({
   why: z.string().max(MAX_CLOZE_WHY).nullable(),
 });
 
-/** A cloze card to make for the word in the sentence: the blank must be inside it. */
+/** A cloze card to make for the word in the sentence: the blank, like the sentence, is
+ * offsets in the text, and must be inside the sentence. */
 export const NewCloze = Cloze.extend({ lemmaId: LemmaId }).refine(
-  (c) => c.blankStart < c.blankEnd && c.blankEnd <= c.sentence.length && c.sentence.slice(c.blankStart, c.blankEnd).trim() !== "",
+  (c) =>
+    c.sentenceStart <= c.blankStart &&
+    c.blankStart < c.blankEnd &&
+    c.blankEnd <= c.sentenceStart + c.sentence.length &&
+    c.sentence.slice(c.blankStart - c.sentenceStart, c.blankEnd - c.sentenceStart).trim() !== "",
   { message: "the blank must be a word in the sentence" },
 );
 

@@ -3,6 +3,7 @@
   import {
     CARD_GROUPS,
     LANGUAGE_INFO,
+    blankParts,
     RATINGS,
     isLang,
     type CardCounts,
@@ -211,7 +212,7 @@
   }
 
   function blankOf(cloze: Cloze): string {
-    return cloze.sentence.slice(cloze.blankStart, cloze.blankEnd);
+    return blankParts(cloze).blank;
   }
 
   function lemmaOf(c: DueCard): string {
@@ -248,10 +249,11 @@
 
 <!-- The sentence with the word left blank and its lemma to go on, or filled in -->
 {#snippet sentence(c: DueCard, cloze: Cloze, filled: boolean)}
+  {@const parts = blankParts(cloze)}
   <p class="sentence" lang={langOf(c)}>
-    {cloze.sentence.slice(0, cloze.blankStart)}{#if filled}<mark>{blankOf(cloze)}</mark>{:else}<span class="blank"
+    {parts.before}{#if filled}<mark>{parts.blank}</mark>{:else}<span class="blank"
         ><span class="visually-hidden">blank</span></span
-      > <span class="base">({lemmaOf(c)})</span>{/if}{cloze.sentence.slice(cloze.blankEnd)}
+      > <span class="base">({lemmaOf(c)})</span>{/if}{parts.after}
   </p>
 {/snippet}
 
