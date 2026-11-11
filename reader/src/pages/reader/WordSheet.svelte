@@ -250,11 +250,14 @@
   }
 
   /** A cloze card practises a form: offered for a word that isn't its lemma (pracy, not
-   * praca), in a sentence short enough to keep, unless the word is known or ignored, which
-   * takes its cloze cards out of reviews too, or is part of a fused word (du is de + le),
-   * whose parts share its span. */
+   * praca), or that is but has a reason for a case other than the nominative (widzę dom),
+   * in a sentence short enough to keep, unless the word is known or ignored, which takes
+   * its cloze cards out of reviews too, or is part of a fused word (du is de + le), whose
+   * parts share its span. */
   function clozeOf(w: (typeof words)[number]) {
-    if (!learnable(w) || w.ref.token.mwt !== undefined || sameWord(w.entry?.lemma ?? w.ref.token.lemma ?? w.ref.token.text, w.ref.token.text)) return null;
+    if (!learnable(w) || w.ref.token.mwt !== undefined) return null;
+    const isLemma = sameWord(w.entry?.lemma ?? w.ref.token.lemma ?? w.ref.token.text, w.ref.token.text);
+    if (isLemma && (w.caseWhy === null || w.ref.token.feats.Case === "Nom")) return null;
     const found = sentenceText(w.ref.sentence);
     if (!found || found.text.length > MAX_CLOZE_SENTENCE) return null;
     const why = w.caseWhy && w.caseWhy.text.length <= MAX_CLOZE_WHY ? w.caseWhy.text : null;
