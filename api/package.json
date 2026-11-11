@@ -7,6 +7,7 @@
   },
   "scripts": {
     "check": "tsc --noEmit && tsc --noEmit -p src/worker && tsc --noEmit -p tsconfig.workerd-test.json",
+    "pretest": "pnpm --filter @skolia/reader build && wrangler deploy --dry-run --outdir dist --env=''",
     "test": "node --test \"src/**/*.test.ts\""
   },
   "dependencies": {
