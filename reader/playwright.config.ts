@@ -11,7 +11,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   expect: {
-    toHaveScreenshot: { maxDiffPixelRatio: 0.001 },
+    toHaveScreenshot: { maxDiffPixels: 10 },
   },
   use: {
     baseURL: "https://skolia.test",
