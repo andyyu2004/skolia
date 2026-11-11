@@ -497,7 +497,7 @@
   .tip {
     position: absolute;
     top: calc(100% + 0.4rem);
-    left: 0;
+    right: 0;
     z-index: 5;
     width: max-content;
     max-width: min(16rem, calc(100vw - 2 * var(--gutter)));
