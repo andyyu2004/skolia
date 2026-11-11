@@ -1,1 +1,1 @@
-{"author":{"id":"ad87ffa09351c4e5a412ec8ee1546e86b314f33d6f28629bb4bcfe7b2290924d"},"ops":[{"type":5,"timestamp":1794392033,"nonce":"mbU01k4ViyHuGXPLPW2SpYVK1CY=","added":["p1"],"removed":null}]}
+{"author":{"id":"ad87ffa09351c4e5a412ec8ee1546e86b314f33d6f28629bb4bcfe7b2290924d"},"ops":[{"type":3,"timestamp":1794392743,"nonce":"cqeB1fLw4U50eF/LUk2LWzVs+1o=","message":"Fixed in PR #60 (https://github.com/skolia-io/skolia/pull/60); close when it merges.","files":null}]}
