@@ -1,4 +1,6 @@
 import json
+import logging
+import re
 from pathlib import Path
 
 import brotli
@@ -63,6 +65,32 @@ def test_job_writes_analysis_bundle_and_ready_status(tmp_path: Path) -> None:
     assert analysis is not None
     assert json.loads(brotli.decompress(analysis))["analyzer"] == "test/1"
     assert blobs.get(ready["bundle"]) is not None
+
+
+def test_each_stage_of_a_job_logs_its_time(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    blobs = DirBlobs(tmp_path)
+    doc = doc_id("pl", TEXT)
+    blobs.put(text_key(doc), TEXT.encode(), "text/plain")
+    queue = MemoryQueue()
+    queue.send({"doc": doc, "lang": "pl"})
+    with caplog.at_level(logging.INFO, logger="skolia_analysis.ingest.worker"):
+        Ingester(blobs, pipelines()).run(queue, stop=lambda: not queue.pending)
+    stages = [
+        re.sub(r"[\d.]+ s$", "N s", re.sub(r"\(\d+ bytes\)", "(N bytes)", message))
+        for message in caplog.messages
+    ]
+    assert stages == [
+        f"ingesting {doc} (pl)",
+        f"{doc} (3 words): analysis took N s",
+        f"{doc} (3 words): bundling took N s",
+        f"{doc} (3 words): compressing the analysis took N s",
+        f"{doc} (3 words): uploading the analysis (N bytes) took N s",
+        f"{doc} (3 words): compressing the bundle took N s",
+        f"{doc} (3 words): uploading the bundle (N bytes) took N s",
+        f"{doc}: ready after N s",
+    ]
 
 
 def test_all_of_a_document_is_under_one_prefix(tmp_path: Path) -> None:
