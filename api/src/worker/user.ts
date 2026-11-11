@@ -38,8 +38,9 @@ const NEW = (alias: string) => `${alias}.lang = ? AND ${alias}.active = 1 AND ${
 /** A group's new cards that today's allowance leaves to show, as a condition on card with
  * its parameters, and at most how many. Words: every new word card of a started lemma, and
  * all those of the first lemmas not yet started, as many as are left, in the order their
- * cards were made. Forms: cloze cards whose lemmas are started, as many as are left. */
-function freshCards(group: CardGroup, lang: Lang, newLeft: NewLeft): { where: string; params: readonly SqlStorageValue[]; cap: number } {
+ * cards were made. Forms: cloze cards whose lemmas are started, as many as are left.
+ * count: how to count them in the allowance's terms, words by lemma and forms by card. */
+function freshCards(group: CardGroup, lang: Lang, newLeft: NewLeft): { where: string; params: readonly SqlStorageValue[]; cap: number; count: string } {
   switch (group) {
     case "words":
       return {
@@ -48,9 +49,10 @@ function freshCards(group: CardGroup, lang: Lang, newLeft: NewLeft): { where: st
           GROUP BY lemma_id ORDER BY min(created), lemma_id LIMIT ?))`,
         params: [lang, lang, newLeft.words],
         cap: Number.POSITIVE_INFINITY,
+        count: "count(DISTINCT card.lemma_id)",
       };
     case "forms":
-      return { where: `${NEW("card")} AND card.kind = 'cloze' AND ${started("card")}`, params: [lang], cap: newLeft.forms };
+      return { where: `${NEW("card")} AND card.kind = 'cloze' AND ${started("card")}`, params: [lang], cap: newLeft.forms, count: "count(*)" };
   }
 }
 
@@ -222,14 +224,15 @@ export class User extends DurableObject<object> {
     return { cards: [...due, ...fresh].slice(0, limit).map(scheduled), newLeft };
   }
 
-  /** Each language's cards due by now, and new cards it would show today, by group. */
+  /** Each language's cards due by now, and what new it would show today, by group: words'
+   * lemmas, as their allowance counts them, and forms' cards. */
   counts(now: Timestamp, dayStart: Timestamp): CardCounts[] {
     return LANGS.map((lang) => {
       const newLeft = this.#newLeft(lang, dayStart);
       const tally = (group: CardGroup): Tally => {
         const due = this.sql.exec(`SELECT count(*) AS n FROM card ${DUE} AND ${IN_GROUP[group]}`, lang, now).one()["n"];
-        const { where, params, cap } = freshCards(group, lang, newLeft);
-        const fresh = this.sql.exec(`SELECT count(*) AS n FROM card WHERE ${where}`, ...params).one()["n"];
+        const { where, params, cap, count } = freshCards(group, lang, newLeft);
+        const fresh = this.sql.exec(`SELECT ${count} AS n FROM card WHERE ${where}`, ...params).one()["n"];
         return { due: Number(due), new: Math.min(Number(fresh), cap) };
       };
       return { lang, words: tally("words"), forms: tally("forms") };
