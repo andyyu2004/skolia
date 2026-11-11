@@ -117,6 +117,13 @@ test("word sheet", async ({ page }) => {
   await expect(page).toHaveScreenshot("word-sheet.png");
 });
 
+// wiele: its lemma's own form, but the object of mówiono, so accusative, and a cloze card
+test("word sheet, a form that is its lemma", async ({ page }) => {
+  await open(page, `#/doc/${LALKA}?w=1.21`);
+  await expect(page.getByRole("button", { name: "Add wiele to your cards, with this sentence to practise wiele" })).toBeVisible();
+  await expect(page).toHaveScreenshot("word-sheet-lemma-form.png");
+});
+
 test("word sheet, scrolled", async ({ page, isMobile }) => {
   await open(page, WORD);
   // On a phone the handle gives the sheet the screen; on a desktop it's hidden
