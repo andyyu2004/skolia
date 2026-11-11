@@ -510,7 +510,7 @@
   .tip {
     position: absolute;
     top: calc(100% + 0.4rem);
-    left: 0;
+    right: 0;
     z-index: 5;
     width: max-content;
     max-width: min(16rem, calc(100vw - 2 * var(--gutter)));
@@ -533,22 +533,6 @@
     visibility: visible;
     opacity: 1;
     transition-delay: 0.3s;
-  }
-
-  @media (max-width: 600px) {
-    .title-row {
-      position: relative;
-    }
-
-    .mode {
-      position: static;
-    }
-
-    .tip {
-      right: 0;
-      width: auto;
-      max-width: none;
-    }
   }
 
   .credit {

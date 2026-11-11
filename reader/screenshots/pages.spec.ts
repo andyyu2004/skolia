@@ -124,6 +124,10 @@ test("reader, edit dialog", async ({ page }) => {
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByRole("button", { name: "Delete…" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
+  // Where the click's scroll leaves the body varies; the confirmation is at its end
+  await page.locator(".modal-body").evaluate((el) => el.scrollTo(0, el.scrollHeight));
+  // Off Keep it, which is where Delete… was and is sometimes drawn hovered
+  await page.mouse.move(0, 0);
   await expect(page).toHaveScreenshot("reader-edit.png");
 });
 
