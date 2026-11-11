@@ -162,7 +162,7 @@ async function cards(base: string, key: string, lang: Lang): Promise<void> {
   await mark("active");
   const words = await body("words", api.me.words.$get());
   assert.equal(words.find((w) => w.lemmaId === word)?.status, "active", `${lang}: ${word} isn't active`);
-  assert.deepEqual(await counts(), { lang, words: { due: 0, new: 2 }, forms: none }, `${lang}: counts after adding a word`);
+  assert.deepEqual(await counts(), { lang, words: { due: 0, new: 1 }, forms: none }, `${lang}: counts after adding a word`);
 
   const added = await due();
   assert.deepEqual(new Set(added.cards.map((c) => c.kind)), new Set(["recognition", "production"]), `${lang}: card kinds`);

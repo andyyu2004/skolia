@@ -3,7 +3,8 @@
 import json
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import cast
@@ -76,6 +77,16 @@ def compressed_json(value: object) -> bytes:
     return brotli.compress(data, quality=BROTLI_QUALITY)
 
 
+@contextmanager
+def timed(doc: str, words: int, stage: str) -> Generator[None]:
+    """Log how long a stage of a job took, failed or not."""
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        log.info("%s (%d words): %s took %.2f s", doc, words, stage, time.perf_counter() - start)
+
+
 class Ingester:
     def __init__(self, blobs: Blobs, pipelines: dict[str, Pipeline]) -> None:
         self._blobs = blobs
@@ -114,6 +125,7 @@ class Ingester:
             raise JobError("text and language don't match the document id")
         if len(text) > MAX_TEXT_LENGTH:
             raise JobError(f"text is longer than {MAX_TEXT_LENGTH} characters")
+        words = len(text.split())
         versions = pipeline.versions()
         a_key = analysis_key(doc, versions["analysis"])
         b_key = bundle_key(doc, versions["bundle"])
@@ -123,19 +135,24 @@ class Ingester:
             # A new bundler or lexicon with the same analyser: only the bundle is remade
             stored = self._blobs.get(a_key)
             if stored is not None:
-                analysis = cast(Blob, json.loads(brotli.decompress(stored)))
+                with timed(doc, words, "reading the stored analysis"):
+                    analysis = cast(Blob, json.loads(brotli.decompress(stored)))
             else:
                 self._status(doc, "analysing")
-                analysis = pipeline.analyze(text)
+                with timed(doc, words, "analysis"):
+                    analysis = pipeline.analyze(text)
                 if analysis["analyzer"] != pipeline.analyzer:
                     # Otherwise the API would keep finding it out of date and queueing it
                     raise JobError(
                         f"analysed as {analysis['analyzer']!r}, but published {pipeline.analyzer!r}"
                     )
-            bundle = pipeline.bundle(analysis)
+            with timed(doc, words, "bundling"):
+                bundle = pipeline.bundle(analysis)
             if stored is None:
-                self._blobs.put(a_key, compressed_json(analysis), JSON, BROTLI)
-            self._blobs.put(b_key, compressed_json(bundle), JSON, BROTLI)
+                self._put_compressed(doc, words, "analysis", a_key, analysis)
+            self._put_compressed(doc, words, "bundle", b_key, bundle)
+        else:
+            log.info("%s (%d words): bundle %s already made", doc, words, versions["bundle"])
         return self._status(
             doc,
             "ready",
@@ -144,6 +161,12 @@ class Ingester:
             analysis=a_key,
             bundle=b_key,
         )
+
+    def _put_compressed(self, doc: str, words: int, name: str, key: str, value: object) -> None:
+        with timed(doc, words, f"compressing the {name}"):
+            data = compressed_json(value)
+        with timed(doc, words, f"uploading the {name} ({len(data)} bytes)"):
+            self._blobs.put(key, data, JSON, BROTLI)
 
     def _status(
         self,
@@ -208,6 +231,7 @@ class Ingester:
             if received is None:
                 continue
             log.info("ingesting %s (%s)", received.job["doc"], received.job["lang"])
+            start = time.perf_counter()
             try:
                 status = self.process(received.job)
             except BlobError:
@@ -220,4 +244,5 @@ class Ingester:
                 continue
             failures = 0
             queue.ack(received)
-            log.info("%s: %s", received.job["doc"], status["state"])
+            elapsed = time.perf_counter() - start
+            log.info("%s: %s after %.2f s", received.job["doc"], status["state"], elapsed)

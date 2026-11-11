@@ -111,18 +111,31 @@
     selected = id === selected ? null : id;
   }
 
-  function move(step: number): void {
+  /** The one word Tab stops at: the selected word, or the first. */
+  const tabStop = $derived.by(() => {
+    if (!doc) return null;
+    if (selected !== null && doc.words[selected]?.punct === false) return selected;
+    const first = doc.words.findIndex((w) => !w.punct);
+    return first === -1 ? null : first;
+  });
+
+  async function move(step: number): Promise<void> {
     if (!doc) return;
     let next = selected ?? (step > 0 ? -1 : doc.words.length);
     do next += step;
     while (doc.words[next]?.punct);
-    if (doc.words[next]) selected = next;
+    if (!doc.words[next]) return;
+    selected = next;
+    // Focus follows the selection when it's on a word, not when it's in the sheet
+    if (!article?.contains(document.activeElement)) return;
+    await tick();
+    wordElements(article)[next]?.focus();
   }
 
   function onkeydown(event: KeyboardEvent): void {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
-    if (event.key === "ArrowRight") move(1);
-    else if (event.key === "ArrowLeft") move(-1);
+    if (event.key === "ArrowRight") void move(1);
+    else if (event.key === "ArrowLeft") void move(-1);
     else if (event.key === "Escape") selected = null;
     else return;
     event.preventDefault();
@@ -390,7 +403,7 @@
                line could break between a word and the punctuation after it -->
           {#if p.kind === "gap"}{p.text}{:else if p.punct}<span class="punct">{p.text}</span>{:else}<span
               role="button"
-              tabindex="0"
+              tabindex={p.id === tabStop ? 0 : -1}
               class={["w", { selected: p.id === selected, head: p.id === headPiece, trigger: p.id === triggerPiece }]}
               onclick={() => toggle(p.id)}
               onkeydown={(event) => {
@@ -497,7 +510,7 @@
   .tip {
     position: absolute;
     top: calc(100% + 0.4rem);
-    left: 0;
+    right: 0;
     z-index: 5;
     width: max-content;
     max-width: min(16rem, calc(100vw - 2 * var(--gutter)));
@@ -520,22 +533,6 @@
     visibility: visible;
     opacity: 1;
     transition-delay: 0.3s;
-  }
-
-  @media (max-width: 600px) {
-    .title-row {
-      position: relative;
-    }
-
-    .mode {
-      position: static;
-    }
-
-    .tip {
-      right: 0;
-      width: auto;
-      max-width: none;
-    }
   }
 
   .credit {

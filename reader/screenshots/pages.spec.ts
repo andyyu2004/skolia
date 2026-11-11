@@ -100,11 +100,34 @@ test("reader", async ({ page }) => {
   await expect(page).toHaveScreenshot("reader.png", { fullPage: true });
 });
 
+test("reader, one tab stop for the text", async ({ page }) => {
+  await open(page, `#/doc/${LALKA}`);
+  const text = page.locator("article");
+  await page.getByRole("link", { name: "source" }).focus();
+  await page.keyboard.press("Tab");
+  await expect(text.locator(".w:focus")).toHaveText("W");
+  await page.keyboard.press("ArrowRight");
+  await expect(text.locator(".w.selected:focus")).toHaveText("W");
+  await page.keyboard.press("ArrowRight");
+  await expect(text.locator(".w:focus")).toHaveText("początkach");
+  await expect(text.locator(".w.selected")).toHaveText("początkach");
+  await page.keyboard.press("ArrowLeft");
+  await expect(text.locator(".w:focus")).toHaveText("W");
+  await page.keyboard.press("Tab");
+  expect(await text.evaluate((el) => el.contains(document.activeElement))).toBe(false);
+  await page.keyboard.press("Shift+Tab");
+  await expect(text.locator(".w:focus")).toHaveText("W");
+});
+
 test("reader, edit dialog", async ({ page }) => {
   await open(page, `#/doc/${LALKA}`);
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByRole("button", { name: "Delete…" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
+  // Where the click's scroll leaves the body varies; the confirmation is at its end
+  await page.locator(".modal-body").evaluate((el) => el.scrollTo(0, el.scrollHeight));
+  // Off Keep it, which is where Delete… was and is sometimes drawn hovered
+  await page.mouse.move(0, 0);
   await expect(page).toHaveScreenshot("reader-edit.png");
 });
 

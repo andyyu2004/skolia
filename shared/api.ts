@@ -399,7 +399,8 @@ export interface Due {
   featureSets: FeatureSets;
 }
 
-/** Cards due now, and new cards that would come up today. */
+/** Cards due now, and what new would come up today: words' lemmas, as newLeft counts them,
+ * and forms' cards. */
 export interface Tally {
   readonly due: number;
   readonly new: number;
