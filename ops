@@ -1,1 +1,1 @@
-{"author":{"id":"ad87ffa09351c4e5a412ec8ee1546e86b314f33d6f28629bb4bcfe7b2290924d"},"ops":[{"type":5,"timestamp":1794392035,"nonce":"rYK2dRpMHKJpmMrstH4fOhoIOe8=","added":["p2"],"removed":null}]}
+{"author":{"id":"ad87ffa09351c4e5a412ec8ee1546e86b314f33d6f28629bb4bcfe7b2290924d"},"ops":[{"type":3,"timestamp":1794392924,"nonce":"/eMam+QJRCYBCfzEfAL/YFbt3D4=","message":"Stage timing logs in PR #62. Next: read them on staging for a long text.","files":null}]}
