@@ -522,6 +522,22 @@
     transition-delay: 0.3s;
   }
 
+  @media (max-width: 600px) {
+    .title-row {
+      position: relative;
+    }
+
+    .mode {
+      position: static;
+    }
+
+    .tip {
+      right: 0;
+      width: auto;
+      max-width: none;
+    }
+  }
+
   .credit {
     display: flex;
     flex-wrap: wrap;
