@@ -3,6 +3,7 @@
   import Explore from "./pages/Explore.svelte";
   import { currentUser } from "./lib/api.ts";
   import { clearWords, loadWords } from "./lib/words.svelte.ts";
+  import Button from "./components/Button.svelte";
   import Nav from "./components/Nav.svelte";
   import Reader from "./pages/reader/Reader.svelte";
   import Review from "./pages/Review.svelte";
@@ -49,7 +50,10 @@
     // Only a new page is a new route: a new word in the same text (lib/link.ts) is the
     // reader's to follow, and replacing the route would rerun everything that reads it
     const next = parse(location.hash);
-    if (JSON.stringify(next) !== JSON.stringify(route)) route = next;
+    if (JSON.stringify(next) !== JSON.stringify(route)) {
+      route = next;
+      error = null;
+    }
   }}
 />
 
@@ -57,7 +61,12 @@
 
 <div class="content">
   {#if error}
-    <p class="banner">{error}</p>
+    <div class="banner" role="alert">
+      <p>{error}</p>
+      <Button variant="icon" aria-label="Dismiss" onclick={() => (error = null)}>
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg>
+      </Button>
+    </div>
   {/if}
 
   {#if route.page === "reader"}
@@ -87,10 +96,18 @@
   }
 
   .banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
     max-width: 48rem;
     margin: 0.75rem auto 0;
     padding: 0 var(--gutter);
     color: var(--error);
+  }
+
+  .banner p {
+    margin: 0;
   }
 
   footer {
