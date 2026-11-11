@@ -1,1 +1,1 @@
-{"author":{"id":"ad87ffa09351c4e5a412ec8ee1546e86b314f33d6f28629bb4bcfe7b2290924d"},"ops":[{"type":3,"timestamp":1794393649,"nonce":"ccXT0rJVWjgkFBbswNH9jo12lC8=","message":"Tolerance and quoting in PR #65; merge after #64, which fixes the reader-edit flake.","files":null}]}
+{"author":{"id":"ad87ffa09351c4e5a412ec8ee1546e86b314f33d6f28629bb4bcfe7b2290924d"},"ops":[{"type":3,"timestamp":1794398560,"nonce":"7gsIoN8I3sGA4L57RiesOqPQlFc=","message":"Merged in #65 (3a48705); the reader-edit flake was fixed in #64.","files":null}]}
