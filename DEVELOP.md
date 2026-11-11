@@ -43,7 +43,7 @@ just e2e                     # fresh local state, lexicon samples: the end-to-en
 
 ```fish
 pnpm -r check                # tsc (api), svelte-check (reader)
-pnpm -r test                 # node --test; just build first, for api/dist
+pnpm -r test                 # node --test; api's pretest builds api/dist
 ```
 
 Nothing is faked. The `*.workerd.test.ts` files load the built Worker (`api/dist`, what wrangler deploys) into wrangler's test harness (`api/src/testing/harness.ts`), which runs it in workerd with local D1, R2, queue and Durable Objects. The route tests call the app with the real adapters over those bindings and Better Auth on the local D1. A test-only Worker (`api/src/testing/ingest-recorder.ts`) consumes the local queue so the tests can see what was queued. `just test` builds first. The `*.workerd.test.ts` files need both Node and Workers types, so they have their own `tsconfig.workerd-test.json`.
