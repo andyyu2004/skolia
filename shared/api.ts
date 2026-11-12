@@ -4,6 +4,17 @@ import type { z } from "zod";
 import type { BundleParadigm, Feats, Pronunciation, Relation, Sense, State, Token, Upos } from "./schema.gen.ts";
 import type * as schemas from "./schemas.ts";
 
+import type { PageSize } from "./page.ts";
+
+export type { Paginated } from "./page.ts";
+
+/** A page of documents reads each one's status from R2, so it stays small. */
+export const DOCUMENT_PAGE: PageSize = { fallback: 24, max: 50 };
+export const TAG_PAGE: PageSize = { fallback: 100, max: 500 };
+/** The reader follows these lists to the end, so their pages are big. */
+export const WORD_PAGE: PageSize = { fallback: 500, max: 1000 };
+export const CLOZE_PAGE: PageSize = { fallback: 500, max: 1000 };
+
 export const LANGS = ["en", "fr", "pl"] as const;
 export type Lang = (typeof LANGS)[number];
 
@@ -120,11 +131,6 @@ export interface AvailableTag extends Tag {
   description: string | null;
 }
 
-/** Every tag that can be given, by kind, then in each kind's own order (A0 before A1). */
-export interface TagList {
-  tags: AvailableTag[];
-}
-
 /** An entry's tags, each kind to its value. */
 export type Tags = Readonly<Record<string, string>>;
 
@@ -222,9 +228,21 @@ export interface ReadingNames {
   bundle: string;
 }
 
-export interface DocumentList {
-  documents: DocumentSummary[];
-}
+/** Which entries a list of documents keeps. mine: only the viewer's own, public or
+ * private. title: those whose title has it, case aside (ASCII letters' case only). */
+export type DocumentFilter = {
+  readonly tags: TagFilter;
+  readonly lang: Lang | undefined;
+  readonly title: string | undefined;
+  readonly mine: boolean;
+};
+
+/** Where an entry is in a list of documents: by its user, then its text. A fixed order
+ * that every filter has an index in; an order for people to browse is to come. */
+export type DocumentKey = z.output<typeof schemas.DocumentKey>;
+export type TagKey = z.output<typeof schemas.TagKey>;
+export type WordKey = z.output<typeof schemas.WordKey>;
+export type ClozeKey = z.output<typeof schemas.ClozeKey>;
 
 /** A word the user is learning (active), or has marked as known or ignored (names,
  * typos), which takes its cards out of reviews. A word with no status is new. */
@@ -383,10 +401,11 @@ export interface ClozeMade {
   readonly cardId: CardId;
 }
 
-/** A text's cloze cards, by where their blanks start in it. */
-export interface ClozeList {
-  readonly clozes: readonly { readonly cardId: CardId; readonly start: number }[];
-}
+/** One of a text's cloze cards, by where its blank starts in it. */
+export type ClozeStart = {
+  readonly cardId: CardId;
+  readonly start: number;
+};
 
 /** What's left of today's allowances: words in lemmas, forms in cards. */
 export type NewLeft = Readonly<Record<CardGroup, number>>;

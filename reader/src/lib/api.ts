@@ -4,13 +4,17 @@
 import { hc } from "hono/client";
 import type { AppType } from "@skolia/api/app";
 import {
+  CLOZE_PAGE,
+  TAG_PAGE,
+  WORD_PAGE,
   isLang,
   lemmaParam,
   type ApiError,
   type CardCounts,
   type CardGroup,
-  type ClozeList,
   type ClozeMade,
+  type ClozeStart,
+  type Paginated,
   type Due,
   type DocumentSummary,
   type AvailableTag,
@@ -28,6 +32,7 @@ import {
   type Word,
   type WordStatus,
 } from "@skolia/shared/api";
+import { allPages } from "@skolia/shared/page";
 import { BUNDLE_SCHEMA, SCHEMA, type Blob, type Bundle } from "@skolia/shared/schema";
 
 const api = hc<AppType>("/").api;
@@ -71,21 +76,43 @@ export async function signOut(): Promise<void> {
   await auth("sign-out", {});
 }
 
-export async function listDocuments(): Promise<DocumentSummary[]> {
-  const response = await api.documents.$get({ query: {} });
-  if (!response.ok) throw await failure(response);
-  return (await response.json()).documents;
+/** A 401 on a page of a list of the user's, for listOwn. */
+class SignedOut extends Error {}
+
+/** Every page of a list of the signed-in user's, or null when signed out. */
+async function listOwn<T>(fetchPage: (after: string | undefined) => Promise<Paginated<T>>): Promise<readonly T[] | null> {
+  try {
+    return await allPages(fetchPage);
+  } catch (error) {
+    if (error instanceof SignedOut) return null;
+    throw error;
+  }
 }
 
-let available: Promise<AvailableTag[]> | null = null;
+/** Which documents Explore lists. tags: kind:value, any of one kind, all of the kinds. */
+export type DocumentQuery = {
+  readonly lang: Lang | undefined;
+  readonly title: string;
+  readonly mine: boolean;
+  readonly tags: readonly string[];
+};
+
+/** A page of the documents the query keeps, from the start or after a page's next. */
+export async function listDocuments({ lang, title, mine, tags }: DocumentQuery, after?: string): Promise<Paginated<DocumentSummary>> {
+  const response = await api.documents.$get({ query: { after, lang, q: title.trim() || undefined, mine: mine ? "true" : undefined, tag: [...tags] } });
+  if (!response.ok) throw await failure(response);
+  return response.json();
+}
+
+let available: Promise<readonly AvailableTag[]> | null = null;
 
 /** The tags that can be given, asked for once. */
-export function listTags(): Promise<AvailableTag[]> {
-  available ??= (async () => {
-    const response = await api.tags.$get();
+export function listTags(): Promise<readonly AvailableTag[]> {
+  available ??= allPages(async (after) => {
+    const response = await api.tags.$get({ query: { after, limit: String(TAG_PAGE.max) } });
     if (!response.ok) throw await failure(response);
-    return (await response.json()).tags;
-  })().catch((error: unknown) => {
+    return response.json();
+  }).catch((error: unknown) => {
     available = null;
     throw error;
   });
@@ -140,11 +167,13 @@ export async function loadReading(id: string, names: ReadingNames): Promise<Read
 }
 
 /** The user's words, or null when signed out. */
-export async function listWords(): Promise<Word[] | null> {
-  const response = await api.me.words.$get();
-  if (response.status === 401) return null;
-  if (!response.ok) throw await failure(response);
-  return response.json();
+export function listWords(): Promise<readonly Word[] | null> {
+  return listOwn(async (after) => {
+    const response = await api.me.words.$get({ query: { after, limit: String(WORD_PAGE.max) } });
+    if (response.status === 401) throw new SignedOut();
+    if (!response.ok) throw await failure(response);
+    return response.json();
+  });
 }
 
 export async function setWord(lemmaId: LemmaId, status: WordStatus): Promise<void> {
@@ -197,11 +226,13 @@ export async function makeCloze(json: NewClozeInput): Promise<ClozeMade> {
 }
 
 /** The user's cloze cards from a text, or null when signed out. */
-export async function listClozes(documentId: string): Promise<ClozeList | null> {
-  const response = await api.me.clozes.$get({ query: { documentId } });
-  if (response.status === 401) return null;
-  if (!response.ok) throw await failure(response);
-  return response.json();
+export function listClozes(documentId: string): Promise<readonly ClozeStart[] | null> {
+  return listOwn(async (after) => {
+    const response = await api.me.clozes.$get({ query: { documentId, after, limit: String(CLOZE_PAGE.max) } });
+    if (response.status === 401) throw new SignedOut();
+    if (!response.ok) throw await failure(response);
+    return response.json();
+  });
 }
 
 export async function deleteCloze(cardId: string): Promise<void> {

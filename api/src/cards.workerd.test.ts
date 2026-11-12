@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MAX_NEW_PER_DAY, lemmaParam, type CardCounts, type CardGroup, type Due, type Lang, type LemmaId, type NewClozeInput, type Rating, type Reviewed, type ReviewRequestInput, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
-import { ALICE, NOW, client, loadLexicon, local, raw, setup, useLocal, type App } from "./testing/app.ts";
+import { MAX_NEW_PER_DAY, WORD_PAGE, lemmaParam, type CardCounts, type CardGroup, type Due, type Lang, type LemmaId, type NewClozeInput, type Rating, type Reviewed, type ReviewRequestInput, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
+import { allPages } from "@skolia/shared/page";
+import { ALICE, NOW, client, loadLexicon, local, raw, refusesBadPages, setup, useLocal, walk, type App } from "./testing/app.ts";
 import { body } from "./testing/responses.ts";
 
 useLocal();
@@ -41,8 +42,8 @@ function makeCloze(app: App, headers: Headers, lemmaId: LemmaId, n: number) {
   return body("cloze", client(app, headers).me.clozes.$post({ json }), 201);
 }
 
-function words(app: App, headers: Headers): Promise<Word[]> {
-  return body("words", client(app, headers).me.words.$get());
+function words(app: App, headers: Headers): Promise<readonly Word[]> {
+  return allPages((after) => body("words", client(app, headers).me.words.$get({ query: { after } })));
 }
 
 function mark(app: App, headers: Headers | undefined, lemmaId: LemmaId, status: WordStatus) {
@@ -307,7 +308,7 @@ test("a review needs a session, the user's card, a grade, and a time that isn't 
 test("words, cards and settings need a session and valid input", async () => {
   const app = setup();
   const anonymous = client(app);
-  assert.equal((await anonymous.me.words.$get()).status, 401);
+  assert.equal((await anonymous.me.words.$get({ query: {} })).status, 401);
   assert.equal((await anonymous.me.cards.due.$get({ query: { lang: "pl", dayStart: DAY_START } })).status, 401);
   assert.equal((await anonymous.me.cards.counts.$get({ query: { dayStart: DAY_START } })).status, 401);
   assert.equal((await anonymous.me.settings.$get()).status, 401);
@@ -337,6 +338,16 @@ test("words, cards and settings need a session and valid input", async () => {
   const { formsWithWords: _, ...missing } = DEFAULT_SETTINGS;
   assert.equal((await raw(app, "PUT", "/api/me/settings", headers, missing)).status, 400);
   assert.deepEqual(await body("settings", client(app, headers).me.settings.$get()), DEFAULT_SETTINGS);
+});
+
+test("the words come a page at a time, by lemma id", async () => {
+  const app = setup();
+  const headers = await signedIn();
+  const lemmas: readonly LemmaId[] = ["pl:pies:NOUN", "pl:dom:NOUN", "pl:kot:NOUN", "pl:być:VERB", "pl:ale:CCONJ"];
+  for (const lemmaId of lemmas) assert.equal((await mark(app, headers, lemmaId, "known")).status, 204);
+  const listed = await walk(2, (after) => body("words", client(app, headers).me.words.$get({ query: { after, limit: "2" } })));
+  assert.deepEqual(listed.map((w) => w.lemmaId), [...lemmas].sort());
+  await refusesBadPages(WORD_PAGE.max, (query) => client(app, headers).me.words.$get({ query }));
 });
 
 function forget(app: App, headers: Headers | undefined, lemmaId: LemmaId) {

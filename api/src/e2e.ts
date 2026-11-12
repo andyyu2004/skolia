@@ -14,6 +14,7 @@
 import assert from "node:assert/strict";
 import { hc } from "hono/client";
 import { LANGS, lemmaParam, type CardCounts, type Due, type ImportRequest, type Lang, type LemmaId, type Version, type WordStatus } from "@skolia/shared/api";
+import { allPages } from "@skolia/shared/page";
 import type { AppType } from "./app.ts";
 import { API_KEY_HEADER } from "./auth.ts";
 import { body, expectStatus } from "./testing/responses.ts";
@@ -77,10 +78,10 @@ async function documents(base: string, key: string, lang: Lang): Promise<void> {
   const request: ImportRequest = { title: `end-to-end test ${at}`, text: `${TEXTS[lang]} Test ${at}.`, lang, visibility: "private" };
   const { id } = await body(`${lang} import`, api.documents.$post({ json: request }), 202);
   console.log(`${lang}: imported ${id}`);
-  const library = await body("library", anonymous.documents.$get({ query: {} }));
-  assert.ok(!library.documents.some((d) => d.id === id), `${lang}: a private text is in the library`);
-  const mine = await body("the importer's documents", api.documents.$get({ query: {} }));
-  assert.ok(mine.documents.some((d) => d.id === id), `${lang}: the importer's list hasn't their private text`);
+  const library = await body("library", anonymous.documents.$get({ query: { q: request.title } }));
+  assert.ok(!library.items.some((d) => d.id === id), `${lang}: a private text is in the library`);
+  const mine = await body("the importer's documents", api.documents.$get({ query: { q: request.title } }));
+  assert.ok(mine.items.some((d) => d.id === id), `${lang}: the importer's list hasn't their private text`);
 
   const deadline = Date.now() + TIMEOUT_MS;
   for (;;) {
@@ -160,7 +161,7 @@ async function cards(base: string, key: string, lang: Lang): Promise<void> {
   assert.deepEqual(await counts(), { lang, words: none, forms: none }, `${lang}: a new user has cards`);
 
   await mark("active");
-  const words = await body("words", api.me.words.$get());
+  const words = await allPages((after) => body("words", api.me.words.$get({ query: { after } })));
   assert.equal(words.find((w) => w.lemmaId === word)?.status, "active", `${lang}: ${word} isn't active`);
   assert.deepEqual(await counts(), { lang, words: { due: 0, new: 1 }, forms: none }, `${lang}: counts after adding a word`);
 

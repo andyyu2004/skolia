@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import { CARD_GROUPS, LANGS, WORD_CARD_KINDS, MATURE_DAYS, timestamp, type CardCounts, type CardGroup, type NewLeft, type Tally, type CardId as CardIdType, type ClozeList, type DocumentId, type NewCloze, type Timestamp, type Lang, type LemmaId, type ReviewRequest, type ScheduledCard, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
+import { CARD_GROUPS, LANGS, WORD_CARD_KINDS, MATURE_DAYS, timestamp, type CardCounts, type CardGroup, type NewLeft, type Tally, type CardId as CardIdType, type ClozeKey, type ClozeStart, type DocumentId, type Paginated, type WordKey, type NewCloze, type Timestamp, type Lang, type LemmaId, type ReviewRequest, type ScheduledCard, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
+import { paginate, type PageRequest } from "@skolia/shared/page";
 import * as schemas from "@skolia/shared/schemas";
 import { CardId } from "@skolia/shared/schemas";
 import type { DueCards, ReviewOutcome, StoredPosition } from "../ports.ts";
@@ -81,16 +82,24 @@ export class User extends DurableObject<object> {
     }
   }
 
-  words(): Word[] {
-    return this.sql
+  /** A page of the words, by lemma id: those after the page's key, which word's primary key seeks to. */
+  words({ after, limit }: PageRequest<WordKey>): Paginated<Word> {
+    const rows = this.sql
       .exec(
         `SELECT word.lemma_id AS "lemmaId", word.status, word.updated,
            coalesce(card.scheduled_days >= ${MATURE_DAYS}, 0) AS mature
          FROM word LEFT JOIN card ON card.lemma_id = word.lemma_id AND card.kind = 'recognition'
-         ORDER BY word.lemma_id`,
+         WHERE word.lemma_id > ?
+         ORDER BY word.lemma_id LIMIT ?`,
+        after?.[0] ?? "",
+        limit + 1,
       )
       .toArray()
       .map((row) => schemas.Word.parse({ ...row, mature: row["mature"] === 1 }));
+    return paginate(
+      rows.map((item) => ({ item, key: [item.lemmaId] as const })),
+      limit,
+    );
   }
 
   /** Active gives the word its cards, if it hasn't any; the cards, its cloze cards too, are
@@ -168,12 +177,22 @@ export class User extends DurableObject<object> {
     });
   }
 
-  /** A text's cloze cards, by where their blanks start in it. */
-  clozes(documentId: DocumentId): ClozeList {
+  /** A page of a text's cloze cards, by where their blanks start in it: those after the
+   * page's key, which cloze's (document_id, blank_start) index seeks to. */
+  clozes(documentId: DocumentId, { after, limit }: PageRequest<ClozeKey>): Paginated<ClozeStart> {
     const rows = this.sql
-      .exec(`SELECT card_id, blank_start FROM cloze WHERE document_id = ? ORDER BY blank_start`, documentId)
-      .toArray();
-    return { clozes: rows.map((row) => ({ cardId: CardId.parse(row["card_id"]), start: Number(row["blank_start"]) })) };
+      .exec(
+        `SELECT card_id, blank_start FROM cloze WHERE document_id = ? AND blank_start > ? ORDER BY blank_start LIMIT ?`,
+        documentId,
+        after?.[0] ?? -1,
+        limit + 1,
+      )
+      .toArray()
+      .map((row): ClozeStart => ({ cardId: CardId.parse(row["card_id"]), start: Number(row["blank_start"]) }));
+    return paginate(
+      rows.map((item) => ({ item, key: [item.start] as const })),
+      limit,
+    );
   }
 
   /** Deletes a cloze card, and by the foreign keys its cloze row and reviews; a word's

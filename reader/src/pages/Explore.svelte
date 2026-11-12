@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { AvailableTag, DocumentSummary, Lang, User } from "@skolia/shared/api";
-  import { LANGS, LANGUAGE_INFO, LICENCE_INFO, matchesTags, parseTag, tagFilter } from "@skolia/shared/api";
-  import { listDocuments, listTags } from "../lib/api.ts";
+  import { LANGS, LANGUAGE_INFO, LICENCE_INFO } from "@skolia/shared/api";
+  import { listDocuments, listTags, type DocumentQuery } from "../lib/api.ts";
   import { tagLabel } from "../lib/tags.ts";
   import TagFilter from "../components/TagFilter.svelte";
   import { badge } from "../lib/reading.ts";
@@ -9,37 +9,38 @@
 
   let { user }: { user: User | null | undefined } = $props();
 
-  let documents = $state<DocumentSummary[] | null>(null);
+  /** How long typing in the search waits before it asks for the list again. */
+  const SEARCH_DELAY_MS = 250;
+
+  /** The pages loaded so far, null while the first loads. */
+  let documents = $state<readonly DocumentSummary[] | null>(null);
+  /** The cursor for the page after them, null when they're all of them. */
+  let next = $state<string | null>(null);
+  let loadingMore = $state(false);
   let error = $state<string | null>(null);
   let query = $state("");
+  let title = $state("");
   let lang = $state<Lang | "all">("all");
-  let importer = $state<"all" | "mine" | `by:${string}`>("all");
+  let importer = $state<"all" | "mine">("all");
   /** The tags kept, as kind:value: any of one kind, all of the kinds. */
   let tagged = $state<readonly string[]>([]);
   let available = $state<readonly AvailableTag[]>([]);
   let tagsError = $state<string | null>(null);
-  const filter = $derived(tagFilter(tagged.flatMap((t) => parseTag(t) ?? [])));
 
-  /** Others who imported what's listed, by id, since two can share a name. */
-  const importers = $derived(
-    [...new Map((documents ?? []).filter((d) => !d.mine).map((d) => [d.importer.id, d.importer])).values()].sort((a, b) => a.name.localeCompare(b.name)),
-  );
+  const request = $derived<DocumentQuery>({ lang: lang === "all" ? undefined : lang, title, mine: importer === "mine", tags: [...tagged] });
+  const filtered = $derived(request.lang !== undefined || request.title.trim() !== "" || request.tags.length > 0);
 
-  function byImporter(d: DocumentSummary): boolean {
-    if (importer === "all") return true;
-    if (importer === "mine") return d.mine;
-    return !d.mine && `by:${d.importer.id}` === importer;
-  }
+  /** Bumped by each new query, so a page for an older one isn't added to the list. */
+  let generation = 0;
 
   $effect(() => {
     if (!user && importer === "mine") importer = "all";
   });
 
-  const shown = $derived.by(() => {
-    const q = query.trim().toLocaleLowerCase();
-    return (documents ?? []).filter(
-      (d) => (lang === "all" || d.lang === lang) && byImporter(d) && matchesTags(d.tags, filter) && (q === "" || d.title.toLocaleLowerCase().includes(q)),
-    );
+  $effect(() => {
+    const typed = query;
+    const timer = setTimeout(() => (title = typed), SEARCH_DELAY_MS);
+    return () => clearTimeout(timer);
   });
 
   const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
@@ -53,11 +54,36 @@
   });
 
   $effect(() => {
-    listDocuments().then(
-      (d) => (documents = d),
-      (e: unknown) => (error = e instanceof Error ? e.message : String(e)),
+    const asked = request;
+    const mine = ++generation;
+    error = null;
+    listDocuments(asked).then(
+      (page) => {
+        if (mine !== generation) return;
+        documents = page.items;
+        next = page.next;
+      },
+      (e: unknown) => {
+        if (mine === generation) error = e instanceof Error ? e.message : String(e);
+      },
     );
   });
+
+  async function more(): Promise<void> {
+    if (next === null || loadingMore) return;
+    const mine = generation;
+    loadingMore = true;
+    try {
+      const page = await listDocuments(request, next);
+      if (mine !== generation) return;
+      documents = [...(documents ?? []), ...page.items];
+      next = page.next;
+    } catch (e: unknown) {
+      if (mine === generation) error = e instanceof Error ? e.message : String(e);
+    } finally {
+      loadingMore = false;
+    }
+  }
 </script>
 
 <Page title="Explore" wide>
@@ -73,7 +99,7 @@
       <div class="listing-head">
         <span class="listing-count">
           {#if documents}
-            {shown.length.toLocaleString()} {shown.length === 1 ? "text" : "texts"}
+            {documents.length.toLocaleString()}{next === null ? "" : "+"} {documents.length === 1 && next === null ? "text" : "texts"}
           {/if}
         </span>
         <select class={{ active: lang !== "all" }} bind:value={lang} aria-label="Language">
@@ -87,28 +113,25 @@
           {#if user}
             <option value="mine">You</option>
           {/if}
-          {#each importers as { id, name } (id)}
-            <option value={`by:${id}`}>{name}</option>
-          {/each}
         </select>
         <TagFilter {available} error={tagsError} bind:selected={tagged} />
       </div>
 
       {#if documents === null}
         <p class="empty">Loading…</p>
-      {:else if shown.length === 0}
+      {:else if documents.length === 0}
         <p class="empty">
-          {#if documents.length === 0}
-            Nothing imported yet.
-          {:else if importer === "mine" && !documents.some((d) => d.mine)}
+          {#if filtered}
+            No texts match.
+          {:else if importer === "mine"}
             You haven't imported anything yet. <a href="#/upload">Upload a text</a>.
           {:else}
-            No texts match.
+            Nothing imported yet.
           {/if}
         </p>
       {:else}
         <ul class="entries">
-          {#each shown as doc (`${doc.id}/${doc.importer.id}`)}
+          {#each documents as doc (`${doc.id}/${doc.importer.id}`)}
             {@const status = badge(doc)}
             <li>
               <a class="entry" href={`#/doc/${doc.id}`}>
@@ -138,6 +161,11 @@
             </li>
           {/each}
         </ul>
+        {#if next !== null}
+          <div class="more">
+            <button type="button" onclick={more} disabled={loadingMore}>{loadingMore ? "Loading…" : "More"}</button>
+          </div>
+        {/if}
       {/if}
     </section>
   {/if}
@@ -256,6 +284,13 @@
 
   .entries li:last-child .entry {
     border-radius: 0 0 10px 10px;
+  }
+
+  .more {
+    display: flex;
+    justify-content: center;
+    padding: 0.75rem 1rem;
+    border-top: 1px solid var(--line);
   }
 
   .entry:hover .entry-title {

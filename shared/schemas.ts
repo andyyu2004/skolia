@@ -2,6 +2,10 @@ import * as z from "zod";
 import {
   CARD_GROUPS,
   CARD_KINDS,
+  CLOZE_PAGE,
+  DOCUMENT_PAGE,
+  TAG_PAGE,
+  WORD_PAGE,
   LANGS,
   LICENCES,
   MAX_AUTHOR_LENGTH,
@@ -25,6 +29,7 @@ import {
   parseTag,
   tagFilter,
 } from "./api.ts";
+import { pageQuery } from "./page.ts";
 import type { Status as StatusType, Versions as VersionsType } from "./schema.gen.ts";
 
 export const Lang = z.enum(LANGS);
@@ -109,7 +114,13 @@ export const NewCloze = Cloze.extend({ lemmaId: LemmaId }).refine(
   { message: "the blank must be a word in the sentence" },
 );
 
-export const ClozesQuery = z.object({ documentId: DocumentId });
+/** Where a word is in the list of a user's words: by lemma id. */
+export const WordKey = z.tuple([LemmaId]);
+export const WordsQuery = pageQuery(WordKey, WORD_PAGE);
+
+/** Where a cloze card is in the list of a text's: where its blank starts. */
+export const ClozeKey = z.tuple([Index]);
+export const ClozesQuery = pageQuery(ClozeKey, CLOZE_PAGE).extend({ documentId: DocumentId });
 
 /** cloze: a cloze card's sentence, null for a word's cards. */
 export const ScheduledCard = z.object({
@@ -138,9 +149,28 @@ export const Tags = z.record(TagKind, TagValue).refine((tags) => Object.keys(tag
 
 export const AvailableTag = z.object({ kind: TagKind, value: TagValue, description: z.string().nullable() });
 
-/** A list's query: tag=kind:value, once or more, keeps entries with any of the values of
- * each kind given. */
-export const DocumentsQuery = z.object({
+/** Where a tag is in the list of them: by kind, then in the kind's order. */
+export const TagKey = z.tuple([TagKind, z.number().int()]);
+export const TagsQuery = pageQuery(TagKey, TAG_PAGE);
+
+/** See DocumentKey in api.ts. */
+export const DocumentKey = z.tuple([UserId, DocumentId]);
+
+/** A page of the viewer's own documents. */
+export const MyDocumentsQuery = pageQuery(DocumentKey, DOCUMENT_PAGE);
+
+/** A page of the documents list. tag=kind:value, once or more, keeps entries with any of
+ * the values of each kind given; lang, those in the language; q, those whose title has
+ * it; mine=true, only the viewer's own. */
+export const DocumentsQuery = MyDocumentsQuery.extend({
+  lang: Lang.optional(),
+  q: z
+    .string()
+    .trim()
+    .max(MAX_TITLE_LENGTH)
+    .transform((q) => q || undefined)
+    .optional(),
+  mine: z.stringbool().default(false),
   tag: z
     .union([z.string(), z.array(z.string())])
     .transform((tags, context) =>

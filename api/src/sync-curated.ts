@@ -11,8 +11,9 @@ import { join } from "node:path";
 import { hc } from "hono/client";
 import { parse as parseYaml } from "yaml";
 import * as z from "zod";
-import { LANGS, type DocumentId, type DocumentSummary, type DocumentUpdate, type Lang, type Tags } from "@skolia/shared/api";
+import { DOCUMENT_PAGE, LANGS, type DocumentId, type DocumentSummary, type DocumentUpdate, type Lang, type Tags } from "@skolia/shared/api";
 import { docId } from "@skolia/shared/keys";
+import { allPages } from "@skolia/shared/page";
 import * as schemas from "@skolia/shared/schemas";
 import type { AppType } from "./app.ts";
 import { API_KEY_HEADER } from "./auth.ts";
@@ -154,9 +155,14 @@ export type Api = ReturnType<typeof hc<AppType>>["api"];
 /** Lists, then unless check is set makes, the changes that make the signed-in user's
  * documents match the texts. */
 export async function sync(api: Api, texts: readonly Curated[], { check = false, log = console.log } = {}): Promise<Change[]> {
-  const listed = await api.me.documents.$get({ query: {} });
-  if (!listed.ok) throw new Error(`list: ${listed.status} ${await listed.text()}`);
-  const changes = plan(texts, (await listed.json()).documents);
+  // Every page: a document missing from the list would be imported again, and one in
+  // the list but not in curated/ deleted
+  const mine = await allPages(async (after) => {
+    const listed = await api.me.documents.$get({ query: { after, limit: String(DOCUMENT_PAGE.max) } });
+    if (!listed.ok) throw new Error(`list: ${listed.status} ${await listed.text()}`);
+    return listed.json();
+  });
+  const changes = plan(texts, mine);
   for (const change of changes) log(describe(change));
   if (check) return changes;
   for (const change of changes) {

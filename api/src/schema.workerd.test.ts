@@ -49,15 +49,19 @@ test("every D1 table is STRICT, and timestamps must be toISOString()'s", async (
 });
 
 // A SCAN that names an index walks it in order, as list does over the public entries' partial index
-test("no document query scans a whole table", async () => {
-  for (const [name, sql] of Object.entries(DOCUMENT_QUERIES)) {
-    const params = parameters(sql);
-    const { results } = await local.env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`)
-      .bind(...Array.from({ length: params }, () => "x"))
-      .all<{ detail: string }>();
-    const scans = results.map((r) => r.detail).filter((d) => /^SCAN \S+$/u.test(d));
-    assert.deepEqual(scans, [], `${name}: ${results.map((r) => r.detail).join("; ")}`);
-  }
+test("no document query scans a whole table or sorts its rows", async () => {
+  const plans = await Promise.all(
+    Object.entries(DOCUMENT_QUERIES).map(async ([name, sql]) => {
+      const { results } = await local.env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`)
+        .bind(...Array.from({ length: parameters(sql) }, () => "x"))
+        .all<{ detail: string }>();
+      return { name, plan: results.map((r) => r.detail) };
+    }),
+  );
+  // A list's page walks its indexes in the list's order; visible sorts one text's entries
+  const paged = (name: string) => name.startsWith("list") || name.startsWith("tags");
+  const wrong = plans.filter(({ name, plan }) => plan.some((d) => /^SCAN \S+$/u.test(d) || (paged(name) && /USE TEMP B-TREE FOR .*ORDER BY/u.test(d))));
+  assert.deepEqual(wrong, [], wrong.map(({ name, plan }) => `${name}: ${plan.join("; ")}`).join("\n"));
 });
 
 test("a tag's kind and value are kind:value's, and each kind's tags have their own order", async () => {
@@ -93,14 +97,16 @@ test("an entry's tags are tags skolia has, one of each kind, and go with the ent
   assert.equal(await env.DB.prepare("select 1 from user_document_tag").first(), null);
 });
 
-test("a list narrowed by tags looks them up by value", async () => {
+test("a list narrowed by tags seeks each value from the cursor, and merges them", async () => {
   const sql = DOCUMENT_QUERIES.listTagged;
   const params = parameters(sql);
   const { results } = await local.env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`)
     .bind(...Array.from({ length: params }, () => "x"))
     .all<{ detail: string }>();
   const plan = results.map((r) => r.detail);
-  assert.ok(plan.some((d) => /user_document_tag USING COVERING INDEX user_document_tag_value_idx \(kind=\? AND value=\?\)/u.test(d)), plan.join("; "));
+  const seeks = plan.filter((d) => /^SEARCH tagged USING COVERING INDEX user_document_tag_value_idx \(kind=\? AND value=\? AND \(user_id,document_id\)>\(\?,\?\)\)$/u.test(d));
+  assert.equal(seeks.length, 2, plan.join("; "));
+  assert.equal(plan[0], "MERGE (UNION ALL)", plan.join("; "));
 });
 
 /** How many parameters a query takes: its highest ?N, or its count of plain ?s. */

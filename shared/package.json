@@ -7,6 +7,7 @@
     "./api": "./api.ts",
     "./keys": "./keys.ts",
     "./schemas": "./schemas.ts",
+    "./page": "./page.ts",
     "./lang": "./lang/index.ts",
     "./ud": "./ud.ts",
     "./paradigm": "./paradigm.ts",

@@ -15,7 +15,7 @@ export async function loadClozes(documentId: string): Promise<void> {
   clozes.documentId = documentId;
   clozes.byStart = null;
   const list = await listClozes(documentId);
-  if (mine === generation) clozes.byStart = list && new Map(list.clozes.map((c) => [c.start, c.cardId]));
+  if (mine === generation) clozes.byStart = list && new Map(list.map((c) => [c.start, c.cardId]));
 }
 
 /** A load still in flight may have read the list before this card, so it's loaded again. */
