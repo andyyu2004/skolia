@@ -22,9 +22,12 @@
   import Page from "../components/Page.svelte";
   import ParadigmTable from "../components/ParadigmTable.svelte";
   import Pronunciations from "../components/Pronunciations.svelte";
-  import { cardCounts, deleteCloze, dueCards, getSettings, review, signIn } from "../lib/api.ts";
+  import { createQuery, useQueryClient } from "@tanstack/svelte-query";
+  import { review, signIn } from "../lib/api.ts";
+  import { createRemoveCloze } from "../lib/clozes.ts";
+  import { countsQuery, dueQuery, settingsQuery } from "../lib/queries.ts";
   import { clue, keyTarget, shortcut } from "../lib/review.ts";
-  import { setStatus } from "../lib/words.svelte.ts";
+  import { createSetStatus } from "../lib/words.ts";
 
   /** lang and group are the URL's (#/review/pl/forms); without a language, the one with the
    * most to review. group only counts when the settings review forms on their own: without
@@ -35,20 +38,21 @@
   const GROUP_LABELS: Record<CardGroup, string> = { words: "Words", forms: "Forms" };
   const SHOWN_SENSES = 3;
 
-  let counts = $state<CardCounts[] | null>(null);
+  const client = useQueryClient();
+  const cardCounts = createQuery(() => ({ ...countsQuery, enabled: !!user }));
+  const settings = createQuery(() => ({ ...settingsQuery, enabled: !!user }));
+  const counts = $derived(cardCounts.data ?? null);
   /** Whether forms have their own session; null until the settings have come. */
-  let split = $state<boolean | null>(null);
-  let due = $state<Due | null>(null);
-  /** The language and group due's cards are from, so others' don't show while it loads. */
-  let dueFor = $state<string | null>(null);
-  let index = $state(0);
-  let revealed = $state(false);
+  const split = $derived(settings.data ? !settings.data.formsWithWords : null);
+  /** The card whose answer is shown. */
+  let revealedId = $state<string | null>(null);
   let busy = $state(false);
+  /** The last action's failure. */
   let error = $state<string | null>(null);
   let showButton = $state<HTMLButtonElement | null>(null);
   let goodButton = $state<HTMLButtonElement | null>(null);
-  /** Bumped by each load, so an older response can't replace a newer one. */
-  let generation = 0;
+  const setStatus = createSetStatus();
+  const deleteCloze = createRemoveCloze();
 
   /** Cards to review in one group, or with none in both. */
   function toReview(c: CardCounts, group: CardGroup | null = null): number {
@@ -63,54 +67,29 @@
   const group = $derived<CardGroup | null>(
     split ? (wanted ?? (selectedCounts && toReview(selectedCounts, "words") === 0 && toReview(selectedCounts, "forms") > 0 ? "forms" : "words")) : null,
   );
-  const card = $derived(due?.cards[index]);
-  const left = $derived(due ? due.cards.length - index : 0);
+  const session = $derived(dueQuery(selected, group));
+  const dueCards = createQuery(() => ({ ...session, enabled: !!user && split !== null }));
+  /** The session's cards not yet reviewed; null while they load. */
+  const due = $derived(dueCards.data ?? null);
+  const card = $derived(due?.cards[0]);
+  const left = $derived(due?.cards.length ?? 0);
+  const revealed = $derived(card !== undefined && card.id === revealedId);
+  const failure = $derived(error ?? (cardCounts.error ?? settings.error ?? dueCards.error)?.message ?? null);
 
   function message(e: unknown): string {
     return e instanceof Error ? e.message : String(e);
   }
 
-  async function loadCounts(): Promise<void> {
-    try {
-      const [loaded, settings] = await Promise.all([cardCounts(), getSettings()]);
-      counts = loaded;
-      split = !settings.formsWithWords;
-    } catch (e: unknown) {
-      error = message(e);
-    }
+  /** Takes cards out of this session. */
+  function drop(keep: (c: DueCard) => boolean): void {
+    client.setQueryData(session.queryKey, (d) => d && { ...d, cards: d.cards.filter(keep) });
   }
-
-  async function load(language: Lang, group: CardGroup | null): Promise<void> {
-    const mine = ++generation;
-    const key = `${language}/${group ?? ""}`;
-    busy = true;
-    error = null;
-    if (dueFor !== key) due = null;
-    try {
-      const next = await dueCards(language, group);
-      if (mine !== generation) return;
-      due = next;
-      dueFor = key;
-      index = 0;
-      revealed = false;
-    } catch (e: unknown) {
-      if (mine === generation) error = message(e);
-    } finally {
-      if (mine === generation) busy = false;
-    }
-  }
-
-  $effect(() => {
-    if (user) void loadCounts();
-  });
-
-  $effect(() => {
-    if (user && selected && split !== null) void load(selected, group);
-  });
 
   function refresh(): void {
-    void loadCounts();
-    if (selected && split !== null) void load(selected, group);
+    error = null;
+    void cardCounts.refetch();
+    void settings.refetch();
+    if (selected && split !== null) void dueCards.refetch();
   }
 
   function newLeft(left: Due["newLeft"]): string {
@@ -120,19 +99,19 @@
   }
 
   async function reveal(): Promise<void> {
-    revealed = true;
+    revealedId = card?.id ?? null;
     await tick();
     goodButton?.focus();
   }
 
   async function grade(rating: Rating): Promise<void> {
     if (!card || busy) return;
+    const { id } = card;
     busy = true;
     error = null;
     try {
-      await review(card.id, rating);
-      index += 1;
-      revealed = false;
+      await review(id, rating);
+      drop((c) => c.id !== id);
     } catch (e: unknown) {
       error = message(e);
     } finally {
@@ -144,14 +123,13 @@
 
   /** Known takes the word out of reviews, all its cards, and skips them in this session. */
   async function markKnown(): Promise<void> {
-    if (!card || !due || busy) return;
+    if (!card || busy) return;
     const { lemmaId } = card;
     busy = true;
     error = null;
     try {
-      await setStatus(lemmaId, "known");
-      due.cards = [...due.cards.slice(0, index), ...due.cards.slice(index).filter((c) => c.lemmaId !== lemmaId)];
-      revealed = false;
+      await setStatus.mutateAsync({ lemmaId, status: "known" });
+      drop((c) => c.lemmaId !== lemmaId);
     } catch (e: unknown) {
       error = message(e);
     } finally {
@@ -164,14 +142,13 @@
   /** Deletes a cloze card, made from a sentence the parser got wrong or one not worth
    * practising, with its reviews. */
   async function removeCloze(): Promise<void> {
-    if (!card || !due || busy || !confirm("Delete this card and its reviews?")) return;
-    const { id } = card;
+    if (!card?.cloze || busy || !confirm("Delete this card and its reviews?")) return;
+    const { id, cloze } = card;
     busy = true;
     error = null;
     try {
-      await deleteCloze(id);
-      due.cards = due.cards.filter((c) => c.id !== id);
-      revealed = false;
+      await deleteCloze.mutateAsync({ documentId: cloze.documentId, start: cloze.blankStart, cardId: id });
+      drop((c) => c.id !== id);
     } catch (e: unknown) {
       error = message(e);
     } finally {
@@ -322,7 +299,7 @@
     <p class="muted">Sign in to review your words.</p>
     <Button variant="primary" onclick={() => void signIn()}>Sign in</Button>
   {:else if !counts}
-    {#if !error}<p class="muted">Loading…</p>{/if}
+    {#if !failure}<p class="muted">Loading…</p>{/if}
   {/if}
   {#if user && counts && !selected}
     <p>Nothing to review right now. Words you look up in the reader turn into cards here.</p>
@@ -338,7 +315,7 @@
     </nav>
   {/if}
   {#if user && selected && !due}
-    {#if !error}<p class="muted">Loading…</p>{/if}
+    {#if !failure}<p class="muted">Loading…</p>{/if}
   {:else if user && due}
     <p class="counts muted">{left} to go · {newLeft(due.newLeft)} · <a href="#/settings">Settings</a></p>
     {#if card}
@@ -390,10 +367,10 @@
       {/if}
     {:else}
       <p>Nothing to review right now. Words you look up in the reader turn into cards here.</p>
-      <Button variant="quiet" disabled={busy} onclick={refresh}>Check again</Button>
+      <Button variant="quiet" disabled={busy || dueCards.isFetching} onclick={refresh}>Check again</Button>
     {/if}
   {/if}
-  {#if error}<p class="error" role="alert">{error}</p>{/if}
+  {#if failure}<p class="error" role="alert">{failure}</p>{/if}
   </div>
 </Page>
 

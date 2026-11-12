@@ -1,11 +1,13 @@
 <script lang="ts">
+  import { useQueryClient } from "@tanstack/svelte-query";
   import type { User } from "@skolia/shared/api";
   import { signIn, signOut } from "../lib/api.ts";
+  import { forgetUser } from "../lib/queries.ts";
   import Button from "./Button.svelte";
 
   let {
     page,
-    user = $bindable(),
+    user,
     onerror,
   }: {
     page: "explore" | "upload" | "review" | "settings" | "reader";
@@ -16,6 +18,7 @@
   /** The account menu: a popover, so the browser closes it on Escape or a click outside
    * and gives focus back to its button. */
   let menu = $state<HTMLElement | null>(null);
+  const client = useQueryClient();
 
   async function run(action: () => Promise<void>): Promise<void> {
     try {
@@ -67,8 +70,8 @@
                 run(async () => {
                   menu?.hidePopover();
                   await signOut();
-                  user = null;
                   if (page === "upload" || page === "review" || page === "settings") location.hash = "#/";
+                  await forgetUser(client);
                 })}>Sign out</button
             >
           </li>

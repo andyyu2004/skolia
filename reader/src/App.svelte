@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { isLang, type CardGroup, type Lang, type User } from "@skolia/shared/api";
+  import { createQuery } from "@tanstack/svelte-query";
+  import { isLang, type CardGroup, type Lang } from "@skolia/shared/api";
   import Explore from "./pages/Explore.svelte";
-  import { currentUser } from "./lib/api.ts";
-  import { clearWords, loadWords } from "./lib/words.svelte.ts";
+  import { userQuery } from "./lib/queries.ts";
+  import { createWords } from "./lib/words.ts";
   import Button from "./components/Button.svelte";
   import Nav from "./components/Nav.svelte";
   import Reader from "./pages/reader/Reader.svelte";
@@ -27,21 +28,16 @@
   let route = $state(parse(location.hash));
   const version = import.meta.env.VITE_VERSION ?? "dev";
   const versionLink = versionUrl(version);
+  const signedIn = createQuery(() => userQuery);
   /** undefined while loading, null when signed out. */
-  let user = $state<User | null | undefined>(undefined);
+  const user = $derived(signedIn.data);
+  // The word sheet's statuses, loaded once someone signs in
+  const words = createWords();
   let error = $state<string | null>(null);
 
   $effect(() => {
-    currentUser().then(
-      (u) => (user = u),
-      (e: unknown) => (error = e instanceof Error ? e.message : String(e)),
-    );
-  });
-
-  // The word sheet's statuses belong to whoever is signed in
-  $effect(() => {
-    if (user) loadWords().catch((e: unknown) => (error = e instanceof Error ? e.message : String(e)));
-    else clearWords();
+    const failed = signedIn.error ?? words.error;
+    if (failed) error = failed.message;
   });
 </script>
 
@@ -57,7 +53,7 @@
   }}
 />
 
-<Nav page={route.page} bind:user onerror={(message) => (error = message)} />
+<Nav page={route.page} {user} onerror={(message) => (error = message)} />
 
 <div class="content">
   {#if error}

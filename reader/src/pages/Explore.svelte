@@ -1,8 +1,10 @@
 <script lang="ts">
-  import type { AvailableTag, DocumentKey, DocumentSummary, Lang, User } from "@skolia/shared/api";
+  import { createInfiniteQuery, createQuery, keepPreviousData } from "@tanstack/svelte-query";
+  import type { DocumentKey, Lang, User } from "@skolia/shared/api";
   import type { Cursor } from "@skolia/shared/page";
   import { LANGS, LANGUAGE_INFO, LICENCE_INFO } from "@skolia/shared/api";
-  import { listDocuments, listTags, type DocumentQuery } from "../lib/api.ts";
+  import { listDocuments, type DocumentQuery } from "../lib/api.ts";
+  import { tagsQuery } from "../lib/queries.ts";
   import { tagLabel } from "../lib/tags.ts";
   import TagFilter from "../components/TagFilter.svelte";
   import { badge } from "../lib/reading.ts";
@@ -13,26 +15,29 @@
   /** How long typing in the search waits before it asks for the list again. */
   const SEARCH_DELAY_MS = 250;
 
-  /** The pages loaded so far, null while the first loads. */
-  let documents = $state<readonly DocumentSummary[] | null>(null);
-  /** The cursor for the page after them, null when they're all of them. */
-  let next = $state<Cursor<DocumentKey> | null>(null);
-  let loadingMore = $state(false);
-  let error = $state<string | null>(null);
   let query = $state("");
   let title = $state("");
   let lang = $state<Lang | "all">("all");
   let importer = $state<"all" | "mine">("all");
   /** The tags kept, as kind:value: any of one kind, all of the kinds. */
   let tagged = $state<readonly string[]>([]);
-  let available = $state<readonly AvailableTag[]>([]);
-  let tagsError = $state<string | null>(null);
 
   const request = $derived<DocumentQuery>({ lang: lang === "all" ? undefined : lang, title, mine: importer === "mine", tags: [...tagged] });
   const filtered = $derived(request.lang !== undefined || request.title.trim() !== "" || request.tags.length > 0);
 
-  /** Bumped by each new query, so a page for an older one isn't added to the list. */
-  let generation = 0;
+  // Without them there's no tag filter, but the list still works
+  const tags = createQuery(() => tagsQuery);
+
+  /** A new query's list shows the last one's until it comes. */
+  const listing = createInfiniteQuery(() => ({
+    queryKey: ["documents", request] as const,
+    queryFn: ({ queryKey: [, asked], pageParam }) => listDocuments(asked, pageParam),
+    initialPageParam: undefined as Cursor<DocumentKey> | undefined,
+    getNextPageParam: (page) => page.next ?? undefined,
+    placeholderData: keepPreviousData,
+  }));
+  /** The pages loaded so far, undefined while the first loads. */
+  const documents = $derived(listing.data?.pages.flatMap((page) => page.items));
 
   $effect(() => {
     if (!user && importer === "mine") importer = "all";
@@ -45,46 +50,6 @@
   });
 
   const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
-
-  $effect(() => {
-    // Without them there's no tag filter, but the list still works
-    listTags().then(
-      (t) => (available = t),
-      (e: unknown) => (tagsError = e instanceof Error ? e.message : String(e)),
-    );
-  });
-
-  $effect(() => {
-    const asked = request;
-    const mine = ++generation;
-    error = null;
-    listDocuments(asked).then(
-      (page) => {
-        if (mine !== generation) return;
-        documents = page.items;
-        next = page.next;
-      },
-      (e: unknown) => {
-        if (mine === generation) error = e instanceof Error ? e.message : String(e);
-      },
-    );
-  });
-
-  async function more(): Promise<void> {
-    if (next === null || loadingMore) return;
-    const mine = generation;
-    loadingMore = true;
-    try {
-      const page = await listDocuments(request, next);
-      if (mine !== generation) return;
-      documents = [...(documents ?? []), ...page.items];
-      next = page.next;
-    } catch (e: unknown) {
-      if (mine === generation) error = e instanceof Error ? e.message : String(e);
-    } finally {
-      loadingMore = false;
-    }
-  }
 </script>
 
 <Page title="Explore" wide>
@@ -93,14 +58,14 @@
     <input type="search" bind:value={query} placeholder="Search titles" aria-label="Search titles" />
   </label>
 
-  {#if error}
-    <p class="error">{error}</p>
+  {#if listing.error}
+    <p class="error">{listing.error.message}</p>
   {:else}
     <section class="listing">
       <div class="listing-head">
         <span class="listing-count">
           {#if documents}
-            {documents.length.toLocaleString()}{next === null ? "" : "+"} {documents.length === 1 && next === null ? "text" : "texts"}
+            {documents.length.toLocaleString()}{listing.hasNextPage ? "+" : ""} {documents.length === 1 && !listing.hasNextPage ? "text" : "texts"}
           {/if}
         </span>
         <select class={{ active: lang !== "all" }} bind:value={lang} aria-label="Language">
@@ -115,10 +80,10 @@
             <option value="mine">You</option>
           {/if}
         </select>
-        <TagFilter {available} error={tagsError} bind:selected={tagged} />
+        <TagFilter available={tags.data ?? []} error={tags.error?.message ?? null} bind:selected={tagged} />
       </div>
 
-      {#if documents === null}
+      {#if documents === undefined}
         <p class="empty">Loading…</p>
       {:else if documents.length === 0}
         <p class="empty">
@@ -162,9 +127,11 @@
             </li>
           {/each}
         </ul>
-        {#if next !== null}
+        {#if listing.hasNextPage}
           <div class="more">
-            <button type="button" onclick={more} disabled={loadingMore}>{loadingMore ? "Loading…" : "More"}</button>
+            <button type="button" onclick={() => void listing.fetchNextPage()} disabled={listing.isFetchingNextPage || listing.isPlaceholderData}
+              >{listing.isFetchingNextPage ? "Loading…" : "More"}</button
+            >
           </div>
         {/if}
       {/if}

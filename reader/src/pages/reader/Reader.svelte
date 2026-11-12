@@ -13,8 +13,8 @@
   import { onDestroy, tick, untrack } from "svelte";
   import { SAVE_AFTER_MS, firstBelow, onScreen, positionsOf, scrollToTop, snippet, wordElements, type Positions } from "../../lib/position.ts";
   import type { ReaderMode } from "../../lib/mode.ts";
-  import { words as known } from "../../lib/words.svelte.ts";
-  import { loadClozes } from "../../lib/clozes.svelte.ts";
+  import { createWords } from "../../lib/words.ts";
+  import { createClozes } from "../../lib/clozes.ts";
 
   let { id }: { id: string } = $props();
 
@@ -57,10 +57,9 @@
     return reading && found ? { start: found.start, text: reading.text.slice(found.start, found.end) } : null;
   }
 
-  // The cloze cards from this text, once signed in
-  $effect(() => {
-    if (known.byId !== null) void loadClozes(id).catch(() => undefined);
-  });
+  const known = createWords();
+  // The cloze cards from this text, loaded with it, for the word sheet
+  createClozes(() => id);
 
   $effect(() => {
     let cancelled = false;
@@ -315,7 +314,7 @@
       <div class="title-row">
         <h1>{summary.title}</h1>
         <div class="title-actions">
-          {#if known.byId}
+          {#if known.data}
             <div class="mode">
               <Button
                 variant="quiet"

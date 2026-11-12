@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { DEFAULT_NEW_FORMS_PER_DAY, DEFAULT_NEW_LEMMAS_PER_DAY, MAX_NEW_PER_DAY, type User } from "@skolia/shared/api";
-  import { getSettings, saveSettings, signIn } from "../lib/api.ts";
+  import { createMutation, createQuery } from "@tanstack/svelte-query";
+  import { DEFAULT_NEW_FORMS_PER_DAY, DEFAULT_NEW_LEMMAS_PER_DAY, MAX_NEW_PER_DAY, type Settings, type User } from "@skolia/shared/api";
+  import { saveSettings, signIn } from "../lib/api.ts";
+  import { settingsQuery } from "../lib/queries.ts";
   import Button from "../components/Button.svelte";
   import Field from "../components/Field.svelte";
   import Page from "../components/Page.svelte";
@@ -12,46 +14,24 @@
   let newFormsPerDay = $state<number | null>(null);
   let formsWithWords = $state(true);
   let loaded = $state(false);
-  let saving = $state(false);
-  let saved = $state(false);
-  let error = $state<string | null>(null);
 
-  function message(e: unknown): string {
-    return e instanceof Error ? e.message : String(e);
-  }
+  const settings = createQuery(() => ({ ...settingsQuery, enabled: !!user }));
+  const save = createMutation(() => ({
+    mutationFn: saveSettings,
+    onSuccess: (_saved, sent: Settings, _held, { client }) => client.setQueryData(settingsQuery.queryKey, sent),
+  }));
+  const error = $derived((save.error ?? settings.error)?.message ?? null);
 
   $effect(() => {
-    if (!user) return;
-    let current = true;
-    getSettings().then(
-      (settings) => {
-        if (!current) return;
-        ({ newLemmasPerDay, newFormsPerDay, formsWithWords } = settings);
-        loaded = true;
-      },
-      (e: unknown) => {
-        if (current) error = message(e);
-      },
-    );
-    return () => {
-      current = false;
-    };
+    if (!settings.data || loaded) return;
+    ({ newLemmasPerDay, newFormsPerDay, formsWithWords } = settings.data);
+    loaded = true;
   });
 
-  async function submit(event: SubmitEvent): Promise<void> {
+  function submit(event: SubmitEvent): void {
     event.preventDefault();
-    if (newLemmasPerDay === null || newFormsPerDay === null || saving) return;
-    saving = true;
-    saved = false;
-    error = null;
-    try {
-      await saveSettings({ newLemmasPerDay, newFormsPerDay, formsWithWords });
-      saved = true;
-    } catch (e: unknown) {
-      error = message(e);
-    } finally {
-      saving = false;
-    }
+    if (newLemmasPerDay === null || newFormsPerDay === null || save.isPending) return;
+    save.mutate({ newLemmasPerDay, newFormsPerDay, formsWithWords });
   }
 </script>
 
@@ -74,7 +54,7 @@
           disabled={!loaded}
           aria-describedby="new-lemmas-per-day-hint"
           bind:value={newLemmasPerDay}
-          oninput={() => (saved = false)}
+          oninput={() => save.reset()}
         />
         {#snippet hint()}
           How many words you haven't reviewed before come up each day, in each language, each with its cards for
@@ -93,7 +73,7 @@
           disabled={!loaded}
           aria-describedby="new-forms-per-day-hint"
           bind:value={newFormsPerDay}
-          oninput={() => (saved = false)}
+          oninput={() => save.reset()}
         />
         {#snippet hint()}
           How many new sentences, with a form of a word to fill in, come up each day, in each language. A word's forms
@@ -101,12 +81,12 @@
         {/snippet}
       </Field>
       <label class="check">
-        <input type="checkbox" disabled={!loaded} bind:checked={formsWithWords} onchange={() => (saved = false)} />
+        <input type="checkbox" disabled={!loaded} bind:checked={formsWithWords} onchange={() => save.reset()} />
         Review forms with words
       </label>
       <div class="actions">
-        <Button type="submit" variant="primary" disabled={saving || !loaded}>Save</Button>
-        <span role="status" class="muted">{saved ? "Saved" : ""}</span>
+        <Button type="submit" variant="primary" disabled={save.isPending || !loaded}>Save</Button>
+        <span role="status" class="muted">{save.isSuccess ? "Saved" : ""}</span>
       </div>
       {#if error}<p class="error" role="alert">{error}</p>{/if}
     </form>
