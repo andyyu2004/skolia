@@ -83,7 +83,7 @@ export class User extends DurableObject<object> {
   }
 
   /** A page of the words, by lemma id: those after the page's key, which word's primary key seeks to. */
-  words({ after, limit }: PageRequest<WordKey>): Paginated<Word> {
+  words({ after, limit }: PageRequest<WordKey>): Paginated<Word, WordKey> {
     const rows = this.sql
       .exec(
         `SELECT word.lemma_id AS "lemmaId", word.status, word.updated,
@@ -179,7 +179,7 @@ export class User extends DurableObject<object> {
 
   /** A page of a text's cloze cards, by where their blanks start in it: those after the
    * page's key, which cloze's (document_id, blank_start) index seeks to. */
-  clozes(documentId: DocumentId, { after, limit }: PageRequest<ClozeKey>): Paginated<ClozeStart> {
+  clozes(documentId: DocumentId, { after, limit }: PageRequest<ClozeKey>): Paginated<ClozeStart, ClozeKey> {
     const rows = this.sql
       .exec(
         `SELECT card_id, blank_start FROM cloze WHERE document_id = ? AND blank_start > ? ORDER BY blank_start LIMIT ?`,

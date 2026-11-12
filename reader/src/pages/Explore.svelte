@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { AvailableTag, DocumentSummary, Lang, User } from "@skolia/shared/api";
+  import type { AvailableTag, DocumentKey, DocumentSummary, Lang, User } from "@skolia/shared/api";
+  import type { Cursor } from "@skolia/shared/page";
   import { LANGS, LANGUAGE_INFO, LICENCE_INFO } from "@skolia/shared/api";
   import { listDocuments, listTags, type DocumentQuery } from "../lib/api.ts";
   import { tagLabel } from "../lib/tags.ts";
@@ -15,7 +16,7 @@
   /** The pages loaded so far, null while the first loads. */
   let documents = $state<readonly DocumentSummary[] | null>(null);
   /** The cursor for the page after them, null when they're all of them. */
-  let next = $state<string | null>(null);
+  let next = $state<Cursor<DocumentKey> | null>(null);
   let loadingMore = $state(false);
   let error = $state<string | null>(null);
   let query = $state("");

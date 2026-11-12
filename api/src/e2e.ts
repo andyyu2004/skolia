@@ -13,8 +13,8 @@
 // usage: E2E_API_KEY=<key> E2E_USER_KEY=<key> node src/e2e.ts https://staging.skolia.io $(git describe --tags --always --dirty)
 import assert from "node:assert/strict";
 import { hc } from "hono/client";
-import { LANGS, lemmaParam, type CardCounts, type Due, type ImportRequest, type Lang, type LemmaId, type Version, type WordStatus } from "@skolia/shared/api";
-import { allPages } from "@skolia/shared/page";
+import { LANGS, lemmaParam, type CardCounts, type Due, type ImportRequest, type Lang, type LemmaId, type Version, type WordKey, type WordStatus } from "@skolia/shared/api";
+import { allPages, type Cursor } from "@skolia/shared/page";
 import type { AppType } from "./app.ts";
 import { API_KEY_HEADER } from "./auth.ts";
 import { body, expectStatus } from "./testing/responses.ts";
@@ -161,7 +161,7 @@ async function cards(base: string, key: string, lang: Lang): Promise<void> {
   assert.deepEqual(await counts(), { lang, words: none, forms: none }, `${lang}: a new user has cards`);
 
   await mark("active");
-  const words = await allPages((after) => body("words", api.me.words.$get({ query: { after } })));
+  const words = await allPages((after?: Cursor<WordKey>) => body("words", api.me.words.$get({ query: { after } })));
   assert.equal(words.find((w) => w.lemmaId === word)?.status, "active", `${lang}: ${word} isn't active`);
   assert.deepEqual(await counts(), { lang, words: { due: 0, new: 1 }, forms: none }, `${lang}: counts after adding a word`);
 

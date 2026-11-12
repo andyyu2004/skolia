@@ -12,8 +12,12 @@ import {
   type ApiError,
   type CardCounts,
   type CardGroup,
+  type ClozeKey,
   type ClozeMade,
   type ClozeStart,
+  type DocumentKey,
+  type TagKey,
+  type WordKey,
   type Paginated,
   type Due,
   type DocumentSummary,
@@ -32,7 +36,7 @@ import {
   type Word,
   type WordStatus,
 } from "@skolia/shared/api";
-import { allPages } from "@skolia/shared/page";
+import { allPages, type Cursor } from "@skolia/shared/page";
 import { BUNDLE_SCHEMA, SCHEMA, type Blob, type Bundle } from "@skolia/shared/schema";
 
 const api = hc<AppType>("/").api;
@@ -80,7 +84,7 @@ export async function signOut(): Promise<void> {
 class SignedOut extends Error {}
 
 /** Every page of a list of the signed-in user's, or null when signed out. */
-async function listOwn<T>(fetchPage: (after: string | undefined) => Promise<Paginated<T>>): Promise<readonly T[] | null> {
+async function listOwn<T, K>(fetchPage: (after: Cursor<K> | undefined) => Promise<Paginated<T, K>>): Promise<readonly T[] | null> {
   try {
     return await allPages(fetchPage);
   } catch (error) {
@@ -98,7 +102,7 @@ export type DocumentQuery = {
 };
 
 /** A page of the documents the query keeps, from the start or after a page's next. */
-export async function listDocuments({ lang, title, mine, tags }: DocumentQuery, after?: string): Promise<Paginated<DocumentSummary>> {
+export async function listDocuments({ lang, title, mine, tags }: DocumentQuery, after?: Cursor<DocumentKey>): Promise<Paginated<DocumentSummary, DocumentKey>> {
   const response = await api.documents.$get({ query: { after, lang, q: title.trim() || undefined, mine: mine ? "true" : undefined, tag: [...tags] } });
   if (!response.ok) throw await failure(response);
   return response.json();
@@ -108,7 +112,7 @@ let available: Promise<readonly AvailableTag[]> | null = null;
 
 /** The tags that can be given, asked for once. */
 export function listTags(): Promise<readonly AvailableTag[]> {
-  available ??= allPages(async (after) => {
+  available ??= allPages(async (after?: Cursor<TagKey>) => {
     const response = await api.tags.$get({ query: { after, limit: String(TAG_PAGE.max) } });
     if (!response.ok) throw await failure(response);
     return response.json();
@@ -168,7 +172,7 @@ export async function loadReading(id: string, names: ReadingNames): Promise<Read
 
 /** The user's words, or null when signed out. */
 export function listWords(): Promise<readonly Word[] | null> {
-  return listOwn(async (after) => {
+  return listOwn(async (after?: Cursor<WordKey>) => {
     const response = await api.me.words.$get({ query: { after, limit: String(WORD_PAGE.max) } });
     if (response.status === 401) throw new SignedOut();
     if (!response.ok) throw await failure(response);
@@ -227,7 +231,7 @@ export async function makeCloze(json: NewClozeInput): Promise<ClozeMade> {
 
 /** The user's cloze cards from a text, or null when signed out. */
 export function listClozes(documentId: string): Promise<readonly ClozeStart[] | null> {
-  return listOwn(async (after) => {
+  return listOwn(async (after?: Cursor<ClozeKey>) => {
     const response = await api.me.clozes.$get({ query: { documentId, after, limit: String(CLOZE_PAGE.max) } });
     if (response.status === 401) throw new SignedOut();
     if (!response.ok) throw await failure(response);

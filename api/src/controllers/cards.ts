@@ -37,7 +37,7 @@ const MAX_DUE = 200;
 /** How far ahead of the server's clock a review's time may be. */
 export const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
-export async function words(deps: Deps, user: User, page: PageRequest<WordKey>): Promise<Ok<Paginated<Word>>> {
+export async function words(deps: Deps, user: User, page: PageRequest<WordKey>): Promise<Ok<Paginated<Word, WordKey>>> {
   return ok(await deps.users.words(user.id, page));
 }
 
@@ -84,7 +84,7 @@ export async function makeCloze(deps: Deps, user: User, cloze: NewCloze): Promis
   return made ? { status: 201, body: { cardId } } : ok({ cardId });
 }
 
-export async function clozes(deps: Deps, user: User, documentId: DocumentId, page: PageRequest<ClozeKey>): Promise<Ok<Paginated<ClozeStart>>> {
+export async function clozes(deps: Deps, user: User, documentId: DocumentId, page: PageRequest<ClozeKey>): Promise<Ok<Paginated<ClozeStart, ClozeKey>>> {
   return ok(await deps.users.clozes(user.id, documentId, page));
 }
 

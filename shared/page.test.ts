@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as z from "zod";
-import { allPages, encodeCursor, pageQuery, paginate, type Paginated } from "./page.ts";
+import { allPages, encodeCursor, pageQuery, paginate, type Cursor, type Paginated } from "./page.ts";
 
 const Key = z.tuple([z.string(), z.number().int()]);
 const query = pageQuery(Key, { fallback: 2, max: 3 });
@@ -31,18 +31,20 @@ test("a page drops the row past its limit, and has a next only when there was on
 });
 
 test("every page of a list, in order", async () => {
-  const pages: Readonly<Record<string, Paginated<number>>> = {
-    start: { items: [1, 2], next: "p2" },
-    p2: { items: [3], next: "p3" },
-    p3: { items: [], next: null },
-  };
-  const asked: (string | undefined)[] = [];
-  const items = await allPages(async (after) => {
+  type Key = readonly [string];
+  const [p2, p3] = [encodeCursor(["p2"] as Key), encodeCursor(["p3"] as Key)];
+  const pages: ReadonlyMap<Cursor<Key> | undefined, Paginated<number, Key>> = new Map([
+    [undefined, { items: [1, 2], next: p2 }],
+    [p2, { items: [3], next: p3 }],
+    [p3, { items: [], next: null }],
+  ]);
+  const asked: (Cursor<Key> | undefined)[] = [];
+  const items = await allPages(async (after?: Cursor<Key>) => {
     asked.push(after);
-    const page = pages[after ?? "start"];
+    const page = pages.get(after);
     if (page === undefined) throw new Error(`no page ${after}`);
     return page;
   });
   assert.deepEqual(items, [1, 2, 3]);
-  assert.deepEqual(asked, [undefined, "p2", "p3"]);
+  assert.deepEqual(asked, [undefined, p2, p3]);
 });

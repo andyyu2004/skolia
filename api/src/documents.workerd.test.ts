@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { DOCUMENT_PAGE, MAX_TEXT_LENGTH, TAG_PAGE, type DocumentId, type DocumentSummary, type DocumentUpdate, type ImportRequest, type Lang } from "@skolia/shared/api";
+import { DOCUMENT_PAGE, MAX_TEXT_LENGTH, TAG_PAGE, type DocumentId, type DocumentKey, type TagKey, type DocumentSummary, type DocumentUpdate, type ImportRequest, type Lang } from "@skolia/shared/api";
 import { docId, statusKey, textKey } from "@skolia/shared/keys";
+import type { Cursor } from "@skolia/shared/page";
 import type { IngestJobs } from "./ports.ts";
 import { ALICE, NOW, TEXT, client, importText, importer, listed, local, putJson, raw, readyAt, refusesBadPages, setup, summaryOf, useLocal, walk, type App } from "./testing/app.ts";
 import { body, expectStatus } from "./testing/responses.ts";
@@ -294,7 +295,7 @@ test("the tags come a page at a time, in order", async () => {
   const tags = client(setup()).tags;
   const { items } = await body("tags", tags.$get({ query: {} }));
   assert.ok(items.length >= 5, `only ${items.length} tags`);
-  assert.deepEqual(await walk(2, (after) => body("tags", tags.$get({ query: { after, limit: "2" } }))), items);
+  assert.deepEqual(await walk(2, (after?: Cursor<TagKey>) => body("tags", tags.$get({ query: { after, limit: "2" } }))), items);
   await refusesBadPages(TAG_PAGE.max, (query) => tags.$get({ query }));
 });
 
@@ -374,7 +375,7 @@ type ListQuery = { readonly lang?: Lang; readonly q?: string; readonly mine?: st
 
 /** Every document the viewer sees, two to a page. */
 function paged(app: App, headers: Headers | undefined, query: ListQuery = {}) {
-  return walk(2, (after) => body("list", client(app, headers).documents.$get({ query: { ...query, after, limit: "2" } })));
+  return walk(2, (after?: Cursor<DocumentKey>) => body("list", client(app, headers).documents.$get({ query: { ...query, after, limit: "2" } })));
 }
 
 async function pagedIds(app: App, headers: Headers | undefined, query: ListQuery = {}): Promise<readonly DocumentId[]> {
@@ -450,7 +451,7 @@ test("a list keeps the viewer's own entries with mine, and needs a session for i
   const app = setup();
   assert.deepEqual(await pagedIds(app, importer, { mine: "true" }), byId(own));
   assert.equal((await pagedIds(app, importer, { mine: "false" })).length, 6);
-  const mine = await walk(2, (after) => body("mine", client(app, importer).me.documents.$get({ query: { after, limit: "2" } })));
+  const mine = await walk(2, (after?: Cursor<DocumentKey>) => body("mine", client(app, importer).me.documents.$get({ query: { after, limit: "2" } })));
   assert.deepEqual(mine.map((d) => d.id), byId(own));
   await expectStatus("signed out", client(app).documents.$get({ query: { mine: "true" } }), 401);
 });
@@ -475,5 +476,6 @@ test("the lists of documents refuse a cursor they didn't give and a limit out of
   await refusesBadPages(DOCUMENT_PAGE.max, (query) => client(app, importer).me.documents.$get({ query }));
   const tags = await body("tags", client(app).tags.$get({ query: { limit: "1" } }));
   assert.ok(tags.next);
+  // @ts-expect-error -- a tags cursor isn't a documents one; the API refuses it too
   await expectStatus("a tags cursor", client(app).documents.$get({ query: { after: tags.next } }), 400);
 });

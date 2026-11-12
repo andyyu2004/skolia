@@ -115,11 +115,11 @@ export const NewCloze = Cloze.extend({ lemmaId: LemmaId }).refine(
 );
 
 /** Where a word is in the list of a user's words: by lemma id. */
-export const WordKey = z.tuple([LemmaId]);
+export const WordKey = z.tuple([LemmaId]).readonly();
 export const WordsQuery = pageQuery(WordKey, WORD_PAGE);
 
 /** Where a cloze card is in the list of a text's: where its blank starts. */
-export const ClozeKey = z.tuple([Index]);
+export const ClozeKey = z.tuple([Index]).readonly();
 export const ClozesQuery = pageQuery(ClozeKey, CLOZE_PAGE).extend({ documentId: DocumentId });
 
 /** cloze: a cloze card's sentence, null for a word's cards. */
@@ -150,11 +150,11 @@ export const Tags = z.record(TagKind, TagValue).refine((tags) => Object.keys(tag
 export const AvailableTag = z.object({ kind: TagKind, value: TagValue, description: z.string().nullable() });
 
 /** Where a tag is in the list of them: by kind, then in the kind's order. */
-export const TagKey = z.tuple([TagKind, z.number().int()]);
+export const TagKey = z.tuple([TagKind, z.number().int()]).readonly();
 export const TagsQuery = pageQuery(TagKey, TAG_PAGE);
 
 /** See DocumentKey in api.ts. */
-export const DocumentKey = z.tuple([UserId, DocumentId]);
+export const DocumentKey = z.tuple([UserId, DocumentId]).readonly();
 
 /** A page of the viewer's own documents. */
 export const MyDocumentsQuery = pageQuery(DocumentKey, DOCUMENT_PAGE);

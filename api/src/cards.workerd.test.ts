@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MAX_NEW_PER_DAY, WORD_PAGE, lemmaParam, type CardCounts, type CardGroup, type Due, type Lang, type LemmaId, type NewClozeInput, type Rating, type Reviewed, type ReviewRequestInput, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
-import { allPages } from "@skolia/shared/page";
+import { MAX_NEW_PER_DAY, WORD_PAGE, lemmaParam, type CardCounts, type CardGroup, type Due, type Lang, type LemmaId, type NewClozeInput, type Rating, type Reviewed, type ReviewRequestInput, type Settings, type Word, type WordKey, type WordStatus } from "@skolia/shared/api";
+import { allPages, type Cursor } from "@skolia/shared/page";
 import { ALICE, NOW, client, loadLexicon, local, raw, refusesBadPages, setup, useLocal, walk, type App } from "./testing/app.ts";
 import { body } from "./testing/responses.ts";
 
@@ -43,7 +43,7 @@ function makeCloze(app: App, headers: Headers, lemmaId: LemmaId, n: number) {
 }
 
 function words(app: App, headers: Headers): Promise<readonly Word[]> {
-  return allPages((after) => body("words", client(app, headers).me.words.$get({ query: { after } })));
+  return allPages(async (after?: Cursor<WordKey>) => body("words", client(app, headers).me.words.$get({ query: { after } })));
 }
 
 function mark(app: App, headers: Headers | undefined, lemmaId: LemmaId, status: WordStatus) {
@@ -345,7 +345,7 @@ test("the words come a page at a time, by lemma id", async () => {
   const headers = await signedIn();
   const lemmas: readonly LemmaId[] = ["pl:pies:NOUN", "pl:dom:NOUN", "pl:kot:NOUN", "pl:być:VERB", "pl:ale:CCONJ"];
   for (const lemmaId of lemmas) assert.equal((await mark(app, headers, lemmaId, "known")).status, 204);
-  const listed = await walk(2, (after) => body("words", client(app, headers).me.words.$get({ query: { after, limit: "2" } })));
+  const listed = await walk(2, (after?: Cursor<WordKey>) => body("words", client(app, headers).me.words.$get({ query: { after, limit: "2" } })));
   assert.deepEqual(listed.map((w) => w.lemmaId), [...lemmas].sort());
   await refusesBadPages(WORD_PAGE.max, (query) => client(app, headers).me.words.$get({ query }));
 });

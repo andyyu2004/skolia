@@ -11,9 +11,9 @@ import { join } from "node:path";
 import { hc } from "hono/client";
 import { parse as parseYaml } from "yaml";
 import * as z from "zod";
-import { DOCUMENT_PAGE, LANGS, type DocumentId, type DocumentSummary, type DocumentUpdate, type Lang, type Tags } from "@skolia/shared/api";
+import { DOCUMENT_PAGE, LANGS, type DocumentId, type DocumentKey, type DocumentSummary, type DocumentUpdate, type Lang, type Tags } from "@skolia/shared/api";
 import { docId } from "@skolia/shared/keys";
-import { allPages } from "@skolia/shared/page";
+import { allPages, type Cursor } from "@skolia/shared/page";
 import * as schemas from "@skolia/shared/schemas";
 import type { AppType } from "./app.ts";
 import { API_KEY_HEADER } from "./auth.ts";
@@ -157,7 +157,7 @@ export type Api = ReturnType<typeof hc<AppType>>["api"];
 export async function sync(api: Api, texts: readonly Curated[], { check = false, log = console.log } = {}): Promise<Change[]> {
   // Every page: a document missing from the list would be imported again, and one in
   // the list but not in curated/ deleted
-  const mine = await allPages(async (after) => {
+  const mine = await allPages(async (after?: Cursor<DocumentKey>) => {
     const listed = await api.me.documents.$get({ query: { after, limit: String(DOCUMENT_PAGE.max) } });
     if (!listed.ok) throw new Error(`list: ${listed.status} ${await listed.text()}`);
     return listed.json();

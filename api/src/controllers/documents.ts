@@ -39,19 +39,19 @@ export async function list(
   viewer: User | null,
   filter: DocumentFilter,
   page: PageRequest<DocumentKey>,
-): Promise<Ok<Paginated<DocumentSummary>> | Failed<401>> {
+): Promise<Ok<Paginated<DocumentSummary, DocumentKey>> | Failed<401>> {
   if (filter.mine && viewer === null) return fail(401, "sign in to see your own texts");
   const { items, next } = await deps.documents.list(viewer?.id ?? null, filter, page);
   return ok({ items: await Promise.all(items.map(async (r) => summarize(r, await readStatus(deps.blobs, r.id), viewer))), next });
 }
 
 /** A page of the documents the user imported, public or private. */
-export async function mine(deps: Deps, user: User, page: PageRequest<DocumentKey>): Promise<Ok<Paginated<DocumentSummary>> | Failed<401>> {
+export async function mine(deps: Deps, user: User, page: PageRequest<DocumentKey>): Promise<Ok<Paginated<DocumentSummary, DocumentKey>> | Failed<401>> {
   return list(deps, user, { tags: {}, lang: undefined, title: undefined, mine: true }, page);
 }
 
 /** A page of the tags that can be given. */
-export async function tags(deps: Deps, page: PageRequest<TagKey>): Promise<Ok<Paginated<AvailableTag>>> {
+export async function tags(deps: Deps, page: PageRequest<TagKey>): Promise<Ok<Paginated<AvailableTag, TagKey>>> {
   return ok(await deps.documents.tags(page));
 }
 

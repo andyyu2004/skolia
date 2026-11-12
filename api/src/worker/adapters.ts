@@ -58,7 +58,7 @@ export class DurableObjectUsers implements UserData {
     this.users = users;
   }
 
-  async words(userId: UserId, page: PageRequest<WordKey>): Promise<Paginated<Word>> {
+  async words(userId: UserId, page: PageRequest<WordKey>): Promise<Paginated<Word, WordKey>> {
     return this.users.getByName(userId).words(page);
   }
 
@@ -86,7 +86,7 @@ export class DurableObjectUsers implements UserData {
     return this.users.getByName(userId).makeCloze(cloze, now);
   }
 
-  async clozes(userId: UserId, documentId: DocumentId, page: PageRequest<ClozeKey>): Promise<Paginated<ClozeStart>> {
+  async clozes(userId: UserId, documentId: DocumentId, page: PageRequest<ClozeKey>): Promise<Paginated<ClozeStart, ClozeKey>> {
     return this.users.getByName(userId).clozes(documentId, page);
   }
 
@@ -318,7 +318,7 @@ export class D1Documents implements DocumentStore {
     this.db = db;
   }
 
-  async list(viewer: UserId | null, filter: DocumentFilter, page: PageRequest<DocumentKey>): Promise<Paginated<StoredDocument>> {
+  async list(viewer: UserId | null, filter: DocumentFilter, page: PageRequest<DocumentKey>): Promise<Paginated<StoredDocument, DocumentKey>> {
     const rows = (await this.all(listQuery(viewer, filter, page))).map((row) => schemas.DocumentRow.parse(row));
     return paginate(
       rows.map((item) => ({ item, key: [item.user, item.id] as const })),
@@ -326,7 +326,7 @@ export class D1Documents implements DocumentStore {
     );
   }
 
-  async tags(page: PageRequest<TagKey>): Promise<Paginated<AvailableTag>> {
+  async tags(page: PageRequest<TagKey>): Promise<Paginated<AvailableTag, TagKey>> {
     const rows = (await this.all(tagsQuery(page))).map((row) => TagRow.parse(row));
     return paginate(
       rows.map(({ position, ...item }) => ({ item, key: [item.kind, position] as const })),

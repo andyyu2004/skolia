@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach } from "node:test";
 import { brotliCompressSync } from "node:zlib";
 import { hc, type ClientResponse } from "hono/client";
-import type { DocumentId, DocumentSummary, Lang, Paginated } from "@skolia/shared/api";
+import type { DocumentId, DocumentKey, DocumentSummary, Lang, Paginated } from "@skolia/shared/api";
 import { partKey, statusKey, versionsKey } from "@skolia/shared/keys";
-import { allPages, encodeCursor } from "@skolia/shared/page";
+import { allPages, encodeCursor, type Cursor } from "@skolia/shared/page";
 import { createApp, type AppType } from "../app.ts";
 import type { Auth } from "../ports.ts";
 import { CloudflareQueue, D1Documents, D1Lexicon, DurableObjectUsers, R2Blobs, lexiconsOf, type JobsOf } from "../worker/adapters.ts";
@@ -123,14 +123,14 @@ export function importText(
 
 /** The ids of every document the viewer sees, from all the list's pages. */
 export async function listed(app: App, headers?: Headers): Promise<DocumentId[]> {
-  const documents = await allPages((after) => body("list", client(app, headers).documents.$get({ query: { after } })));
+  const documents = await allPages((after?: Cursor<DocumentKey>) => body("list", client(app, headers).documents.$get({ query: { after } })));
   return documents.map((d) => d.id);
 }
 
 /** Every item of a list, following its pages from the first, after checking that each
  * page but the last is full and the last has some items unless the list is empty. */
-export async function walk<T>(limit: number, fetchPage: (after: string | undefined) => Promise<Paginated<T>>): Promise<readonly T[]> {
-  const pages = async (after: string | undefined): Promise<readonly Paginated<T>[]> => {
+export async function walk<T, K>(limit: number, fetchPage: (after: Cursor<K> | undefined) => Promise<Paginated<T, K>>): Promise<readonly T[]> {
+  const pages = async (after: Cursor<K> | undefined): Promise<readonly Paginated<T, K>[]> => {
     const page = await fetchPage(after);
     return page.next === null ? [page] : [page, ...(await pages(page.next))];
   };
@@ -142,12 +142,17 @@ export async function walk<T>(limit: number, fetchPage: (after: string | undefin
   return all.flatMap((page) => page.items);
 }
 
+/** A string passed off as any list's cursor, to see the API refuse what the types would. */
+export function forged(text: string): Cursor<never> {
+  return text as Cursor<never>;
+}
+
 /** Checks that a list refuses an after it didn't give, and a limit out of its range. */
 export async function refusesBadPages(
   max: number,
-  list: (query: { readonly after?: string; readonly limit?: string }) => Promise<ClientResponse<unknown, number, string>>,
+  list: (query: { readonly after?: Cursor<never>; readonly limit?: string }) => Promise<ClientResponse<unknown, number, string>>,
 ): Promise<void> {
-  for (const after of ["nope", encodeCursor([1.5])]) {
+  for (const after of [forged("nope"), forged(encodeCursor([1.5]))]) {
     const refused = await expectStatus(`after ${after}`, list({ after }), 400);
     assert.deepEqual(await refused.json(), { error: "after isn't a cursor this list gave" });
   }
