@@ -3,6 +3,7 @@ import { CARD_GROUPS, LANGS, WORD_CARD_KINDS, MATURE_DAYS, timestamp, type CardC
 import { paginate, type PageRequest } from "@skolia/shared/page";
 import * as schemas from "@skolia/shared/schemas";
 import { CardId } from "@skolia/shared/schemas";
+import { sql, type Sql } from "@skolia/util/sql";
 import type { DueCards, ReviewOutcome, StoredPosition, StoredReading } from "../ports.ts";
 import { fromJson, fsrs, newCard, review, toJson } from "./scheduler.ts";
 import { MIGRATIONS } from "../user/migrations/index.ts";
@@ -25,46 +26,47 @@ function scheduled(row: Record<string, SqlStorageValue>): ScheduledCard {
 }
 
 /** A group's cards, as a condition on card. */
-const IN_GROUP: Readonly<Record<CardGroup, string>> = { words: "card.kind != 'cloze'", forms: "card.kind = 'cloze'" };
+const IN_GROUP: Readonly<Record<CardGroup, Sql>> = { words: sql`card.kind != 'cloze'`, forms: sql`card.kind = 'cloze'` };
 
-/** A language's active cards due by now, with lang and now as its parameters. */
-const DUE = `WHERE card.lang = ? AND card.active = 1 AND card.schedule_status != 'new' AND card.due_at <= ?`;
+/** A language's active cards due by now. */
+const due = (lang: Lang, now: Timestamp) => sql`WHERE card.lang = ${lang} AND card.active = 1 AND card.schedule_status != 'new' AND card.due_at <= ${now}`;
 
 /** Whether the lemma of the card under alias has been started: one of its word cards reviewed. */
-const started = (alias: string) =>
-  `EXISTS (SELECT 1 FROM card AS w WHERE w.lemma_id = ${alias}.lemma_id AND w.kind != 'cloze' AND w.first_reviewed IS NOT NULL)`;
+const started = (alias: "card" | "u") =>
+  sql`EXISTS (SELECT 1 FROM card AS w WHERE w.lemma_id = ${sql.id(alias, "lemma_id")} AND w.kind != 'cloze' AND w.first_reviewed IS NOT NULL)`;
 
-/** The card under alias is a language's new card, with lang as its parameter. */
-const NEW = (alias: string) => `${alias}.lang = ? AND ${alias}.active = 1 AND ${alias}.schedule_status = 'new'`;
+/** The card under alias is a language's new card. */
+const NEW = (alias: "card" | "u", lang: Lang) =>
+  sql`${sql.id(alias, "lang")} = ${lang} AND ${sql.id(alias, "active")} = 1 AND ${sql.id(alias, "schedule_status")} = 'new'`;
 
-/** A group's new cards that today's allowance leaves to show, as a condition on card with
- * its parameters, and at most how many. Words: every new word card of a started lemma, and
- * all those of the first lemmas not yet started, as many as are left, in the order their
- * cards were made. Forms: cloze cards whose lemmas are started, as many as are left.
- * count: how to count them in the allowance's terms, words by lemma and forms by card. */
-function freshCards(group: CardGroup, lang: Lang, newLeft: NewLeft): { where: string; params: readonly SqlStorageValue[]; cap: number; count: string } {
+/** A group's new cards that today's allowance leaves to show, as a condition on card, and
+ * at most how many. Words: every new word card of a started lemma, and all those of the
+ * first lemmas not yet started, as many as are left, in the order their cards were made.
+ * Forms: cloze cards whose lemmas are started, as many as are left. count: how to count
+ * them in the allowance's terms, words by lemma and forms by card. */
+function freshCards(group: CardGroup, lang: Lang, newLeft: NewLeft): { where: Sql; cap: number; count: Sql } {
   switch (group) {
     case "words":
       return {
-        where: `${NEW("card")} AND card.kind != 'cloze' AND (${started("card")} OR card.lemma_id IN (
-          SELECT lemma_id FROM card AS u WHERE ${NEW("u")} AND u.kind != 'cloze' AND NOT ${started("u")}
-          GROUP BY lemma_id ORDER BY min(created), lemma_id LIMIT ?))`,
-        params: [lang, lang, newLeft.words],
+        where: sql`${NEW("card", lang)} AND card.kind != 'cloze' AND (${started("card")} OR card.lemma_id IN (
+          SELECT lemma_id FROM card AS u WHERE ${NEW("u", lang)} AND u.kind != 'cloze' AND NOT ${started("u")}
+          GROUP BY lemma_id ORDER BY min(created), lemma_id LIMIT ${newLeft.words}))`,
         cap: Number.POSITIVE_INFINITY,
-        count: "count(DISTINCT card.lemma_id)",
+        count: sql`count(DISTINCT card.lemma_id)`,
       };
     case "forms":
-      return { where: `${NEW("card")} AND card.kind = 'cloze' AND ${started("card")}`, params: [lang], cap: newLeft.forms, count: "count(*)" };
+      return { where: sql`${NEW("card", lang)} AND card.kind = 'cloze' AND ${started("card")}`, cap: newLeft.forms, count: sql`count(*)` };
   }
 }
 
 export class User extends DurableObject<object> {
-  private readonly sql: SqlStorage;
-
   constructor(ctx: DurableObjectState, env: object) {
     super(ctx, env);
-    this.sql = ctx.storage.sql;
     void ctx.blockConcurrencyWhile(() => this.#migrate(MIGRATIONS.length));
+  }
+
+  #exec({ text, params }: Sql): SqlStorageCursor<Record<string, SqlStorageValue>> {
+    return this.ctx.storage.sql.exec(text, ...params);
   }
 
   migrate(version: number): Promise<void> {
@@ -85,16 +87,13 @@ export class User extends DurableObject<object> {
 
   /** A page of the words, by lemma id: those after the page's key, which word's primary key seeks to. */
   words({ after, limit }: PageRequest<WordKey>): Paginated<Word, WordKey> {
-    const rows = this.sql
-      .exec(
-        `SELECT word.lemma_id AS "lemmaId", word.status, word.updated,
+    const rows = this.#exec(
+      sql`SELECT word.lemma_id AS "lemmaId", word.status, word.updated,
            coalesce(card.scheduled_days >= ${MATURE_DAYS}, 0) AS mature
          FROM word LEFT JOIN card ON card.lemma_id = word.lemma_id AND card.kind = 'recognition'
-         WHERE word.lemma_id > ?
-         ORDER BY word.lemma_id LIMIT ?`,
-        after?.[0] ?? "",
-        limit + 1,
-      )
+         WHERE word.lemma_id > ${after?.[0] ?? ""}
+         ORDER BY word.lemma_id LIMIT ${limit + 1}`,
+    )
       .toArray()
       .map((row) => schemas.Word.parse({ ...row, mature: row["mature"] === 1 }));
     return paginate(
@@ -108,26 +107,18 @@ export class User extends DurableObject<object> {
   async setWord(lemmaId: LemmaId, status: WordStatus, now: Timestamp): Promise<void> {
     const s = await fsrs();
     this.ctx.storage.transactionSync(() => {
-      this.sql.exec(
-        `INSERT INTO word (lemma_id, status, updated) VALUES (?, ?, ?)
+      this.#exec(
+        sql`INSERT INTO word (lemma_id, status, updated) VALUES (${lemmaId}, ${status}, ${now})
          ON CONFLICT (lemma_id) DO UPDATE SET status = excluded.status, updated = excluded.updated`,
-        lemmaId,
-        status,
-        now,
       );
       const active = status === "active" ? 1 : 0;
-      this.sql.exec(`UPDATE card SET active = ? WHERE lemma_id = ?`, active, lemmaId);
+      this.#exec(sql`UPDATE card SET active = ${active} WHERE lemma_id = ${lemmaId}`);
       if (!active) return;
       for (const kind of WORD_CARD_KINDS) {
         const id = CardId.parse(crypto.randomUUID());
-        this.sql.exec(
-          `INSERT INTO card (id, lemma_id, kind, created, active, fsrs) VALUES (?, ?, ?, ?, 1, ?)
+        this.#exec(
+          sql`INSERT INTO card (id, lemma_id, kind, created, active, fsrs) VALUES (${id}, ${lemmaId}, ${kind}, ${now}, 1, ${toJson(newCard(s, id, new Date(now)))})
            ON CONFLICT (lemma_id, kind) WHERE kind != 'cloze' DO NOTHING`,
-          id,
-          lemmaId,
-          kind,
-          now,
-          toJson(newCard(s, id, new Date(now))),
         );
       }
     });
@@ -137,8 +128,8 @@ export class User extends DurableObject<object> {
    * no card or review: setWord active brings them back. */
   clearWordStatus(lemmaId: LemmaId): void {
     this.ctx.storage.transactionSync(() => {
-      this.sql.exec(`DELETE FROM word WHERE lemma_id = ?`, lemmaId);
-      this.sql.exec(`UPDATE card SET active = 0 WHERE lemma_id = ?`, lemmaId);
+      this.#exec(sql`DELETE FROM word WHERE lemma_id = ${lemmaId}`);
+      this.#exec(sql`UPDATE card SET active = 0 WHERE lemma_id = ${lemmaId}`);
     });
   }
 
@@ -148,31 +139,16 @@ export class User extends DurableObject<object> {
   async makeCloze(cloze: NewCloze, now: Timestamp): Promise<{ cardId: CardIdType; made: boolean }> {
     const s = await fsrs();
     return this.ctx.storage.transactionSync(() => {
-      const had = this.sql
-        .exec(`SELECT card_id FROM cloze WHERE document_id = ? AND blank_start = ?`, cloze.documentId, cloze.blankStart)
-        .toArray()[0];
+      const had = this.#exec(sql`SELECT card_id FROM cloze WHERE document_id = ${cloze.documentId} AND blank_start = ${cloze.blankStart}`).toArray()[0];
       if (had !== undefined) return { cardId: CardId.parse(had["card_id"]), made: false };
       const id = CardId.parse(crypto.randomUUID());
-      this.sql.exec(
-        `INSERT INTO card (id, lemma_id, kind, created, active, fsrs)
-         VALUES (?, ?, 'cloze', ?, coalesce((SELECT status = 'active' FROM word WHERE lemma_id = ?), 1), ?)`,
-        id,
-        cloze.lemmaId,
-        now,
-        cloze.lemmaId,
-        toJson(newCard(s, id, new Date(now))),
+      this.#exec(
+        sql`INSERT INTO card (id, lemma_id, kind, created, active, fsrs)
+         VALUES (${id}, ${cloze.lemmaId}, 'cloze', ${now}, coalesce((SELECT status = 'active' FROM word WHERE lemma_id = ${cloze.lemmaId}), 1), ${toJson(newCard(s, id, new Date(now)))})`,
       );
-      this.sql.exec(
-        `INSERT INTO cloze (card_id, document_id, sentence, sentence_start, blank_start, blank_end, feats, why)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        id,
-        cloze.documentId,
-        cloze.sentence,
-        cloze.sentenceStart,
-        cloze.blankStart,
-        cloze.blankEnd,
-        JSON.stringify(cloze.feats),
-        cloze.why,
+      this.#exec(
+        sql`INSERT INTO cloze (card_id, document_id, sentence, sentence_start, blank_start, blank_end, feats, why)
+         VALUES ${sql.tuple([id, cloze.documentId, cloze.sentence, cloze.sentenceStart, cloze.blankStart, cloze.blankEnd, JSON.stringify(cloze.feats), cloze.why])}`,
       );
       return { cardId: id, made: true };
     });
@@ -181,13 +157,9 @@ export class User extends DurableObject<object> {
   /** A page of a text's cloze cards, by where their blanks start in it: those after the
    * page's key, which cloze's (document_id, blank_start) index seeks to. */
   clozes(documentId: DocumentId, { after, limit }: PageRequest<ClozeKey>): Paginated<ClozeStart, ClozeKey> {
-    const rows = this.sql
-      .exec(
-        `SELECT card_id, blank_start FROM cloze WHERE document_id = ? AND blank_start > ? ORDER BY blank_start LIMIT ?`,
-        documentId,
-        after?.[0] ?? -1,
-        limit + 1,
-      )
+    const rows = this.#exec(
+      sql`SELECT card_id, blank_start FROM cloze WHERE document_id = ${documentId} AND blank_start > ${after?.[0] ?? -1} ORDER BY blank_start LIMIT ${limit + 1}`,
+    )
       .toArray()
       .map((row): ClozeStart => ({ cardId: CardId.parse(row["card_id"]), start: Number(row["blank_start"]) }));
     return paginate(
@@ -199,7 +171,7 @@ export class User extends DurableObject<object> {
   /** Deletes a cloze card, and by the foreign keys its cloze row and reviews; a word's
    * cards can only be taken out of reviews (setWord). Whether there was one. */
   deleteCloze(cardId: CardIdType): boolean {
-    return this.sql.exec(`DELETE FROM card WHERE id = ? AND kind = 'cloze'`, cardId).rowsWritten > 0;
+    return this.#exec(sql`DELETE FROM card WHERE id = ${cardId} AND kind = 'cloze'`).rowsWritten > 0;
   }
 
   /** What a language has left of today's allowances: the daily limits are per language.
@@ -207,19 +179,12 @@ export class User extends DurableObject<object> {
    * cards, a cloze card against the day it first had one for it, from dayStart. */
   #newLeft(lang: Lang, dayStart: Timestamp): NewLeft {
     const { newLemmasPerDay, newFormsPerDay } = this.settings();
-    const lemmas = this.sql
-      .exec(
-        `SELECT count(DISTINCT lemma_id) AS n FROM card AS c
-         WHERE lang = ? AND first_reviewed >= ? AND kind != 'cloze'
-           AND NOT EXISTS (SELECT 1 FROM card AS e WHERE e.lemma_id = c.lemma_id AND e.kind != 'cloze' AND e.first_reviewed < ?)`,
-        lang,
-        dayStart,
-        dayStart,
-      )
-      .one()["n"];
-    const forms = this.sql
-      .exec(`SELECT count(*) AS n FROM card WHERE lang = ? AND first_reviewed >= ? AND kind = 'cloze'`, lang, dayStart)
-      .one()["n"];
+    const lemmas = this.#exec(
+      sql`SELECT count(DISTINCT lemma_id) AS n FROM card AS c
+         WHERE lang = ${lang} AND first_reviewed >= ${dayStart} AND kind != 'cloze'
+           AND NOT EXISTS (SELECT 1 FROM card AS e WHERE e.lemma_id = c.lemma_id AND e.kind != 'cloze' AND e.first_reviewed < ${dayStart})`,
+    ).one()["n"];
+    const forms = this.#exec(sql`SELECT count(*) AS n FROM card WHERE lang = ${lang} AND first_reviewed >= ${dayStart} AND kind = 'cloze'`).one()["n"];
     return { words: Math.max(0, newLemmasPerDay - Number(lemmas)), forms: Math.max(0, newFormsPerDay - Number(forms)) };
   }
 
@@ -229,19 +194,17 @@ export class User extends DurableObject<object> {
   due(lang: Lang, now: Timestamp, dayStart: Timestamp, limit: number, group: CardGroup | undefined): DueCards {
     const newLeft = this.#newLeft(lang, dayStart);
     const groups = group === undefined ? CARD_GROUPS : [group];
-    const select = `SELECT card.id, card.lemma_id AS "lemmaId", card.kind, card.schedule_status = 'new' AS "isNew", due_at AS "dueAt",
+    const select = sql`SELECT card.id, card.lemma_id AS "lemmaId", card.kind, card.schedule_status = 'new' AS "isNew", due_at AS "dueAt",
         cloze.document_id AS "documentId", sentence, sentence_start AS "sentenceStart", blank_start AS "blankStart",
         blank_end AS "blankEnd", feats, why
       FROM card LEFT JOIN cloze ON cloze.card_id = card.id`;
-    const inGroup = group === undefined ? "1" : IN_GROUP[group];
-    const due = this.sql
-      .exec(`${select} ${DUE} AND ${inGroup} ORDER BY due_at LIMIT ?`, lang, now, limit)
-      .toArray();
+    const inGroup = group === undefined ? sql`1` : IN_GROUP[group];
+    const dueNow = this.#exec(sql`${select} ${due(lang, now)} AND ${inGroup} ORDER BY due_at LIMIT ${limit}`).toArray();
     const fresh = groups.flatMap((g) => {
-      const { where, params, cap } = freshCards(g, lang, newLeft);
-      return this.sql.exec(`${select} WHERE ${where} ORDER BY card.created, card.lemma_id, card.kind DESC LIMIT ?`, ...params, Math.min(cap, limit)).toArray();
+      const { where, cap } = freshCards(g, lang, newLeft);
+      return this.#exec(sql`${select} WHERE ${where} ORDER BY card.created, card.lemma_id, card.kind DESC LIMIT ${Math.min(cap, limit)}`).toArray();
     });
-    return { cards: [...due, ...fresh].slice(0, limit).map(scheduled), newLeft };
+    return { cards: [...dueNow, ...fresh].slice(0, limit).map(scheduled), newLeft };
   }
 
   /** Each language's cards due by now, and what new it would show today, by group: words'
@@ -250,10 +213,10 @@ export class User extends DurableObject<object> {
     return LANGS.map((lang) => {
       const newLeft = this.#newLeft(lang, dayStart);
       const tally = (group: CardGroup): Tally => {
-        const due = this.sql.exec(`SELECT count(*) AS n FROM card ${DUE} AND ${IN_GROUP[group]}`, lang, now).one()["n"];
-        const { where, params, cap, count } = freshCards(group, lang, newLeft);
-        const fresh = this.sql.exec(`SELECT ${count} AS n FROM card WHERE ${where}`, ...params).one()["n"];
-        return { due: Number(due), new: Math.min(Number(fresh), cap) };
+        const dueNow = this.#exec(sql`SELECT count(*) AS n FROM card ${due(lang, now)} AND ${IN_GROUP[group]}`).one()["n"];
+        const { where, cap, count } = freshCards(group, lang, newLeft);
+        const fresh = this.#exec(sql`SELECT ${count} AS n FROM card WHERE ${where}`).one()["n"];
+        return { due: Number(dueNow), new: Math.min(Number(fresh), cap) };
       };
       return { lang, words: tally("words"), forms: tally("forms") };
     });
@@ -264,10 +227,10 @@ export class User extends DurableObject<object> {
   async review({ id, cardId, rating, at }: ReviewRequest, now: Timestamp): Promise<ReviewOutcome> {
     const s = await fsrs();
     return this.ctx.storage.transactionSync((): ReviewOutcome => {
-      const row = this.sql.exec(`SELECT fsrs, created FROM card WHERE id = ?`, cardId).toArray()[0];
+      const row = this.#exec(sql`SELECT fsrs, created FROM card WHERE id = ${cardId}`).toArray()[0];
       if (row === undefined) return { kind: "no-card" };
       const card = fromJson(String(row["fsrs"]));
-      const seen = this.sql.exec(`SELECT card_id FROM review WHERE id = ?`, id).toArray()[0];
+      const seen = this.#exec(sql`SELECT card_id FROM review WHERE id = ${id}`).toArray()[0];
       if (seen !== undefined) {
         return seen["card_id"] === cardId ? { kind: "reviewed", cardId, dueAt: timestamp(card.dueAt) } : { kind: "id-reused" };
       }
@@ -276,78 +239,60 @@ export class User extends DurableObject<object> {
         return { kind: "out-of-order" };
       }
       const next = review(s, card, rating, when);
-      this.sql.exec(`INSERT INTO review (id, card_id, rating, review_time) VALUES (?, ?, ?, ?)`, id, cardId, rating, when.toISOString());
-      this.sql.exec(`UPDATE card SET fsrs = ?, first_reviewed = coalesce(first_reviewed, ?) WHERE id = ?`, toJson(next), now, cardId);
+      this.#exec(sql`INSERT INTO review (id, card_id, rating, review_time) VALUES ${sql.tuple([id, cardId, rating, when.toISOString()])}`);
+      this.#exec(sql`UPDATE card SET fsrs = ${toJson(next)}, first_reviewed = coalesce(first_reviewed, ${now}) WHERE id = ${cardId}`);
       return { kind: "reviewed", cardId, dueAt: timestamp(next.dueAt) };
     });
   }
 
   settings(): Settings {
-    const row = this.sql
-      .exec(
-        `SELECT new_lemmas_per_day AS "newLemmasPerDay", new_forms_per_day AS "newFormsPerDay", forms_with_words AS "formsWithWords"
+    const row = this.#exec(
+      sql`SELECT new_lemmas_per_day AS "newLemmasPerDay", new_forms_per_day AS "newFormsPerDay", forms_with_words AS "formsWithWords"
          FROM settings WHERE id = 1`,
-      )
-      .one();
+    ).one();
     return schemas.Settings.parse({ ...row, formsWithWords: row["formsWithWords"] === 1 });
   }
 
   setSettings({ newLemmasPerDay, newFormsPerDay, formsWithWords }: Settings): void {
-    this.sql.exec(
-      `UPDATE settings SET new_lemmas_per_day = ?, new_forms_per_day = ?, forms_with_words = ? WHERE id = 1`,
-      newLemmasPerDay,
-      newFormsPerDay,
-      formsWithWords ? 1 : 0,
+    this.#exec(
+      sql`UPDATE settings SET new_lemmas_per_day = ${newLemmasPerDay}, new_forms_per_day = ${newFormsPerDay}, forms_with_words = ${formsWithWords ? 1 : 0} WHERE id = 1`,
     );
   }
 
   position(documentId: DocumentId): StoredPosition | null {
-    const row = this.sql.exec(`SELECT sentence, token, at FROM reading_position WHERE document_id = ?`, documentId).toArray()[0];
+    const row = this.#exec(sql`SELECT sentence, token, at FROM reading_position WHERE document_id = ${documentId}`).toArray()[0];
     return row === undefined ? null : { sentence: Number(row["sentence"]), token: Number(row["token"]), at: schemas.Timestamp.parse(row["at"]) };
   }
 
   setPosition(documentId: DocumentId, { sentence, token, at }: StoredPosition): void {
-    this.sql.exec(
-      `INSERT INTO reading_position (document_id, sentence, token, at) VALUES (?, ?, ?, ?)
+    this.#exec(
+      sql`INSERT INTO reading_position (document_id, sentence, token, at) VALUES ${sql.tuple([documentId, sentence, token, at])}
        ON CONFLICT (document_id) DO UPDATE SET sentence = excluded.sentence, token = excluded.token, at = excluded.at
        WHERE excluded.at > reading_position.at`,
-      documentId,
-      sentence,
-      token,
-      at,
     );
   }
 
   reading(documentId: DocumentId): ReadingEntry | null {
-    const row = this.sql.exec(`SELECT ${READING_ENTRY} FROM reading_list WHERE document_id = ?`, documentId).toArray()[0];
+    const row = this.#exec(sql`SELECT ${READING_ENTRY} FROM reading_list WHERE document_id = ${documentId}`).toArray()[0];
     return row === undefined ? null : schemas.ReadingEntry.parse(row);
   }
 
   setReading(documentId: DocumentId, lang: Lang, status: ReadingStatus, now: Timestamp): ReadingEntry {
-    const row = this.sql
-      .exec(
-        `INSERT INTO reading_list (document_id, lang, status, added_at, updated_at) VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT (document_id) DO UPDATE SET status = excluded.status,
-           updated_at = iif(excluded.status = reading_list.status, reading_list.updated_at, excluded.updated_at)
-         RETURNING ${READING_ENTRY}`,
-        documentId,
-        lang,
-        status,
-        now,
-        now,
-      )
-      .one();
+    const row = this.#exec(
+      sql`INSERT INTO reading_list (document_id, lang, status, added_at, updated_at) VALUES ${sql.tuple([documentId, lang, status, now, now])}
+       ON CONFLICT (document_id) DO UPDATE SET status = excluded.status,
+         updated_at = iif(excluded.status = reading_list.status, reading_list.updated_at, excluded.updated_at)
+       RETURNING ${READING_ENTRY}`,
+    ).one();
     return schemas.ReadingEntry.parse(row);
   }
 
   removeReading(documentId: DocumentId): void {
-    this.sql.exec(`DELETE FROM reading_list WHERE document_id = ?`, documentId);
+    this.#exec(sql`DELETE FROM reading_list WHERE document_id = ${documentId}`);
   }
 
   readingList(status: ReadingStatus, lang: Lang | undefined, { after, limit }: PageRequest<ReadingKey>): Paginated<StoredReading, ReadingKey> {
-    const params = [...(lang === undefined ? [] : [lang]), status, ...(after ?? []), limit + 1];
-    const rows = this.sql
-      .exec(readingListQuery(lang !== undefined, after !== undefined), ...params)
+    const rows = this.#exec(readingListQuery(status, lang, after, limit + 1))
       .toArray()
       .map((row): StoredReading => ({ documentId: schemas.DocumentId.parse(row["documentId"]), ...schemas.ReadingEntry.parse(row) }));
     return paginate(
@@ -363,14 +308,10 @@ export class User extends DurableObject<object> {
     if (found.length > 0) throw new MigrationError(found.join("; "));
     for (const step of plan(stack.length, target, migrations)) {
       this.ctx.storage.transactionSync(() => {
-        this.sql.exec(step.sql);
-        this.sql.exec(
-          "INSERT INTO migration_log (version, name, direction, checksum, applied_at) VALUES (?, ?, ?, ?, ?)",
-          step.version,
-          step.name,
-          step.direction,
-          step.checksum,
-          new Date().toISOString(),
+        this.ctx.storage.sql.exec(step.sql);
+        this.#exec(
+          sql`INSERT INTO migration_log (version, name, direction, checksum, applied_at)
+            VALUES ${sql.tuple([step.version, step.name, step.direction, step.checksum, new Date().toISOString()])}`,
         );
       });
     }
@@ -378,7 +319,7 @@ export class User extends DurableObject<object> {
 
   #log(): LogEntry[] {
     this.ctx.storage.transactionSync(() => {
-      this.sql.exec(`
+      this.#exec(sql`
         CREATE TABLE IF NOT EXISTS migration_log (
           seq INTEGER PRIMARY KEY AUTOINCREMENT,
           version INTEGER NOT NULL CHECK (version > 0),
@@ -393,8 +334,7 @@ export class User extends DurableObject<object> {
           BEGIN SELECT RAISE(ABORT, 'migration_log is append-only'); END;
       `);
     });
-    return this.sql
-      .exec(`SELECT seq, version, name, direction, checksum, applied_at AS "appliedAt" FROM migration_log ORDER BY seq`)
+    return this.#exec(sql`SELECT seq, version, name, direction, checksum, applied_at AS "appliedAt" FROM migration_log ORDER BY seq`)
       .toArray()
       .map((row) => LogEntry.parse(row));
   }
