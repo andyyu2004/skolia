@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@skolia/shared": "workspace:*",
+    "@tanstack/svelte-query": "6.3.6",
     "hono": "4.13.13",
     "svelte": "5.57.2"
   },
