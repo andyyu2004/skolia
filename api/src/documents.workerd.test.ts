@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MAX_TEXT_LENGTH, type DocumentId, type DocumentSummary, type DocumentUpdate, type ImportRequest } from "@skolia/shared/api";
+import { DOCUMENT_PAGE, MAX_TEXT_LENGTH, TAG_PAGE, type DocumentId, type DocumentKey, type TagKey, type DocumentSummary, type DocumentUpdate, type ImportRequest, type Lang } from "@skolia/shared/api";
 import { docId, statusKey, textKey } from "@skolia/shared/keys";
+import type { Cursor } from "@skolia/shared/page";
 import type { IngestJobs } from "./ports.ts";
-import { ALICE, NOW, TEXT, client, importText, importer, listed, local, putJson, raw, readyAt, setup, summaryOf, useLocal, type App } from "./testing/app.ts";
+import { ALICE, NOW, TEXT, client, importText, importer, listed, local, putJson, raw, readyAt, refusesBadPages, setup, summaryOf, useLocal, walk, type App } from "./testing/app.ts";
 import { body, expectStatus } from "./testing/responses.ts";
 
 useLocal();
@@ -23,7 +24,7 @@ test("the typed client imports, lists and gets a document, and sees a 404 as not
   const { id } = await imported.json();
   const listed = await api.documents.$get({ query: {} });
   assert.ok(listed.ok);
-  assert.deepEqual((await listed.json()).documents.map((d) => d.id), [id]);
+  assert.deepEqual((await listed.json()).items.map((d) => d.id), [id]);
   const got = await api.documents[":id"].$get({ param: { id } });
   assert.ok(got.ok);
   assert.equal((await got.json()).id, id);
@@ -155,10 +156,10 @@ test("another user importing the same text gets their own entry, and the first s
   assert.deepEqual([ivys.title, ivys.visibility, ivys.licence, ivys.author, ivys.mine], ["Ivy's", "private", "all-rights-reserved", "someone", true]);
   const signedOut = await summaryOf(app, id, {});
   assert.deepEqual([signedOut.title, signedOut.importer.name, signedOut.mine], ["Alice's", "Alice", false]);
-  const { documents } = await body("list", client(app).documents.$get({ query: {} }));
-  assert.deepEqual(documents.map((d) => d.title), ["Alice's"]);
+  const { items } = await body("list", client(app).documents.$get({ query: {} }));
+  assert.deepEqual(items.map((d) => d.title), ["Alice's"]);
   const both = await body("list", client(app, importer).documents.$get({ query: {} }));
-  assert.deepEqual(both.documents.map((d) => d.title).sort(), ["Alice's", "Ivy's"]);
+  assert.deepEqual(both.items.map((d) => d.title).sort(), ["Alice's", "Ivy's"]);
 });
 
 test("a text only privately imported is unknown to everyone else, its text, analysis, bundle and position too", async () => {
@@ -232,7 +233,7 @@ test("an entry has the tags it was imported with, which its user replaces", asyn
   const id = await imported(app, importer, TEXT, { tags: { level: "A2" } });
   const tags = async () => (await body("get", view(app, importer, id))).tags;
   assert.deepEqual(await tags(), { level: "A2" });
-  assert.deepEqual((await body("list", client(app, importer).documents.$get({ query: {} }))).documents.map((d) => d.tags), [{ level: "A2" }]);
+  assert.deepEqual((await body("list", client(app, importer).documents.$get({ query: {} }))).items.map((d) => d.tags), [{ level: "A2" }]);
   assert.deepEqual((await body("patch", patch(app, importer, id, { tags: { level: "C2" } }))).tags, { level: "C2" });
   await expectStatus("title only", patch(app, importer, id, { title: "Pies" }), 200);
   assert.deepEqual(await tags(), { level: "C2" });
@@ -268,7 +269,7 @@ test("a list narrows to entries with any of the values asked for each kind of ta
   await imported(app, importer, "Trzeci tekst.", shared);
   const own = await imported(app, alice, "Czwarty tekst.", { tags: { level: "B1" } });
   const narrowed = async (headers: Headers | undefined, tag: string | string[]) =>
-    (await body("list", client(app, headers).documents.$get({ query: { tag } }))).documents.map((d) => d.id).sort();
+    (await body("list", client(app, headers).documents.$get({ query: { tag } }))).items.map((d) => d.id).sort();
   assert.deepEqual(await narrowed(undefined, "level:B1"), [b1]);
   assert.deepEqual(await narrowed(alice, "level:B1"), [b1, own].sort());
   assert.deepEqual(await narrowed(undefined, ["level:A1", "level:B1"]), [a1, b1].sort());
@@ -281,12 +282,21 @@ test("a list narrows to entries with any of the values asked for each kind of ta
 });
 
 test("the tags skolia has are listed, each kind's in its order", async () => {
-  const { tags } = await body("tags", client(setup()).tags.$get());
+  const { items: tags, next } = await body("tags", client(setup()).tags.$get({ query: {} }));
+  assert.equal(next, null);
   assert.deepEqual(
     tags.filter((t) => t.kind === "level").map((t) => t.value),
     ["A0", "A1", "A2", "B1", "B2", "C1", "C2", "C3"],
   );
   assert.equal(tags.find((t) => t.value === "B1")?.description, "Intermediate");
+});
+
+test("the tags come a page at a time, in order", async () => {
+  const tags = client(setup()).tags;
+  const { items } = await body("tags", tags.$get({ query: {} }));
+  assert.ok(items.length >= 5, `only ${items.length} tags`);
+  assert.deepEqual(await walk(2, (after?: Cursor<TagKey>) => body("tags", tags.$get({ query: { after, limit: "2" } }))), items);
+  await refusesBadPages(TAG_PAGE.max, (query) => tags.$get({ query }));
 });
 
 test("the importer makes a document public under a shareable licence, and private again", async () => {
@@ -307,8 +317,8 @@ test("a summary says whether the viewer imported it", async () => {
   const alice = await local.signIn((await local.signUp(ALICE)).id);
   const mine = async (headers?: Headers) => (await body("get", view(app, headers, id))).mine;
   assert.deepEqual([await mine(importer), await mine(alice), await mine()], [true, false, false]);
-  const { documents } = await body("list", client(app, importer).documents.$get({ query: {} }));
-  assert.deepEqual(documents.map((d) => d.mine), [true]);
+  const { items } = await body("list", client(app, importer).documents.$get({ query: {} }));
+  assert.deepEqual(items.map((d) => d.mine), [true]);
 });
 
 test("the importer deletes their entry; nobody else can", async () => {
@@ -334,8 +344,9 @@ test("a user's own documents are listed for them, private ones too, and nobody e
   const mine = await imported(app, importer, "Mój tekst.");
   const alice = await local.signIn((await local.signUp(ALICE)).id);
   await imported(app, alice, "Tekst Alicji.", { visibility: "public", licence: "cc0" });
-  const { documents } = await body("mine", client(app, importer).me.documents.$get({ query: {} }));
-  assert.deepEqual(documents.map((d) => d.id), [mine]);
+  const { items, next } = await body("mine", client(app, importer).me.documents.$get({ query: {} }));
+  assert.deepEqual(items.map((d) => d.id), [mine]);
+  assert.equal(next, null);
   await expectStatus("signed out", client(app).me.documents.$get({ query: {} }), 401);
 });
 
@@ -351,4 +362,120 @@ test("the importer sees where their document is in the queue; others don't", asy
   assert.equal(await place(null), undefined);
   await readyAt(id, "1");
   assert.equal(await place(null, importer), undefined);
+});
+
+const PUBLIC = { visibility: "public", licence: "cc0" } as const;
+
+/** Imported this many minutes after NOW. */
+function importedAt(minutes: number, headers: Headers, text: string, fields: Partial<ImportRequest> = {}): Promise<DocumentId> {
+  return imported(setup({ at: new Date(Date.parse(NOW) + minutes * 60_000).toISOString() }), headers, text, fields);
+}
+
+type ListQuery = { readonly lang?: Lang; readonly q?: string; readonly mine?: string; readonly tag?: string | string[] };
+
+/** Every document the viewer sees, two to a page. */
+function paged(app: App, headers: Headers | undefined, query: ListQuery = {}) {
+  return walk(2, (after?: Cursor<DocumentKey>) => body("list", client(app, headers).documents.$get({ query: { ...query, after, limit: "2" } })));
+}
+
+async function pagedIds(app: App, headers: Headers | undefined, query: ListQuery = {}): Promise<readonly DocumentId[]> {
+  return (await paged(app, headers, query)).map((d) => d.id);
+}
+
+/** One importer's texts in the list's order: by id. */
+function byId(ids: readonly DocumentId[]): readonly DocumentId[] {
+  return [...ids].sort();
+}
+
+test("entries come by importer, then by text, across pages, whenever they were imported", async () => {
+  const app = setup();
+  const alice = await local.signUp(ALICE);
+  const aliceHeaders = await local.signIn(alice.id);
+  const ivy = (await local.auth.user(importer))?.id;
+  assert.ok(ivy);
+  const older = await importedAt(-1, importer, "Najstarszy tekst.", PUBLIC);
+  const ivys = [await imported(app, importer, "Pierwszy tekst.", PUBLIC), await imported(app, importer, "Drugi tekst.", PUBLIC)];
+  const shared = (await body("alice imports", client(app, aliceHeaders).documents.$post({ json: { text: "Pierwszy tekst.", lang: "pl", ...PUBLIC } }), 200)).id;
+  const alices = [shared, await imported(app, aliceHeaders, "Trzeci tekst.", PUBLIC)];
+  const entries = [...[older, ...ivys].map((id) => [ivy, id] as const), ...alices.map((id) => [alice.id, id] as const)];
+  const expected = [...entries]
+    .sort(([userA, idA], [userB, idB]) => (userA === userB ? (idA < idB ? -1 : 1) : userA < userB ? -1 : 1))
+    .map(([user, id]) => `${user} ${id}`);
+  assert.deepEqual((await paged(app, undefined)).map((d) => `${d.importer.id} ${d.id}`), expected);
+  const whole = await body("list", client(app).documents.$get({ query: {} }));
+  assert.deepEqual(whole.items.map((d) => `${d.importer.id} ${d.id}`), expected);
+  assert.equal(whole.next, null);
+});
+
+test("the viewer's private entries come among the public ones in the list's order", async () => {
+  const aliceId = (await local.signUp(ALICE)).id;
+  const alice = await local.signIn(aliceId);
+  const ivy = (await local.auth.user(importer))?.id;
+  assert.ok(ivy);
+  const alices = byId([await importedAt(1, alice, "Pierwszy tekst.", PUBLIC), await importedAt(3, alice, "Trzeci tekst.", PUBLIC), await importedAt(5, alice, "Piąty tekst.", PUBLIC)]);
+  const ivys = byId([await importedAt(2, importer, "Drugi tekst."), await importedAt(4, importer, "Czwarty tekst.")]);
+  const app = setup();
+  const all = aliceId < ivy ? [...alices, ...ivys] : [...ivys, ...alices];
+  assert.deepEqual(await pagedIds(app, importer), all);
+  assert.deepEqual(await pagedIds(app, alice), alices);
+  assert.deepEqual(await pagedIds(app, undefined), alices);
+  assert.deepEqual(await listed(app, importer), all);
+});
+
+test("a list keeps the entries in a language before taking a page of them", async () => {
+  const english = [await importedAt(1, importer, "First text.", { lang: "en" }), await importedAt(2, importer, "Second text.", { lang: "en" }), await importedAt(3, importer, "Third text.", { lang: "en" })];
+  for (const [n, text] of ["Pierwszy tekst.", "Drugi tekst.", "Trzeci tekst."].entries()) await importedAt(4 + n, importer, text);
+  const app = setup();
+  assert.deepEqual(await pagedIds(app, importer, { lang: "en" }), byId(english));
+  assert.equal((await pagedIds(app, importer, { lang: "pl" })).length, 3);
+  assert.deepEqual(await pagedIds(app, importer, { lang: "fr" }), []);
+});
+
+test("a list keeps the entries whose titles have the search, % and _ as themselves and case aside", async () => {
+  const titled = (minutes: number, title: string) => importedAt(minutes, importer, `Tekst ${title}.`, { title });
+  const percent = [await titled(1, "100% prawdy"), await titled(2, "Na 100% tak"), await titled(3, "100%")];
+  const underscore = [await titled(4, "a_b"), await titled(5, "A_B pies"), await titled(6, "kot a_b")];
+  for (const [n, title] of ["100 procent", "1000 lat", "100x", "axb", "a-b", "ab"].entries()) await titled(7 + n, title);
+  const app = setup();
+  assert.deepEqual(await pagedIds(app, importer, { q: "100%" }), byId(percent));
+  assert.deepEqual(await pagedIds(app, importer, { q: "a_b" }), byId(underscore));
+  assert.deepEqual(await pagedIds(app, importer, { q: "  PIES " }), [underscore[1]]);
+  assert.deepEqual(await pagedIds(app, importer, { q: "nic takiego" }), []);
+  assert.equal((await pagedIds(app, importer, { q: "  " })).length, 12);
+});
+
+test("a list keeps the viewer's own entries with mine, and needs a session for it", async () => {
+  const alice = await local.signIn((await local.signUp(ALICE)).id);
+  const own = [await importedAt(1, importer, "Pierwszy tekst."), await importedAt(2, importer, "Drugi tekst.", PUBLIC), await importedAt(3, importer, "Trzeci tekst.")];
+  for (const [n, text] of ["Czwarty tekst.", "Piąty tekst.", "Szósty tekst."].entries()) await importedAt(4 + n, alice, text, PUBLIC);
+  const app = setup();
+  assert.deepEqual(await pagedIds(app, importer, { mine: "true" }), byId(own));
+  assert.equal((await pagedIds(app, importer, { mine: "false" })).length, 6);
+  const mine = await walk(2, (after?: Cursor<DocumentKey>) => body("mine", client(app, importer).me.documents.$get({ query: { after, limit: "2" } })));
+  assert.deepEqual(mine.map((d) => d.id), byId(own));
+  await expectStatus("signed out", client(app).documents.$get({ query: { mine: "true" } }), 401);
+});
+
+test("a list keeps the entries with the tags asked for before taking a page of them", async () => {
+  const tagged = [
+    await importedAt(1, importer, "Pierwszy tekst.", { ...PUBLIC, tags: { level: "A1" } }),
+    await importedAt(2, importer, "Drugi tekst.", { ...PUBLIC, tags: { level: "B1" } }),
+    await importedAt(3, importer, "Trzeci tekst.", { ...PUBLIC, tags: { level: "B1" } }),
+  ];
+  await importedAt(4, importer, "Czwarty tekst.", { ...PUBLIC, tags: { level: "C1" } });
+  for (const [n, text] of ["Piąty tekst.", "Szósty tekst."].entries()) await importedAt(5 + n, importer, text, PUBLIC);
+  const hidden = await importedAt(7, importer, "Siódmy tekst.", { tags: { level: "B1" } });
+  const app = setup();
+  assert.deepEqual(await pagedIds(app, undefined, { tag: ["level:A1", "level:B1"] }), byId(tagged));
+  assert.deepEqual(await pagedIds(app, importer, { tag: ["level:B1"] }), byId([...tagged.slice(1), hidden]));
+});
+
+test("the lists of documents refuse a cursor they didn't give and a limit out of range", async () => {
+  const app = setup();
+  await refusesBadPages(DOCUMENT_PAGE.max, (query) => client(app, importer).documents.$get({ query }));
+  await refusesBadPages(DOCUMENT_PAGE.max, (query) => client(app, importer).me.documents.$get({ query }));
+  const tags = await body("tags", client(app).tags.$get({ query: { limit: "1" } }));
+  assert.ok(tags.next);
+  // @ts-expect-error -- a tags cursor isn't a documents one; the API refuses it too
+  await expectStatus("a tags cursor", client(app).documents.$get({ query: { after: tags.next } }), 400);
 });

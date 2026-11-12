@@ -51,7 +51,7 @@ export function createApp(deps: Deps) {
     .get("/api/version", (c) => c.json({ version: deps.version } satisfies Version, 200))
     .on(["GET", "POST"], "/api/auth/*", (c) => deps.auth.handle(c.req.raw))
     .get("/api/me", (c) => signedIn(c, async (user) => ok(user)))
-    .get("/api/me/words", (c) => signedIn(c, (user) => cards.words(deps, user)))
+    .get("/api/me/words", zValidator("query", schemas.WordsQuery, badRequest()), (c) => signedIn(c, (user) => cards.words(deps, user, c.req.valid("query"))))
     .put(
       "/api/me/words/:lemmaId",
       zValidator("param", z.object({ lemmaId: schemas.LemmaId }), badRequest(LEMMA_ID_MESSAGE)),
@@ -74,9 +74,10 @@ export function createApp(deps: Deps) {
     .post("/api/me/clozes", zValidator("json", schemas.NewCloze, badRequest()), (c) =>
       signedIn(c, (user) => cards.makeCloze(deps, user, c.req.valid("json"))),
     )
-    .get("/api/me/clozes", zValidator("query", schemas.ClozesQuery, badRequest(DOCUMENT_ID_MESSAGE)), (c) =>
-      signedIn(c, (user) => cards.clozes(deps, user, c.req.valid("query").documentId)),
-    )
+    .get("/api/me/clozes", zValidator("query", schemas.ClozesQuery, badRequest()), (c) => {
+      const { documentId, ...page } = c.req.valid("query");
+      return signedIn(c, (user) => cards.clozes(deps, user, documentId, page));
+    })
     .delete("/api/me/clozes/:cardId", zValidator("param", z.object({ cardId: schemas.CardId }), badRequest("card id must be a UUID")), (c) =>
       signedIn(c, (user) => cards.deleteCloze(deps, user, c.req.valid("param").cardId)),
     )
@@ -89,7 +90,9 @@ export function createApp(deps: Deps) {
       zValidator("json", schemas.ReadingPosition, badRequest()),
       (c) => signedIn(c, (user) => positions.set(deps, user, c.req.valid("param").id, c.req.valid("json"))),
     )
-    .get("/api/me/documents", (c) => signedIn(c, (user) => documents.mine(deps, user)))
+    .get("/api/me/documents", zValidator("query", schemas.MyDocumentsQuery, badRequest()), (c) =>
+      signedIn(c, (user) => documents.mine(deps, user, c.req.valid("query"))),
+    )
     .get("/api/me/settings", (c) => signedIn(c, (user) => cards.settings(deps, user)))
     .put("/api/me/settings", zValidator("json", schemas.Settings, badRequest()), (c) =>
       signedIn(c, (user) => cards.setSettings(deps, user, c.req.valid("json"))),
@@ -97,10 +100,11 @@ export function createApp(deps: Deps) {
     .post("/api/lexicon/entries", zValidator("json", schemas.LookupRequest, badRequest()), async (c) =>
       send(c, await cards.lookUp(deps, c.req.valid("json").ids)),
     )
-    .get("/api/documents", zValidator("query", schemas.DocumentsQuery, badRequest()), async (c) =>
-      send(c, await documents.list(deps, await deps.auth.user(c.req.raw.headers), c.req.valid("query").tag ?? {})),
-    )
-    .get("/api/tags", async (c) => send(c, await documents.tags(deps)))
+    .get("/api/documents", zValidator("query", schemas.DocumentsQuery, badRequest()), async (c) => {
+      const { tag, lang, q, mine, ...page } = c.req.valid("query");
+      return send(c, await documents.list(deps, await deps.auth.user(c.req.raw.headers), { tags: tag ?? {}, lang, title: q, mine }, page));
+    })
+    .get("/api/tags", zValidator("query", schemas.TagsQuery, badRequest()), async (c) => send(c, await documents.tags(deps, c.req.valid("query"))))
     .post("/api/documents", limit, zValidator("json", schemas.ImportRequest, badRequest()), (c) =>
       signedIn(c, (user) => documents.importText(deps, user, c.req.valid("json")), "sign in to import"),
     )

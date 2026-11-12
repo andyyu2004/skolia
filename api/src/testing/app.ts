@@ -1,12 +1,15 @@
+import assert from "node:assert/strict";
 import { after, before, beforeEach } from "node:test";
 import { brotliCompressSync } from "node:zlib";
-import { hc } from "hono/client";
-import type { DocumentId, DocumentList, DocumentSummary, Lang } from "@skolia/shared/api";
+import { hc, type ClientResponse } from "hono/client";
+import type { DocumentId, DocumentKey, DocumentSummary, Lang, Paginated } from "@skolia/shared/api";
 import { partKey, statusKey, versionsKey } from "@skolia/shared/keys";
+import { allPages, encodeCursor, type Cursor } from "@skolia/shared/page";
 import { createApp, type AppType } from "../app.ts";
 import type { Auth } from "../ports.ts";
 import { CloudflareQueue, D1Documents, D1Lexicon, DurableObjectUsers, R2Blobs, lexiconsOf, type JobsOf } from "../worker/adapters.ts";
 import { ORIGIN, startLocal, type Local } from "./harness.ts";
+import { body, expectStatus } from "./responses.ts";
 
 export let local: Local;
 
@@ -118,9 +121,45 @@ export function importText(
   });
 }
 
-export async function listed(app: App, headers: HeadersInit = {}): Promise<string[]> {
-  const response = await app.request(`${ORIGIN}/api/documents`, { headers });
-  return ((await response.json()) as DocumentList).documents.map((d) => d.id);
+/** The ids of every document the viewer sees, from all the list's pages. */
+export async function listed(app: App, headers?: Headers): Promise<DocumentId[]> {
+  const documents = await allPages((after?: Cursor<DocumentKey>) => body("list", client(app, headers).documents.$get({ query: { after } })));
+  return documents.map((d) => d.id);
+}
+
+/** Every item of a list, following its pages from the first, after checking that each
+ * page but the last is full and the last has some items unless the list is empty. */
+export async function walk<T, K>(limit: number, fetchPage: (after: Cursor<K> | undefined) => Promise<Paginated<T, K>>): Promise<readonly T[]> {
+  const pages = async (after: Cursor<K> | undefined): Promise<readonly Paginated<T, K>[]> => {
+    const page = await fetchPage(after);
+    return page.next === null ? [page] : [page, ...(await pages(page.next))];
+  };
+  const all = await pages(undefined);
+  const sizes = all.map((page) => page.items.length);
+  const last = sizes.at(-1) ?? 0;
+  assert.deepEqual(sizes.slice(0, -1), sizes.slice(0, -1).map(() => limit), `page sizes ${sizes.join(", ")}`);
+  assert.ok(last <= limit && (last > 0 || all.length === 1), `page sizes ${sizes.join(", ")}`);
+  return all.flatMap((page) => page.items);
+}
+
+/** A string passed off as any list's cursor, to see the API refuse what the types would. */
+export function forged(text: string): Cursor<never> {
+  return text as Cursor<never>;
+}
+
+/** Checks that a list refuses an after it didn't give, and a limit out of its range. */
+export async function refusesBadPages(
+  max: number,
+  list: (query: { readonly after?: Cursor<never>; readonly limit?: string }) => Promise<ClientResponse<unknown, number, string>>,
+): Promise<void> {
+  for (const after of [forged("nope"), forged(encodeCursor([1.5]))]) {
+    const refused = await expectStatus(`after ${after}`, list({ after }), 400);
+    assert.deepEqual(await refused.json(), { error: "after isn't a cursor this list gave" });
+  }
+  for (const limit of [String(max + 1), "0"]) {
+    const refused = await expectStatus(`limit ${limit}`, list({ limit }), 400);
+    assert.deepEqual(await refused.json(), { error: `limit must be 1 to ${max}` });
+  }
 }
 
 /** A ready document whose analysis and bundle were made by version v, as ingest leaves it. */

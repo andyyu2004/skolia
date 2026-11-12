@@ -7,8 +7,15 @@ import {
   type CardCounts,
   type CardGroup,
   type CardId,
-  type ClozeList,
+  type ClozeKey,
+  type ClozeStart,
+  type DocumentFilter,
+  type DocumentKey,
   type NewCloze,
+  type Paginated,
+  type Tag,
+  type TagKey,
+  type WordKey,
   type DocumentId,
   type FeatureSets,
   type Lang,
@@ -18,9 +25,10 @@ import {
   type Lookup,
   type Timestamp,
   type UserId,
-  type ReviewRequest, type Settings, type AvailableTag, type TagFilter, type Tags, type Word, type WordStatus } from "@skolia/shared/api";
+  type ReviewRequest, type Settings, type AvailableTag, type Tags, type Word, type WordStatus } from "@skolia/shared/api";
+import { paginate, type PageRequest } from "@skolia/shared/page";
 import type { BundleParadigm, IngestJob, Pronunciation, Relation, Sense } from "@skolia/shared/schema";
-import { AvailableTag as AvailableTagSchema, DocumentRow, LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
+import * as schemas from "@skolia/shared/schemas";
 import { sql, type Sql } from "@skolia/util/sql";
 import type {
   BlobStore,
@@ -50,8 +58,8 @@ export class DurableObjectUsers implements UserData {
     this.users = users;
   }
 
-  async words(userId: UserId): Promise<Word[]> {
-    return this.users.getByName(userId).words();
+  async words(userId: UserId, page: PageRequest<WordKey>): Promise<Paginated<Word, WordKey>> {
+    return this.users.getByName(userId).words(page);
   }
 
   async setWord(userId: UserId, lemmaId: LemmaId, status: WordStatus, now: Timestamp): Promise<void> {
@@ -78,8 +86,8 @@ export class DurableObjectUsers implements UserData {
     return this.users.getByName(userId).makeCloze(cloze, now);
   }
 
-  async clozes(userId: UserId, documentId: DocumentId): Promise<ClozeList> {
-    return this.users.getByName(userId).clozes(documentId);
+  async clozes(userId: UserId, documentId: DocumentId, page: PageRequest<ClozeKey>): Promise<Paginated<ClozeStart, ClozeKey>> {
+    return this.users.getByName(userId).clozes(documentId, page);
   }
 
   async deleteCloze(userId: UserId, cardId: CardId): Promise<boolean> {
@@ -104,7 +112,7 @@ export class DurableObjectUsers implements UserData {
 }
 
 const LexiconRow = z.object({
-  lemmaId: LemmaIdSchema,
+  lemmaId: schemas.LemmaId,
   version: z.string(),
   lemma: z.string(),
   upos: z.enum(UPOS),
@@ -192,41 +200,105 @@ export class D1Lexicon implements Lexicon {
   }
 }
 
-const SELECT_DOCUMENT = `SELECT entry.document_id AS id, entry.user_id AS "user", entry.title, entry.imported_at AS imported,
-    entry.visibility, entry.licence, entry.author, entry.source, document.lang, document.words, "user"."name" AS importerName,
+const COLUMNS = `entry.title, entry.imported_at AS imported, entry.visibility, entry.licence, entry.author, entry.source,
+    document.lang, document.words, "user"."name" AS importerName,
     (SELECT json_group_object(tag.kind, tag.value) FROM user_document_tag AS tag
-      WHERE tag.user_id = entry.user_id AND tag.document_id = entry.document_id) AS tags
-  FROM user_document AS entry
-  JOIN document ON document.id = entry.document_id
+      WHERE tag.user_id = entry.user_id AND tag.document_id = entry.document_id) AS tags`;
+const JOINS = `JOIN document ON document.id = entry.document_id
   JOIN "user" ON "user"."id" = entry.user_id`;
 
-/** The list's query: every public entry and the viewer's private ones, narrowed to those
- * with any of the values the filter gives for each kind of tag it names. Each kind looks
- * its values up in user_document_tag_value_idx. */
-export function listQuery(viewer: UserId | null, tags: TagFilter): Sql {
+const SELECT_DOCUMENT = `SELECT entry.document_id AS id, entry.user_id AS "user", ${COLUMNS}
+  FROM user_document AS entry
+  ${JOINS}`;
+
+/** Entries by one of their tags: its key columns are the tag row's, so the list's order is
+ * user_document_tag_value_idx's within the tag. */
+const SELECT_TAGGED = `SELECT tagged.document_id AS id, tagged.user_id AS "user", ${COLUMNS}
+  FROM user_document_tag AS tagged
+  JOIN user_document AS entry ON entry.user_id = tagged.user_id AND entry.document_id = tagged.document_id
+  ${JOINS}`;
+
+type KindValues = readonly [kind: string, values: readonly string[]];
+
+/** The list's query: a page of the public entries and the viewer's private ones (with
+ * mine, the viewer's alone) that the filter keeps, in the order of their key, (user,
+ * document), and one more entry if there is one. Each part walks an index in that order
+ * from the cursor, and SQLite merges them, so a page reads about a page of entries:
+ * - the public entries, by primary key, or with tags, one part for each value of the
+ *   first kind, by user_document_tag_value_idx, the other kinds looked up for each entry;
+ * - the viewer's own, by primary key, their tags looked up for each entry. */
+export function listQuery(viewer: UserId | null, { tags, lang, title, mine }: DocumentFilter, { after, limit }: PageRequest<DocumentKey>): Sql {
+  const kinds: readonly KindValues[] = Object.entries(tags).filter(([, values]) => values.length > 0);
+  const [first, ...others] = kinds;
   const narrowed = sql.join(
-    Object.entries(tags)
-      .filter(([, values]) => values.length > 0)
-      .map(
-        ([kind, values]) => sql` AND (entry.user_id, entry.document_id) IN (SELECT user_id, document_id FROM user_document_tag
-          WHERE kind = ${kind} AND value IN (${sql.join(values, ", ")}))`,
-      ),
+    [
+      ...(lang === undefined ? [] : [sql` AND document.lang = ${lang}`]),
+      ...(title === undefined ? [] : [sql` AND entry.title LIKE ${`%${title.replace(/[\\%_]/gu, "\\$&")}%`} ESCAPE '\\'`]),
+    ],
     "",
   );
-  const select = sql.raw(SELECT_DOCUMENT);
-  // A UNION rather than an OR, so each half searches its own index
-  return sql`${select} WHERE entry.visibility = 'public'${narrowed}
-    UNION ALL ${select} WHERE entry.user_id = ${viewer} AND entry.visibility = 'private'${narrowed}
-    ORDER BY imported DESC`;
+  const from = (alias: "entry" | "tagged") =>
+    after === undefined ? sql.empty : sql` AND (${sql.raw(alias)}.user_id, ${sql.raw(alias)}.document_id) > (${after[0]}, ${after[1]})`;
+  const own =
+    viewer === null
+      ? []
+      : [sql`${sql.raw(SELECT_DOCUMENT)} WHERE entry.user_id = ${viewer}${mine ? sql.empty : sql` AND entry.visibility = 'private'`}${from("entry")}${narrowed}${tagged(kinds)}`];
+  const shared = mine
+    ? []
+    : first === undefined
+      ? [sql`${sql.raw(SELECT_DOCUMENT)} WHERE entry.visibility = 'public'${from("entry")}${narrowed}`]
+      : first[1].map(
+          (value) =>
+            sql`${sql.raw(SELECT_TAGGED)} WHERE tagged.kind = ${first[0]} AND tagged.value = ${value} AND entry.visibility = 'public'${from("tagged")}${narrowed}${tagged(others)}`,
+        );
+  return sql`${sql.join([...shared, ...own], " UNION ALL ")} ORDER BY "user", id LIMIT ${limit + 1}`;
 }
+
+/** The entry has one of the values of each kind, looked up by user_document_tag's primary key. */
+function tagged(kinds: readonly KindValues[]): Sql {
+  return sql.join(
+    kinds.map(
+      ([kind, values]) => sql` AND EXISTS (SELECT 1 FROM user_document_tag AS has
+        WHERE has.user_id = entry.user_id AND has.document_id = entry.document_id AND has.kind = ${kind} AND has.value IN (${sql.join(values, ", ")}))`,
+    ),
+    "",
+  );
+}
+
+/** A page of the tags, and one more if there is one. */
+function tagsQuery({ after, limit }: PageRequest<TagKey>): Sql {
+  const from = after === undefined ? sql.empty : sql` WHERE (kind, position) > (${after[0]}, ${after[1]})`;
+  return sql`SELECT kind, value, description, position FROM tag${from} ORDER BY kind, position LIMIT ${limit + 1}`;
+}
+
+function knownQuery(tags: readonly Tag[]): Sql {
+  return sql`SELECT kind, value FROM tag WHERE (kind, value) IN (VALUES ${sql.join(
+    tags.map(({ kind, value }) => sql`(${kind}, ${value})`),
+    ", ",
+  )})`;
+}
+
+const TagRow = schemas.AvailableTag.extend({ position: z.number().int() });
+const KnownTag = schemas.AvailableTag.pick({ kind: true, value: true });
+
+const NO_FILTER: DocumentFilter = { tags: {}, lang: undefined, title: undefined, mine: false };
+const SOME_KEY = schemas.DocumentKey.parse(["x", "0".repeat(64)]);
+const SOMEONE = schemas.UserId.parse("x");
+const TWO_KINDS = { level: ["A1", "B1"], form: ["poem"] };
 
 /** D1Documents' queries, exported for the test that checks each one uses an index. */
 export const DOCUMENT_QUERIES = {
-  list: listQuery(null, {}).text,
+  list: listQuery(null, NO_FILTER, { after: undefined, limit: 24 }).text,
+  listAfter: listQuery(SOMEONE, NO_FILTER, { after: SOME_KEY, limit: 24 }).text,
   /** The list narrowed to one kind of tag, two of its values */
-  listTagged: listQuery(null, { level: ["A1", "B1"] }).text,
-  tags: "SELECT kind, value, description FROM tag ORDER BY kind, position",
-  importedBy: `${SELECT_DOCUMENT} WHERE entry.user_id = ?1 ORDER BY entry.imported_at DESC`,
+  listTagged: listQuery(null, { ...NO_FILTER, tags: { level: ["A1", "B1"] } }, { after: SOME_KEY, limit: 24 }).text,
+  listTwoKinds: listQuery(SOMEONE, { ...NO_FILTER, tags: TWO_KINDS }, { after: SOME_KEY, limit: 24 }).text,
+  listFiltered: listQuery(SOMEONE, { ...NO_FILTER, lang: "pl", title: "x" }, { after: SOME_KEY, limit: 24 }).text,
+  listMine: listQuery(SOMEONE, { ...NO_FILTER, mine: true }, { after: undefined, limit: 24 }).text,
+  listMineAfter: listQuery(SOMEONE, { ...NO_FILTER, mine: true, tags: TWO_KINDS }, { after: SOME_KEY, limit: 24 }).text,
+  tags: tagsQuery({ after: undefined, limit: 100 }).text,
+  tagsAfter: tagsQuery({ after: ["level", 0], limit: 100 }).text,
+  known: knownQuery([{ kind: "level", value: "A1" }]).text,
   visible: `${SELECT_DOCUMENT} WHERE entry.document_id = ?1 AND (entry.user_id = ?2 OR entry.visibility = 'public')
     ORDER BY entry.user_id IS ?2 DESC, entry.imported_at LIMIT 1`,
   has: "SELECT 1 FROM document WHERE id = ?1",
@@ -246,28 +318,38 @@ export class D1Documents implements DocumentStore {
     this.db = db;
   }
 
-  async list(viewer: UserId | null, tags: TagFilter): Promise<readonly StoredDocument[]> {
-    const { text, params } = listQuery(viewer, tags);
+  async list(viewer: UserId | null, filter: DocumentFilter, page: PageRequest<DocumentKey>): Promise<Paginated<StoredDocument, DocumentKey>> {
+    const rows = (await this.all(listQuery(viewer, filter, page))).map((row) => schemas.DocumentRow.parse(row));
+    return paginate(
+      rows.map((item) => ({ item, key: [item.user, item.id] as const })),
+      page.limit,
+    );
+  }
+
+  async tags(page: PageRequest<TagKey>): Promise<Paginated<AvailableTag, TagKey>> {
+    const rows = (await this.all(tagsQuery(page))).map((row) => TagRow.parse(row));
+    return paginate(
+      rows.map(({ position, ...item }) => ({ item, key: [item.kind, position] as const })),
+      page.limit,
+    );
+  }
+
+  async known(tags: readonly Tag[]): Promise<readonly Tag[]> {
+    if (tags.length === 0) return [];
+    return (await this.all(knownQuery(tags))).map((row) => KnownTag.parse(row));
+  }
+
+  private async all({ text, params }: Sql): Promise<readonly Record<string, unknown>[]> {
     const { results } = await this.db
       .prepare(text)
       .bind(...params)
       .all();
-    return results.map((row) => DocumentRow.parse(row));
-  }
-
-  async tags(): Promise<readonly AvailableTag[]> {
-    const { results } = await this.db.prepare(DOCUMENT_QUERIES.tags).all();
-    return results.map((row) => AvailableTagSchema.parse(row));
-  }
-
-  async importedBy(user: UserId): Promise<readonly StoredDocument[]> {
-    const { results } = await this.db.prepare(DOCUMENT_QUERIES.importedBy).bind(user).all();
-    return results.map((row) => DocumentRow.parse(row));
+    return results;
   }
 
   async visible(id: DocumentId, viewer: UserId | null): Promise<StoredDocument | null> {
     const row = await this.db.prepare(DOCUMENT_QUERIES.visible).bind(id, viewer).first();
-    return row ? DocumentRow.parse(row) : null;
+    return row ? schemas.DocumentRow.parse(row) : null;
   }
 
   async has(id: DocumentId): Promise<boolean> {

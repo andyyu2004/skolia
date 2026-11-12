@@ -7,16 +7,19 @@ import {
   formatTag,
   isShareable,
   timestamp,
+  type AvailableTag,
+  type DocumentFilter,
   type DocumentId,
-  type DocumentList,
+  type DocumentKey,
   type DocumentSummary,
   type Lang,
+  type Paginated,
   type QueuePlace,
-  type TagFilter,
-  type TagList,
+  type TagKey,
   type Tags,
   type User,
 } from "@skolia/shared/api";
+import type { PageRequest } from "@skolia/shared/page";
 import { PART_ENCODING, docId, partKey, statusKey, textKey, versionsKey } from "@skolia/shared/keys";
 import type { Status, Versions } from "@skolia/shared/schema";
 import * as schemas from "@skolia/shared/schemas";
@@ -29,23 +32,34 @@ const logger = log("documents");
 const NAME = /^[a-z0-9-]{1,64}$/;
 const JSON_TYPE = "application/json";
 
-/** The entries the viewer can see, narrowed to those with these tags. */
-export async function list(deps: Deps, viewer: User | null, tags: TagFilter): Promise<Ok<DocumentList>> {
-  const records = await deps.documents.list(viewer?.id ?? null, tags);
-  const versions = versionsOf(deps.blobs);
-  return ok({ documents: await Promise.all(records.map((r) => current(deps, r, versions, viewer))) });
+/** A page of the entries the viewer can see that the filter keeps. Listing only reads
+ * each entry's status; opening one (get) queues it again if it needs it. */
+export async function list(
+  deps: Deps,
+  viewer: User | null,
+  filter: DocumentFilter,
+  page: PageRequest<DocumentKey>,
+): Promise<Ok<Paginated<DocumentSummary, DocumentKey>> | Failed<401>> {
+  if (filter.mine && viewer === null) return fail(401, "sign in to see your own texts");
+  const { items, next } = await deps.documents.list(viewer?.id ?? null, filter, page);
+  return ok({ items: await Promise.all(items.map(async (r) => summarize(r, await readStatus(deps.blobs, r.id), viewer))), next });
 }
 
-/** Every tag that can be given. */
-export async function tags(deps: Deps): Promise<Ok<TagList>> {
-  return ok({ tags: [...(await deps.documents.tags())] });
+/** A page of the documents the user imported, public or private. */
+export async function mine(deps: Deps, user: User, page: PageRequest<DocumentKey>): Promise<Ok<Paginated<DocumentSummary, DocumentKey>> | Failed<401>> {
+  return list(deps, user, { tags: {}, lang: undefined, title: undefined, mine: true }, page);
+}
+
+/** A page of the tags that can be given. */
+export async function tags(deps: Deps, page: PageRequest<TagKey>): Promise<Ok<Paginated<AvailableTag, TagKey>>> {
+  return ok(await deps.documents.tags(page));
 }
 
 /** A 400 naming the first of the tags skolia doesn't have, or null if it has them all. */
 async function unknownTag(deps: Deps, tags: Tags): Promise<Failed<400> | null> {
   const given = Object.entries(tags).map(([kind, value]) => ({ kind, value }));
   if (given.length === 0) return null;
-  const known = new Set((await deps.documents.tags()).map(formatTag));
+  const known = new Set((await deps.documents.known(given)).map(formatTag));
   const unknown = given.map(formatTag).find((tag) => !known.has(tag));
   return unknown === undefined ? null : fail(400, `no tag ${unknown}`);
 }
@@ -85,13 +99,6 @@ export async function importText(
   }
   const queued = await requeue(deps, record, await readStatus(deps.blobs, id), deps.now(), known ? "reimported" : "imported");
   return { status: 202, body: summarize(record, queued, user) };
-}
-
-/** The documents the user imported, public or private. */
-export async function mine(deps: Deps, user: User): Promise<Ok<DocumentList>> {
-  const records = await deps.documents.importedBy(user.id);
-  const versions = versionsOf(deps.blobs);
-  return ok({ documents: await Promise.all(records.map((r) => current(deps, r, versions, user))) });
 }
 
 /** A user changes the title, licence, author, source, visibility or tags of their own entry. */

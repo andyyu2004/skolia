@@ -6,8 +6,15 @@ import type {
   CardCounts,
   CardGroup,
   CardId,
-  ClozeList,
+  ClozeKey,
+  ClozeStart,
+  DocumentFilter,
   DocumentId,
+  DocumentKey,
+  Paginated,
+  Tag,
+  TagKey,
+  WordKey,
   Timestamp,
   UserId,
   Lang,
@@ -23,11 +30,11 @@ import type {
   Settings,
   User,
   Visibility,
-  TagFilter,
   Tags,
   Word,
   WordStatus,
 } from "@skolia/shared/api";
+import type { PageRequest } from "@skolia/shared/page";
 import type { IngestJob } from "@skolia/shared/schema";
 
 /** A text, stored once however many users import it, and never deleted. Its state lives in
@@ -63,13 +70,13 @@ export interface StoredDocument extends DocumentEntry {
 }
 
 export interface DocumentStore {
-  /** Every public entry, and the viewer's private ones, newest first, with any of the
-   * values the filter gives for each kind of tag it names. */
-  list(viewer: UserId | null, tags: TagFilter): Promise<readonly StoredDocument[]>;
-  /** Every tag that can be given, by kind, then in each kind's order. */
-  tags(): Promise<readonly AvailableTag[]>;
-  /** This user's entries, public or private, newest first. */
-  importedBy(user: UserId): Promise<readonly StoredDocument[]>;
+  /** A page of the public entries and the viewer's private ones, by user then text, that the
+   * filter keeps (with mine, the viewer's alone). */
+  list(viewer: UserId | null, filter: DocumentFilter, page: PageRequest<DocumentKey>): Promise<Paginated<StoredDocument, DocumentKey>>;
+  /** A page of the tags that can be given, by kind, then in each kind's order. */
+  tags(page: PageRequest<TagKey>): Promise<Paginated<AvailableTag, TagKey>>;
+  /** Those of the tags that can be given. */
+  known(tags: readonly Tag[]): Promise<readonly Tag[]>;
   /** The entry the viewer sees for a text: their own, else its earliest public one. Null
    * for a text that's unknown or private to others. */
   visible(id: DocumentId, viewer: UserId | null): Promise<StoredDocument | null>;
@@ -121,7 +128,8 @@ export type ReviewOutcome = ({ kind: "reviewed" } & Reviewed) | { kind: "no-card
  * time by the API's clock (Deps.now), which the tests set. dayStart: when the user's
  * day started in their time zone; today's new cards count from it. */
 export interface UserData {
-  words(userId: UserId): Promise<Word[]>;
+  /** A page of the words the user has given a status, by lemma id. */
+  words(userId: UserId, page: PageRequest<WordKey>): Promise<Paginated<Word, WordKey>>;
   setWord(userId: UserId, lemmaId: LemmaId, status: WordStatus, now: Timestamp): Promise<void>;
   /** Clears the word's status and takes its cards, cloze cards too, out of reviews. Deletes
    * nothing: the cards and their reviews come back when the word is made active again. */
@@ -132,7 +140,8 @@ export interface UserData {
   review(userId: UserId, request: ReviewRequest, now: Timestamp): Promise<ReviewOutcome>;
   /** The cloze card the text's sentence and word already had, if any, made: false. */
   makeCloze(userId: UserId, cloze: NewCloze, now: Timestamp): Promise<{ cardId: CardId; made: boolean }>;
-  clozes(userId: UserId, documentId: DocumentId): Promise<ClozeList>;
+  /** A page of the text's cloze cards, by where their blanks start. */
+  clozes(userId: UserId, documentId: DocumentId, page: PageRequest<ClozeKey>): Promise<Paginated<ClozeStart, ClozeKey>>;
   /** False if the user has no such cloze card. */
   deleteCloze(userId: UserId, cardId: CardId): Promise<boolean>;
   settings(userId: UserId): Promise<Settings>;

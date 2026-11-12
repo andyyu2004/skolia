@@ -8,14 +8,14 @@ import { extname, join } from "node:path";
 import { brotliCompressSync, brotliDecompressSync } from "node:zlib";
 import type { Page, Route } from "@playwright/test";
 import { createApp } from "@skolia/api/app";
-import { blankOut, type Cloze, type DocumentId as DocumentIdType, type Lang, type LemmaId as LemmaIdType, type LexiconEntry, type ScheduledCard, type Settings, type User, type UserId as UserIdType } from "@skolia/shared/api";
+import { blankOut, matchesTags, type Cloze, type DocumentId as DocumentIdType, type Lang, type LemmaId as LemmaIdType, type LexiconEntry, type ScheduledCard, type Settings, type User, type UserId as UserIdType } from "@skolia/shared/api";
 import { LANGUAGES } from "@skolia/shared/lang";
 import { partKey, statusKey, textKey } from "@skolia/shared/keys";
 import type { Blob, Bundle, Status } from "@skolia/shared/schema";
 import { CardId, DocumentId, LemmaId, Timestamp, UserId } from "@skolia/shared/schemas";
 
 type Deps = Parameters<typeof createApp>[0];
-type StoredDocument = Awaited<ReturnType<Deps["documents"]["list"]>>[number];
+type StoredDocument = Awaited<ReturnType<Deps["documents"]["list"]>>["items"][number];
 type StoredBlob = NonNullable<Awaited<ReturnType<Deps["blobs"]["get"]>>>;
 
 const DIST = join(import.meta.dirname, "..", "dist");
@@ -136,7 +136,7 @@ function deps(signedIn: boolean): Deps {
       user: async () => (signedIn ? user : null),
     },
     users: {
-      words: async () => [],
+      words: async () => ({ items: [], next: null }),
       setWord: async () => {},
       clearWordStatus: async () => {},
       due: async (_userId, lang: Lang, _now, _dayStart, _limit, group) => ({
@@ -146,7 +146,7 @@ function deps(signedIn: boolean): Deps {
       counts: async () => [{ lang: "pl", words: { due: 2, new: 4 }, forms: { due: 0, new: 2 } }],
       review: async (_userId, request) => ({ kind: "reviewed", cardId: request.cardId, dueAt: Timestamp.parse("2026-11-10T10:00:00.000Z") }),
       makeCloze: async () => ({ cardId: CardId.parse("00000000-0000-4000-8000-000000000009"), made: true }),
-      clozes: async () => ({ clozes: [] }),
+      clozes: async () => ({ items: [], next: null }),
       deleteCloze: async () => true,
       settings: async () => settings,
       setSettings: async (_userId, next) => {
@@ -159,9 +159,19 @@ function deps(signedIn: boolean): Deps {
       entries: async (ids) => ({ entries: ids.flatMap((id) => entry(id) ?? []), featureSets: { pl: featureSets } }),
     },
     documents: {
-      list: async (viewer) => visible(viewer),
-      tags: async () => LEVELS,
-      importedBy: async (userId) => documents.filter((d) => d.user === userId),
+      // One page: there are only a few
+      list: async (viewer, { tags, lang, title, mine }) => ({
+        items: visible(viewer).filter(
+          (d) =>
+            (!mine || d.user === viewer) &&
+            (lang === undefined || d.lang === lang) &&
+            (title === undefined || d.title.toLowerCase().includes(title.toLowerCase())) &&
+            matchesTags(d.tags, tags),
+        ),
+        next: null,
+      }),
+      tags: async () => ({ items: LEVELS, next: null }),
+      known: async (wanted) => LEVELS.filter((l) => wanted.some((w) => w.kind === l.kind && w.value === l.value)),
       visible: async (id, viewer) => visible(viewer).find((d) => d.id === id) ?? null,
       has: async (id) => documents.some((d) => d.id === id),
       add: async () => {},

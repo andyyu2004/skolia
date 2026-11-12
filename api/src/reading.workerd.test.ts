@@ -62,10 +62,10 @@ test("the summary names the reading once there is one, and it's served by name",
   assert.equal((await analysis.$get({ param: { id, name: "s2-a9" } })).status, 404);
   assert.equal((await analysis.$get({ param: { id, name: "..%2Fstatus" } })).status, 404);
   const list = await body("documents", client(app).documents.$get({ query: {} }));
-  assert.deepEqual(list.documents.map((d) => d.state), ["ready"]);
+  assert.deepEqual(list.items.map((d) => d.state), ["ready"]);
 });
 
-test("an outdated document is queued once, and its old reading is kept meanwhile", async () => {
+test("an outdated document is queued once when it's opened, not listed, and its old reading is kept meanwhile", async () => {
   const app = setup();
   await importText(app, TEXT, { visibility: "public", licence: "cc0" });
   const id = await docId("pl", TEXT);
@@ -74,7 +74,10 @@ test("an outdated document is queued once, and its old reading is kept meanwhile
   await local.takeQueued();
 
   const list = await body("documents", client(app).documents.$get({ query: {} }));
-  assert.deepEqual(list.documents.map((d) => [d.state, d.reading?.analysis]), [["queued", "s2-a1"]]);
+  assert.deepEqual(list.items.map((d) => [d.state, d.reading?.analysis]), [["ready", "s2-a1"]]);
+  assert.deepEqual(await local.takeQueued(), []);
+  const opened = await summaryOf(app, id);
+  assert.deepEqual([opened.state, opened.reading?.analysis], ["queued", "s2-a1"]);
   assert.deepEqual(await local.takeQueued(), [{ doc: id, lang: "pl" }]);
   assert.equal((await summaryOf(app, id)).state, "queued");
   assert.deepEqual(await local.takeQueued(), []);
@@ -114,4 +117,17 @@ test("a document queued or analysing for too long is queued again", async () => 
   await putJson(statusKey(id), { state: "analysing", updated: "2026-11-03T23:00:00Z" });
   assert.equal((await summaryOf(app, id)).state, "queued");
   assert.equal((await local.takeQueued()).length, 1);
+});
+
+test("listing a stuck document doesn't queue it again; opening it does", async () => {
+  const app = setup();
+  await importText(app);
+  const id = await docId("pl", TEXT);
+  await putJson(statusKey(id), { state: "analysing", updated: "2026-11-03T23:00:00Z" });
+  await local.takeQueued();
+  const list = await body("documents", client(app, importer).documents.$get({ query: {} }));
+  assert.deepEqual(list.items.map((d) => [d.id, d.state]), [[id, "analysing"]]);
+  assert.deepEqual(await local.takeQueued(), []);
+  assert.equal((await summaryOf(app, id)).state, "queued");
+  assert.deepEqual(await local.takeQueued(), [{ doc: id, lang: "pl" }]);
 });

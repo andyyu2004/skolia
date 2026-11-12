@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { lemmaParam, type CardGroup, type Due, type LemmaId, type NewClozeInput, type Rating, type WordStatus } from "@skolia/shared/api";
-import { ALICE, NOW, client, loadLexicon, local, raw, setup, useLocal, type App } from "./testing/app.ts";
+import { CLOZE_PAGE, lemmaParam, type CardGroup, type ClozeKey, type Due, type LemmaId, type NewClozeInput, type Rating, type WordStatus } from "@skolia/shared/api";
+import type { Cursor } from "@skolia/shared/page";
+import { ALICE, NOW, client, loadLexicon, local, raw, refusesBadPages, setup, useLocal, walk, type App } from "./testing/app.ts";
 import { body, expectStatus } from "./testing/responses.ts";
 
 useLocal();
@@ -72,8 +73,8 @@ test("a cloze card keeps its sentence and blank, is due with its lemma's entry, 
   assert.equal(card.entry?.lemma, "praca");
   const { lemmaId: _, ...stored } = PRACY;
   assert.deepEqual(card.cloze, stored);
-  assert.deepEqual(await listed(app, headers), { clozes: [{ cardId, start: 47 }] });
-  assert.deepEqual(await listed(app, headers, "b".repeat(64)), { clozes: [] });
+  assert.deepEqual(await listed(app, headers), { items: [{ cardId, start: 47 }], next: null });
+  assert.deepEqual(await listed(app, headers, "b".repeat(64)), { items: [], next: null });
   assert.equal((await review(app, headers, cardId, 3)).status, 200);
 });
 
@@ -152,7 +153,7 @@ test("deleting a cloze card takes it and its reviews away; a word's cards and ot
   assert.equal((await remove(bob, cardId)).status, 404);
   assert.equal((await remove(headers, cardId)).status, 204);
   assert.equal((await remove(headers, cardId)).status, 404);
-  assert.deepEqual(await listed(app, headers), { clozes: [] });
+  assert.deepEqual(await listed(app, headers), { items: [], next: null });
   assert.equal((await review(app, headers, cardId, 3)).status, 404);
   // Made again, it's a new card
   const again = await body("made again", make(app, headers, PRACY), 201);
@@ -180,4 +181,20 @@ test("cloze cards need a session, and a blank that's a word inside its sentence"
   assert.equal((await client(app, headers).me.clozes.$get({ query: { documentId: "abc" } })).status, 400);
   assert.equal((await client(app, headers).me.clozes[":cardId"].$delete({ param: { cardId: "nope" } })).status, 400);
   assert.equal((await due(app, headers)).cards.length, 0);
+});
+
+test("a text's cloze cards come a page at a time, by where their blanks start", async () => {
+  const app = setup();
+  const headers = await signedIn();
+  const made = await Promise.all(
+    [3, 1, 4, 0, 2].map(async (n) => {
+      const json: NewClozeInput = { ...PRACY, sentence: "Widzę psa.", sentenceStart: n * 100, blankStart: n * 100 + 6, blankEnd: n * 100 + 9 };
+      return { cardId: (await body("made", make(app, headers, json), 201)).cardId, start: json.blankStart };
+    }),
+  );
+  await body("another text's", make(app, headers, { ...PRACY, documentId: "b".repeat(64) }), 201);
+  const clozes = client(app, headers).me.clozes;
+  const all = await walk(2, (after?: Cursor<ClozeKey>) => body("clozes", clozes.$get({ query: { documentId: DOC, after, limit: "2" } })));
+  assert.deepEqual(all, [...made].sort((a, b) => a.start - b.start));
+  await refusesBadPages(CLOZE_PAGE.max, (query) => clozes.$get({ query: { documentId: DOC, ...query } }));
 });

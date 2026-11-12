@@ -6,8 +6,11 @@ import {
   type CardCounts,
   type CardGroup,
   type CardId,
-  type ClozeList,
+  type ClozeKey,
   type ClozeMade,
+  type ClozeStart,
+  type Paginated,
+  type WordKey,
   type DocumentId,
   type Due,
   type FeatureSets,
@@ -25,6 +28,7 @@ import {
   type Word,
   type WordStatus,
 } from "@skolia/shared/api";
+import type { PageRequest } from "@skolia/shared/page";
 import type { Deps, Lexicon } from "../ports.ts";
 import { NO_CONTENT, fail, ok, type Failed, type Json, type NoContent, type Ok } from "./result.ts";
 
@@ -33,8 +37,8 @@ const MAX_DUE = 200;
 /** How far ahead of the server's clock a review's time may be. */
 export const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
-export async function words(deps: Deps, user: User): Promise<Ok<Word[]>> {
-  return ok(await deps.users.words(user.id));
+export async function words(deps: Deps, user: User, page: PageRequest<WordKey>): Promise<Ok<Paginated<Word, WordKey>>> {
+  return ok(await deps.users.words(user.id, page));
 }
 
 export async function setWord(deps: Deps, user: User, lemmaId: LemmaId, status: WordStatus): Promise<NoContent> {
@@ -80,8 +84,8 @@ export async function makeCloze(deps: Deps, user: User, cloze: NewCloze): Promis
   return made ? { status: 201, body: { cardId } } : ok({ cardId });
 }
 
-export async function clozes(deps: Deps, user: User, documentId: DocumentId): Promise<Ok<ClozeList>> {
-  return ok(await deps.users.clozes(user.id, documentId));
+export async function clozes(deps: Deps, user: User, documentId: DocumentId, page: PageRequest<ClozeKey>): Promise<Ok<Paginated<ClozeStart, ClozeKey>>> {
+  return ok(await deps.users.clozes(user.id, documentId, page));
 }
 
 export async function deleteCloze(deps: Deps, user: User, cardId: CardId): Promise<NoContent | Failed<404>> {
