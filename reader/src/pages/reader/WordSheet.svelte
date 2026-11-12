@@ -15,8 +15,8 @@
   } from "@skolia/shared/lexicon";
   import type { Recording } from "@skolia/shared/schema";
   import { LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
-  import { clearStatus, setStatus, words as known } from "../../lib/words.svelte.ts";
-  import { addCloze, clozes, removeCloze } from "../../lib/clozes.svelte.ts";
+  import { createSetStatus, createWords } from "../../lib/words.ts";
+  import { createAddCloze, createClozes, createRemoveCloze } from "../../lib/clozes.ts";
   import { MAX_CLOZE_SENTENCE, MAX_CLOZE_WHY, blankOut } from "@skolia/shared/api";
   import type { ReaderMode } from "../../lib/mode.ts";
   import { paradigmTables } from "@skolia/shared/paradigm";
@@ -203,6 +203,12 @@
     return w.lemmaId !== null && w.partOfWord === null && !UNLEARNABLE.has(w.ref.token.upos);
   }
 
+  const known = createWords();
+  const clozes = createClozes(() => documentId);
+  const setStatus = createSetStatus();
+  const addCloze = createAddCloze();
+  const removeCloze = createRemoveCloze();
+
   /** The last failure to add a word, by lemma id. */
   let statusError = $state<{ lemmaId: LemmaId; message: string } | null>(null);
 
@@ -218,7 +224,7 @@
    * so does its form in this sentence; Known while reviewing takes them out. In reading
    * mode the word's + adds them. */
   $effect(() => {
-    if (!known.byId || mode !== "learning") return;
+    if (!known.data || mode !== "learning") return;
     const fresh = words.flatMap((w): Addition[] => {
       const { lemmaId, cloze } = additionOf(w);
       const addition = {
@@ -241,7 +247,7 @@
   /** Whether it was added. */
   async function learn(lemmaId: LemmaId): Promise<boolean> {
     try {
-      await setStatus(lemmaId, "active");
+      await setStatus.mutateAsync({ lemmaId, status: "active" });
       return true;
     } catch (e: unknown) {
       statusError = { lemmaId, message: `Couldn't add it to your cards: ${e instanceof Error ? e.message : String(e)}` };
@@ -280,9 +286,9 @@
   }
 
   function additionOf(w: (typeof words)[number]): Addition {
-    if (!known.byId || !learnable(w)) return { lemmaId: null, cloze: null };
-    const status = known.byId[w.lemmaId]?.status;
-    const cards = clozes.documentId === documentId ? clozes.byStart : null;
+    if (!known.data || !learnable(w)) return { lemmaId: null, cloze: null };
+    const status = known.data[w.lemmaId]?.status;
+    const cards = clozes.data ?? null;
     const request = status === "known" || status === "ignored" || cards === null ? null : clozeOf(w);
     return {
       lemmaId: status === undefined ? w.lemmaId : null,
@@ -295,13 +301,13 @@
   async function removeFromCards(w: (typeof words)[number]): Promise<void> {
     if (!learnable(w)) return;
     const { start } = w.ref.token;
-    const cardId = clozes.documentId === documentId ? clozes.byStart?.get(start) : undefined;
+    const cardId = clozes.data?.get(start);
     adding = start;
     statusError = null;
     clozeError = null;
     try {
-      if (cardId) await removeCloze(documentId, start, cardId);
-      await clearStatus(w.lemmaId);
+      if (cardId) await removeCloze.mutateAsync({ documentId, start, cardId });
+      await setStatus.mutateAsync({ lemmaId: w.lemmaId, status: null });
     } catch (e: unknown) {
       statusError = { lemmaId: w.lemmaId, message: `Couldn't take it out of your cards: ${e instanceof Error ? e.message : String(e)}` };
     }
@@ -314,7 +320,7 @@
   async function cloze(request: ClozeRequest): Promise<void> {
     const start = request.blankStart;
     try {
-      await addCloze(request);
+      await addCloze.mutateAsync(request);
     } catch (e: unknown) {
       clozeError = { start, message: `Couldn't make the card: ${e instanceof Error ? e.message : String(e)}` };
     }
@@ -442,7 +448,7 @@
             <span class="lemma">(<span {lang}>{word.entry?.lemma ?? token.lemma}</span>)</span>
           {/if}
         </h2>
-        {#if known.byId && learnable(word)}
+        {#if known.data && learnable(word)}
           {@const addition = additionOf(word)}
           {@const lemma = word.entry?.lemma ?? token.lemma ?? token.text}
           {#if addition.lemmaId || addition.cloze}
@@ -458,7 +464,7 @@
               onclick={() => void addFromButton(token.start, addition)}
               ><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10" /></svg></button
             >
-          {:else if known.byId[word.lemmaId]?.status === "active"}
+          {:else if known.data[word.lemmaId]?.status === "active"}
             {@const label = clozeOf(word) ? `${lemma} is in your cards, with this sentence` : `${lemma} is in your cards`}
             <button
               type="button"

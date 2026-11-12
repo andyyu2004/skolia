@@ -108,19 +108,13 @@ export async function listDocuments({ lang, title, mine, tags }: DocumentQuery, 
   return response.json();
 }
 
-let available: Promise<readonly AvailableTag[]> | null = null;
-
-/** The tags that can be given, asked for once. */
+/** The tags that can be given. */
 export function listTags(): Promise<readonly AvailableTag[]> {
-  available ??= allPages(async (after?: Cursor<TagKey>) => {
+  return allPages(async (after?: Cursor<TagKey>) => {
     const response = await api.tags.$get({ query: { after, limit: String(TAG_PAGE.max) } });
     if (!response.ok) throw await failure(response);
     return response.json();
-  }).catch((error: unknown) => {
-    available = null;
-    throw error;
   });
-  return available;
 }
 
 export async function getDocument(id: string): Promise<DocumentSummary> {
