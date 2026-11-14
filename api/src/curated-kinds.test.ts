@@ -92,7 +92,6 @@ annotations:
     data:
       text: " Anna has long hair. "
     licence: cc0
-    author: ""
   kot:
     - kind: text
       data:
@@ -160,6 +159,10 @@ test("bad annotations or markup are refused offline, naming the file and what's 
   refused(
     inline("[a]{x}", annotation("x", "kind: text\ndata:\n  text: a\nlicence: all-rights-reserved")),
     /pl\/a\.yaml: annotations\.x\.0\.licence: an annotation needs a licence that allows sharing it/u,
+  );
+  refused(
+    inline("[a]{x}", annotation("x", 'kind: text\ndata:\n  text: a\nlicence: cc0\nauthor: ""')),
+    /pl\/a\.yaml: annotations\.x\.0\.author: author must be non-empty/u,
   );
   refused(
     inline("[a]{x}", annotation("x", "kind: text\ndata:\n  text: a\nlicence: cc0\nstart: 0")),

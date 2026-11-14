@@ -73,7 +73,8 @@ test("an entry's user adds annotations, which whoever sees the entry sees in ord
       addedAt: "2026-11-04T00:00:00.000Z",
     },
   );
-  await body("add", annotate(app, importer, id, audio(0, 4, { author: "" })), 201);
+  const { author: _, ...anonymous } = audio(0, 4);
+  await body("add", annotate(app, importer, id, anonymous), 201);
   const alice = await local.signIn((await local.signUp(ALICE)).id);
   for (const headers of [importer, alice, undefined]) assert.deepEqual(await starts(app, headers, id), [0, 5]);
   const { items } = await body("annotations", annotations(app, undefined, id));
@@ -179,6 +180,7 @@ test("an annotation's data must be its kind's, its range in the text and its lic
     `the annotation ends at ${text.length + 1}, after the text's end at ${text.length}`,
   );
   await refused("bad source", audio(0, 4, { source: "ftp://example.org" }), "source must be an http(s) URL");
+  await refused("blank author", audio(0, 4, { author: " " }), "author must be non-empty");
   for (const licence of ["all-rights-reserved", "unknown", "mit"]) {
     const response = await raw(app, "POST", `/api/documents/${id}/annotations`, importer, { ...audio(0, 4), licence });
     assert.deepEqual(

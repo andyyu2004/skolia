@@ -294,7 +294,7 @@ export const Annotation = z.intersection(
 /** Whose an annotation is, and the licence it's under. */
 export const AnnotationCredit = z.object({
   licence: z.enum(SHAREABLE_LICENCES, "an annotation needs a licence that allows sharing it"),
-  author: z.string().trim().max(MAX_AUTHOR_LENGTH).optional(),
+  author: z.string().trim().min(1, "author must be non-empty").max(MAX_AUTHOR_LENGTH).optional(),
   source: Source.optional(),
 });
 
@@ -303,7 +303,7 @@ export const AnnotationCredit = z.object({
 export const NewAnnotation = z
   .intersection(z.object({ start: Index, end: Index, ...AnnotationCredit.shape }), AnnotationContent)
   .refine((a) => a.start < a.end, { message: "an annotation must end after it starts", path: ["end"] })
-  .transform((a) => ({ ...a, author: a.author || null, source: a.source ?? null }));
+  .transform((a) => ({ ...a, author: a.author ?? null, source: a.source ?? null }));
 
 export const AnnotationKey = z.tuple([Index, AnnotationId]).readonly();
 const Offset = z.coerce.number().int().min(0).max(MAX_TEXT_LENGTH);
