@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { DocumentId } from "@skolia/shared/schemas";
 import { readLocal, snippet, writeLocal } from "./position.ts";
 
 function memoryStorage(): Storage {
@@ -16,7 +17,7 @@ function memoryStorage(): Storage {
   };
 }
 
-const ID = "d".repeat(64);
+const ID = DocumentId.parse("d".repeat(64));
 
 test("a position written to the browser is read back, per text, as w= writes it", () => {
   const storage = memoryStorage();
@@ -24,7 +25,7 @@ test("a position written to the browser is read back, per text, as w= writes it"
   writeLocal(storage, ID, [12, 0]);
   assert.equal(storage.getItem(`skolia:position:${ID}`), "12.0");
   assert.deepEqual(readLocal(storage, ID), [12, 0]);
-  assert.equal(readLocal(storage, "e".repeat(64)), null);
+  assert.equal(readLocal(storage, DocumentId.parse("e".repeat(64))), null);
 });
 
 test("what isn't a word reads as none, and storage that throws or is missing is no storage", () => {

@@ -5,6 +5,7 @@ import * as schemas from "@skolia/shared/schemas";
 import { startLocal, type Local } from "./testing/harness.ts";
 import { MIGRATIONS } from "./user/migrations/index.ts";
 import { checksum } from "./user/migrator.ts";
+import { readingListQuery } from "./user/queries.ts";
 
 let local: Local;
 
@@ -95,12 +96,13 @@ test("the tables are STRICT, the user's are WITHOUT ROWID, and timestamps must b
   const storage = await storageOf("heidi");
   assert.deepEqual(
     await storage.exec(
-      "select name, strict, wr from pragma_table_list where name in ('word', 'card', 'cloze', 'review', 'settings', 'migration_log') order by name",
+      "select name, strict, wr from pragma_table_list where name in ('word', 'card', 'cloze', 'review', 'settings', 'migration_log', 'reading_list') order by name",
     ),
     [
       { name: "card", strict: 1, wr: 1 },
       { name: "cloze", strict: 1, wr: 1 },
       { name: "migration_log", strict: 1, wr: 0 },
+      { name: "reading_list", strict: 1, wr: 1 },
       { name: "review", strict: 1, wr: 1 },
       { name: "settings", strict: 1, wr: 0 },
       { name: "word", strict: 1, wr: 1 },
@@ -113,6 +115,20 @@ test("the tables are STRICT, the user's are WITHOUT ROWID, and timestamps must b
   }
   await assert.rejects(storage.exec("insert into word values ('pl:kot:NOUN', x'00', '2026-11-07T00:00:00.000Z')"), /cannot store BLOB/);
   assert.equal((await heidi.words(FIRST_PAGE)).items.length, 1);
+  await assert.rejects(
+    storage.exec("insert into reading_list values (?, 'pl', 'to-read', '2026-11-07T00:00:00Z', '2026-11-07T00:00:00.000Z')", "0".repeat(64)),
+    /CHECK constraint failed/,
+  );
+});
+
+test("a page of the reading list seeks to its key in an index, with or without a language, and sorts nothing", async () => {
+  await local.env.USER.getByName("ivan").words(FIRST_PAGE);
+  const storage = await storageOf("ivan");
+  for (const [inLang, after] of [[false, false], [false, true], [true, false], [true, true]] as const) {
+    const plan = (await storage.exec<{ detail: string }>(`EXPLAIN QUERY PLAN ${readingListQuery(inLang, after)}`, ...(inLang ? ["pl"] : []), "to-read", ...(after ? ["x", "y"] : []), 3)).map((row) => row.detail);
+    const index = inLang ? "reading_list_lang" : "reading_list_status";
+    assert.ok(plan.length === 1 && plan[0]!.startsWith(`SEARCH reading_list USING INDEX ${index} `), `${inLang} ${after}: ${plan.join("; ")}`);
+  }
 });
 
 test("an active word's cards are stored with their ts-fsrs state, which gives their due time", async () => {

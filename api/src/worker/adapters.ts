@@ -25,6 +25,9 @@ import {
   type Lookup,
   type Timestamp,
   type UserId,
+  type ReadingEntry,
+  type ReadingKey,
+  type ReadingStatus,
   type ReviewRequest, type Settings, type AvailableTag, type Tags, type Word, type WordStatus } from "@skolia/shared/api";
 import { paginate, type PageRequest } from "@skolia/shared/page";
 import type { BundleParadigm, IngestJob, Pronunciation, Relation, Sense } from "@skolia/shared/schema";
@@ -44,6 +47,7 @@ import type {
   StoredBlob,
   StoredDocument,
   StoredPosition,
+  StoredReading,
   UserData,
 } from "../ports.ts";
 import { log } from "../log.ts";
@@ -108,6 +112,22 @@ export class DurableObjectUsers implements UserData {
 
   async setPosition(userId: UserId, documentId: DocumentId, position: StoredPosition): Promise<void> {
     await this.users.getByName(userId).setPosition(documentId, position);
+  }
+
+  async reading(userId: UserId, documentId: DocumentId): Promise<ReadingEntry | null> {
+    return this.users.getByName(userId).reading(documentId);
+  }
+
+  async setReading(userId: UserId, documentId: DocumentId, lang: Lang, status: ReadingStatus, now: Timestamp): Promise<ReadingEntry> {
+    return this.users.getByName(userId).setReading(documentId, lang, status, now);
+  }
+
+  async removeReading(userId: UserId, documentId: DocumentId): Promise<void> {
+    await this.users.getByName(userId).removeReading(documentId);
+  }
+
+  async readingList(userId: UserId, status: ReadingStatus, lang: Lang | undefined, page: PageRequest<ReadingKey>): Promise<Paginated<StoredReading, ReadingKey>> {
+    return this.users.getByName(userId).readingList(status, lang, page);
   }
 }
 
@@ -350,6 +370,19 @@ export class D1Documents implements DocumentStore {
   async visible(id: DocumentId, viewer: UserId | null): Promise<StoredDocument | null> {
     const row = await this.db.prepare(DOCUMENT_QUERIES.visible).bind(id, viewer).first();
     return row ? schemas.DocumentRow.parse(row) : null;
+  }
+
+  async visibleAll(ids: readonly DocumentId[], viewer: UserId): Promise<ReadonlyMap<DocumentId, StoredDocument>> {
+    if (ids.length === 0) return new Map();
+    const statement = this.db.prepare(DOCUMENT_QUERIES.visible);
+    const found = await this.db.batch(ids.map((id) => statement.bind(id, viewer)));
+    return new Map(
+      found.flatMap(({ results: [row] }) => {
+        if (row === undefined) return [];
+        const document = schemas.DocumentRow.parse(row);
+        return [[document.id, document] as const];
+      }),
+    );
   }
 
   async has(id: DocumentId): Promise<boolean> {

@@ -15,6 +15,7 @@ import {
   type ClozeKey,
   type ClozeMade,
   type ClozeStart,
+  type DocumentId,
   type DocumentKey,
   type TagKey,
   type WordKey,
@@ -28,8 +29,12 @@ import {
   type LemmaId,
   type NewClozeInput,
   type Rating,
+  type ListedReading,
+  type ReadingEntry,
+  type ReadingKey,
   type ReadingPosition,
   type ReadingNames,
+  type ReadingStatus,
   type Reviewed,
   type Settings,
   type User,
@@ -117,14 +122,14 @@ export function listTags(): Promise<readonly AvailableTag[]> {
   });
 }
 
-export async function getDocument(id: string): Promise<DocumentSummary> {
+export async function getDocument(id: DocumentId): Promise<DocumentSummary> {
   const response = await api.documents[":id"].$get({ param: { id } });
   if (!response.ok) throw await failure(response);
   return response.json();
 }
 
 /** The text as uploaded, to show before its analysis is ready. */
-export async function getText(id: string): Promise<string> {
+export async function getText(id: DocumentId): Promise<string> {
   const response = await api.documents[":id"].text.$get({ param: { id } });
   if (!response.ok) throw await failure(response);
   return response.text();
@@ -136,13 +141,13 @@ export async function importDocument(body: ImportRequest): Promise<DocumentSumma
   return response.json();
 }
 
-export async function updateDocument(id: string, update: DocumentUpdate): Promise<DocumentSummary> {
+export async function updateDocument(id: DocumentId, update: DocumentUpdate): Promise<DocumentSummary> {
   const response = await api.documents[":id"].$patch({ param: { id }, json: update });
   if (!response.ok) throw await failure(response);
   return response.json();
 }
 
-export async function deleteDocument(id: string): Promise<void> {
+export async function deleteDocument(id: DocumentId): Promise<void> {
   const response = await api.documents[":id"].$delete({ param: { id } });
   if (!response.ok) throw await failure(response);
 }
@@ -150,7 +155,7 @@ export async function deleteDocument(id: string): Promise<void> {
 /** The reading by name, or "unsupported" when its schema is newer than this reader
  * knows (an API deployed ahead of the reader) or its language isn't one it has. Older
  * schemas are read: documents keep theirs until ingest redoes them. */
-export async function loadReading(id: string, names: ReadingNames): Promise<Reading | "unsupported"> {
+export async function loadReading(id: DocumentId, names: ReadingNames): Promise<Reading | "unsupported"> {
   const doc = api.documents[":id"];
   const [text, analysis, bundle] = await Promise.all([
     doc.text.$get({ param: { id } }),
@@ -224,7 +229,7 @@ export async function makeCloze(json: NewClozeInput): Promise<ClozeMade> {
 }
 
 /** The user's cloze cards from a text, or null when signed out. */
-export function listClozes(documentId: string): Promise<readonly ClozeStart[] | null> {
+export function listClozes(documentId: DocumentId): Promise<readonly ClozeStart[] | null> {
   return listOwn(async (after?: Cursor<ClozeKey>) => {
     const response = await api.me.clozes.$get({ query: { documentId, after, limit: String(CLOZE_PAGE.max) } });
     if (response.status === 401) throw new SignedOut();
@@ -250,15 +255,41 @@ export async function saveSettings(settings: Settings): Promise<void> {
 }
 
 /** Where the user was in the text, null if nowhere yet, or undefined when signed out. */
-export async function getPosition(id: string): Promise<ReadingPosition | null | undefined> {
+export async function getPosition(id: DocumentId): Promise<ReadingPosition | null | undefined> {
   const response = await api.me.positions[":id"].$get({ param: { id } });
   if (response.status === 401) return undefined;
   if (!response.ok) throw await failure(response);
   return (await response.json()).position;
 }
 
+/** The text's entry on the reading list, null if it isn't on it, or undefined when signed out. */
+export async function getReadingEntry(id: DocumentId): Promise<ReadingEntry | null | undefined> {
+  const response = await api.me["reading-list"][":id"].$get({ param: { id } });
+  if (response.status === 401) return undefined;
+  if (!response.ok) throw await failure(response);
+  return (await response.json()).entry;
+}
+
+export async function setReadingStatus(id: DocumentId, status: ReadingStatus): Promise<ReadingEntry> {
+  const response = await api.me["reading-list"][":id"].$put({ param: { id }, json: { status } });
+  if (!response.ok) throw await failure(response);
+  return (await response.json()).entry;
+}
+
+export async function removeFromReadingList(id: DocumentId): Promise<void> {
+  const response = await api.me["reading-list"][":id"].$delete({ param: { id } });
+  if (!response.ok) throw await failure(response);
+}
+
+/** A page of the texts on the reading list with the status, in the language if one is given. */
+export async function listReading(status: ReadingStatus, lang: Lang | undefined, after?: Cursor<ReadingKey>): Promise<Paginated<ListedReading, ReadingKey>> {
+  const response = await api.me["reading-list"].$get({ query: { status, after, ...(lang ? { lang } : {}) } });
+  if (!response.ok) throw await failure(response);
+  return response.json();
+}
+
 /** keepalive: the request outlives the page, for a save as it's hidden or closed. */
-export async function putPosition(id: string, position: ReadingPosition, keepalive = false): Promise<void> {
+export async function putPosition(id: DocumentId, position: ReadingPosition, keepalive = false): Promise<void> {
   const response = await api.me.positions[":id"].$put({ param: { id }, json: position }, { init: { keepalive } });
   if (!response.ok) throw await failure(response);
 }

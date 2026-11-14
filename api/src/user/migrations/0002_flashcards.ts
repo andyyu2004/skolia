@@ -1,6 +1,5 @@
+import { iso, isoOrNull } from "@skolia/util/checks";
 import { up as knownLemma } from "./0001_known_lemma.ts";
-
-const iso = (column: string) => `CHECK (${column} IS strftime('%Y-%m-%dT%H:%M:%fZ', ${column}))`;
 
 export const up = `DROP TABLE known_lemma;
 CREATE TABLE word (
@@ -20,7 +19,7 @@ CREATE TABLE card (
   schedule_status TEXT GENERATED ALWAYS AS (fsrs ->> '$.scheduleStatus') STORED NOT NULL
     CHECK (schedule_status IN ('new', 'learning', 'review')),
   scheduled_days REAL GENERATED ALWAYS AS (fsrs ->> '$.scheduledDays') STORED NOT NULL,
-  first_reviewed TEXT CHECK (first_reviewed IS NULL OR first_reviewed IS strftime('%Y-%m-%dT%H:%M:%fZ', first_reviewed)),
+  first_reviewed TEXT ${isoOrNull("first_reviewed")},
   UNIQUE (lemma_id, kind)
 ) STRICT, WITHOUT ROWID;
 CREATE INDEX card_due ON card (lang, due_at) WHERE active = 1 AND schedule_status != 'new';

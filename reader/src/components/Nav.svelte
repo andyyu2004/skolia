@@ -10,7 +10,7 @@
     user,
     onerror,
   }: {
-    page: "explore" | "upload" | "review" | "settings" | "reader";
+    page: "explore" | "list" | "upload" | "review" | "settings" | "reader";
     user: User | null | undefined;
     onerror: (message: string) => void;
   } = $props();
@@ -38,6 +38,7 @@
   <nav>
     <a href="#/" aria-current={page === "explore" ? "page" : undefined}>Explore</a>
     {#if user}
+      <a href="#/list" aria-current={page === "list" ? "page" : undefined}>Reading list</a>
       <a href="#/upload" aria-current={page === "upload" ? "page" : undefined}>Upload</a>
       <a href="#/review" aria-current={page === "review" ? "page" : undefined}>Review</a>
     {/if}
@@ -70,7 +71,7 @@
                 run(async () => {
                   menu?.hidePopover();
                   await signOut();
-                  if (page === "upload" || page === "review" || page === "settings") location.hash = "#/";
+                  if (page === "list" || page === "upload" || page === "review" || page === "settings") location.hash = "#/";
                   await forgetUser(client);
                 })}>Sign out</button
             >
@@ -118,7 +119,22 @@
     padding: 0 0.6rem;
     color: var(--muted);
     text-decoration: none;
+    white-space: nowrap;
     border-bottom: 2px solid transparent;
+  }
+
+  @media (max-width: 480px) {
+    header {
+      gap: 0.5rem;
+    }
+
+    nav {
+      gap: 0;
+    }
+
+    nav a {
+      padding: 0 0.45rem;
+    }
   }
 
   nav a:hover {

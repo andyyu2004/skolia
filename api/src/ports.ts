@@ -23,7 +23,10 @@ import type {
   Licence,
   NewCloze,
   NewLeft,
+  ReadingEntry,
+  ReadingKey,
   ReadingPosition,
+  ReadingStatus,
   Reviewed,
   ReviewRequest,
   ScheduledCard,
@@ -80,6 +83,8 @@ export interface DocumentStore {
   /** The entry the viewer sees for a text: their own, else its earliest public one. Null
    * for a text that's unknown or private to others. */
   visible(id: DocumentId, viewer: UserId | null): Promise<StoredDocument | null>;
+  /** visible's entry for each of the texts that has one. */
+  visibleAll(ids: readonly DocumentId[], viewer: UserId): Promise<ReadonlyMap<DocumentId, StoredDocument>>;
   /** Whether the text is stored, whoever imported it. */
   has(id: DocumentId): Promise<boolean>;
   /** Insert the entry, and the content unless it's already there. An existing entry is kept. */
@@ -149,9 +154,19 @@ export interface UserData {
   position(userId: UserId, documentId: DocumentId): Promise<StoredPosition | null>;
   /** Keeps the stored position if it's as new as this one or newer. */
   setPosition(userId: UserId, documentId: DocumentId, position: StoredPosition): Promise<void>;
+  /** The text's entry on the reading list, null if it isn't on it. */
+  reading(userId: UserId, documentId: DocumentId): Promise<ReadingEntry | null>;
+  /** Puts the text on the list with the status, or gives it the status. updatedAt changes
+   * only with the status. lang: the text's. */
+  setReading(userId: UserId, documentId: DocumentId, lang: Lang, status: ReadingStatus, now: Timestamp): Promise<ReadingEntry>;
+  removeReading(userId: UserId, documentId: DocumentId): Promise<void>;
+  /** A page of the texts on the list with the status, in the language if one is given. */
+  readingList(userId: UserId, status: ReadingStatus, lang: Lang | undefined, page: PageRequest<ReadingKey>): Promise<Paginated<StoredReading, ReadingKey>>;
 }
 
 export type StoredPosition = Omit<ReadingPosition, "at"> & { at: Timestamp };
+
+export type StoredReading = ReadingEntry & { readonly documentId: DocumentId };
 
 /** The lexicon, with the feature sets its entries' paradigms use. Ids it doesn't have are left out. */
 export interface Lexicon {

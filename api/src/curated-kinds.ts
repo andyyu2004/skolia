@@ -89,12 +89,17 @@ async function wolneLektury(spec: z.output<typeof WolneLektury>, lang: Lang, fet
 
 const FOOTER = "\n-----\n";
 
+/** An ISBN line, which ends a header with any number of blank lines after it. */
+const ISBN_LINE = /^ISBN [0-9X-]+\n/mu;
+
 /** The work in a Wolne Lektury .txt: after its header (author and title, which may wrap,
- * then three blank lines) and before its footer ("-----"), without the line indents and
- * *emphasis* the .txt keeps. */
+ * then an ISBN line or three blank lines) and before its footer ("-----"), without the line
+ * indents and *emphasis* the .txt keeps. */
 export function wolneLekturyText(raw: string): string {
   const body = raw.split(FOOTER)[0] ?? "";
-  const start = body.indexOf("\n\n\n\n");
+  const blank = body.indexOf("\n\n\n\n");
+  const isbn = ISBN_LINE.exec(body);
+  const start = isbn && (blank < 0 || isbn.index < blank) ? isbn.index + isbn[0].length : blank;
   if (start < 0) throw new Error("no blank lines after the header");
   return body
     .slice(start)

@@ -75,6 +75,12 @@ test("a Wolne Lektury text is the work between its header and footer, without in
   assert.throws(() => wolneLekturyText("Fredro\nOsiołkowi\n-----\n"), /no blank lines after the header/u);
 });
 
+test("a Wolne Lektury header with an ISBN ends at it, however many blank lines follow", () => {
+  const work = "Położył się Dyzio na łące\n\n\n\nI marzy";
+  assert.equal(wolneLekturyText(`Julian Tuwim\n\nDyzio marzyciel\n\nISBN 978-83-288-7398-8\n\n\n${work}\n-----\n`), work);
+  assert.equal(wolneLekturyText(`Julian Tuwim\n\nDyzio marzyciel\n\nISBN 978-83-288-7398-8\n\n\n\n\n${work}\n-----\n`), work);
+});
+
 test("a Wolne Lektury licence is read from its footer", () => {
   assert.equal(wolneLekturyLicence(`a\n\n\n\nb${FOOTER_PD}`), "public-domain");
   const cc = (version: string) => `a\n\n\n\nb\n-----\nTen utwór jest udostępniony na licencji Creative Commons: https://creativecommons.org/licenses/${version}/3.0/\n`;

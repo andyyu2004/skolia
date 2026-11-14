@@ -1,6 +1,7 @@
 // Where the reader was in each text: the word at the top of the screen, by sentence and
 // token index as a link's w= has it. Signed in, it's kept with the user's cards
 // (/api/me/positions); signed out, in this browser.
+import type { DocumentId } from "@skolia/shared/api";
 import { getPosition, putPosition } from "./api.ts";
 import { formatWord, parseWord, type WordKey } from "./link.ts";
 
@@ -13,11 +14,11 @@ export interface Positions {
 /** Wait this long after scrolling stops before saving. */
 export const SAVE_AFTER_MS = 3000;
 
-const key = (id: string): string => `skolia:position:${id}`;
+const key = (id: DocumentId): string => `skolia:position:${id}`;
 
 /** The word stored in the browser, or null when there's none or it isn't one. Storage
  * can be missing or throw, in a private window or with site data blocked. */
-export function readLocal(storage: Storage | undefined, id: string): WordKey | null {
+export function readLocal(storage: Storage | undefined, id: DocumentId): WordKey | null {
   try {
     return parseWord(storage?.getItem(key(id)) ?? null);
   } catch {
@@ -25,7 +26,7 @@ export function readLocal(storage: Storage | undefined, id: string): WordKey | n
   }
 }
 
-export function writeLocal(storage: Storage | undefined, id: string, word: WordKey): void {
+export function writeLocal(storage: Storage | undefined, id: DocumentId, word: WordKey): void {
   try {
     storage?.setItem(key(id), formatWord(word));
   } catch {
@@ -42,7 +43,7 @@ function browserStorage(): Storage | undefined {
 }
 
 /** The text's saved position and how to save a new one, the user's if signed in. */
-export async function positionsOf(id: string, storage = browserStorage()): Promise<Positions> {
+export async function positionsOf(id: DocumentId, storage = browserStorage()): Promise<Positions> {
   const remote = await getPosition(id);
   if (remote === undefined) {
     return { saved: readLocal(storage, id), save: async (word) => writeLocal(storage, id, word) };

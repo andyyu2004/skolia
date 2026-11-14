@@ -76,7 +76,9 @@ jobs:
   # Docker image on a Mac that takes them. A failure's expected, actual and diff images
   # are in its screenshots artifact.
   # In place of check, for a run that only changes content, some of it curated texts: that
-  # they parse (api/src/curated.test.ts), which needs no build. A docs-only run checks nothing.
+  # they parse (api/src/curated.test.ts) and resolve, fetched from their sources as the sync
+  # would (api/src/check-curated.ts), which needs no build or Worker. A docs-only run checks
+  # nothing.
   check-curated:
     if: github.event.action != 'closed' && needs.changes.outputs.deploy == 'false' && needs.changes.outputs.curated == 'true'
     needs: changes
@@ -90,6 +92,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: node --test src/curated.test.ts
+        working-directory: api
+      - run: node src/check-curated.ts ../curated
         working-directory: api
 
   screenshots:

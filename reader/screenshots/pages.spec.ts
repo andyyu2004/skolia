@@ -21,6 +21,12 @@ test("explore", async ({ page }) => {
   await expect(page).toHaveScreenshot("explore.png", { fullPage: true });
 });
 
+test("my list", async ({ page }) => {
+  await open(page, "#/list");
+  await expect(page.getByText("Reading now · 1 text")).toBeVisible();
+  await expect(page).toHaveScreenshot("my-list.png", { fullPage: true });
+});
+
 test("explore, tag filter", async ({ page }) => {
   await open(page, "#/");
   await page.getByLabel("Tags").click();

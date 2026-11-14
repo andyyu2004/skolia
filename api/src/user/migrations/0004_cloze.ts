@@ -6,7 +6,7 @@
 // cloze row and its reviews. sentence_start, blank_start and blank_end are offsets in the
 // text, which never changes (its id is its hash), so a word's place in it is the same
 // however the analysis splits sentences.
-const iso = (column: string) => `CHECK (${column} IS strftime('%Y-%m-%dT%H:%M:%fZ', ${column}))`;
+import { iso, isoOrNull } from "@skolia/util/checks";
 
 /** card and review as version 3 has them (cloze false: no cloze kind, card's foreign key to
  * word and UNIQUE (lemma_id, kind), reviews kept when their card goes) or as this version
@@ -28,7 +28,7 @@ CREATE TABLE card_next (
   schedule_status TEXT GENERATED ALWAYS AS (fsrs ->> '$.scheduleStatus') STORED NOT NULL
     CHECK (schedule_status IN ('new', 'learning', 'review')),
   scheduled_days REAL GENERATED ALWAYS AS (fsrs ->> '$.scheduledDays') STORED NOT NULL,
-  first_reviewed TEXT CHECK (first_reviewed IS NULL OR first_reviewed IS strftime('%Y-%m-%dT%H:%M:%fZ', first_reviewed)),
+  first_reviewed TEXT ${isoOrNull("first_reviewed")},
   UNIQUE (${cloze ? "id, kind" : "lemma_id, kind"})
 ) STRICT, WITHOUT ROWID;
 INSERT INTO card_next (id, lemma_id, kind, created, active, fsrs, first_reviewed)

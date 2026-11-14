@@ -13,6 +13,7 @@ import * as schemas from "@skolia/shared/schemas";
 import * as cards from "./controllers/cards.ts";
 import * as documents from "./controllers/documents.ts";
 import * as positions from "./controllers/positions.ts";
+import * as readingList from "./controllers/reading-list.ts";
 import { fail, ok, type BlobResult, type Failed, type NotModified, type Result } from "./controllers/result.ts";
 import { log } from "./log.ts";
 import type { Deps } from "./ports.ts";
@@ -89,6 +90,24 @@ export function createApp(deps: Deps) {
       zValidator("param", z.object({ id: schemas.DocumentId }), badRequest(DOCUMENT_ID_MESSAGE)),
       zValidator("json", schemas.ReadingPosition, badRequest()),
       (c) => signedIn(c, (user) => positions.set(deps, user, c.req.valid("param").id, c.req.valid("json"))),
+    )
+    .get("/api/me/reading-list", zValidator("query", schemas.ReadingQuery, badRequest()), (c) =>
+      signedIn(c, (user) => {
+        const { status, lang, ...page } = c.req.valid("query");
+        return readingList.list(deps, user, status, lang, page);
+      }),
+    )
+    .get("/api/me/reading-list/:id", zValidator("param", z.object({ id: schemas.DocumentId }), badRequest(DOCUMENT_ID_MESSAGE)), (c) =>
+      signedIn(c, (user) => readingList.get(deps, user, c.req.valid("param").id)),
+    )
+    .put(
+      "/api/me/reading-list/:id",
+      zValidator("param", z.object({ id: schemas.DocumentId }), badRequest(DOCUMENT_ID_MESSAGE)),
+      zValidator("json", schemas.SetReading, badRequest()),
+      (c) => signedIn(c, (user) => readingList.set(deps, user, c.req.valid("param").id, c.req.valid("json").status)),
+    )
+    .delete("/api/me/reading-list/:id", zValidator("param", z.object({ id: schemas.DocumentId }), badRequest(DOCUMENT_ID_MESSAGE)), (c) =>
+      signedIn(c, (user) => readingList.remove(deps, user, c.req.valid("param").id)),
     )
     .get("/api/me/documents", zValidator("query", schemas.MyDocumentsQuery, badRequest()), (c) =>
       signedIn(c, (user) => documents.mine(deps, user, c.req.valid("query"))),
