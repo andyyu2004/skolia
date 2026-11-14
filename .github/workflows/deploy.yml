@@ -106,11 +106,26 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
+      # The skolia Worker binds the ingest Worker's Ingester, and Cloudflare refuses a binding
+      # to a script that doesn't exist yet (code 10061), so a new preview's waits for its first
+      # deploy-ingest
+      - name: Wait for the preview's ingest Worker
+        if: ${{ startsWith(inputs.env, 'pr-') }}
+        run: |
+          for _ in $(seq 90); do
+            status=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/skolia-ingest-${{ inputs.env }}/settings")
+            if [ "$status" = 200 ]; then exit 0; fi
+            echo "skolia-ingest-${{ inputs.env }}: $status"
+            sleep 10
+          done
+          exit 1
       - run: just deploy-web ${{ inputs.env }}
       - id: url
         run: echo "url=$(just url ${{ inputs.env }})" >> "$GITHUB_OUTPUT"
 
-  # deploy-web for a preview, beside deploy-ingest rather than after it
+  # deploy-web for a preview, beside deploy-ingest rather than after it, once the preview's
+  # ingest Worker exists
   deploy-web-preview:
     if: ${{ startsWith(inputs.env, 'pr-') }}
     needs: deploy-infra
