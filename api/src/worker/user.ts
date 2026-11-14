@@ -3,6 +3,7 @@ import { CARD_GROUPS, LANGS, WORD_CARD_KINDS, MATURE_DAYS, timestamp, type CardC
 import { paginate, type PageRequest } from "@skolia/shared/page";
 import * as schemas from "@skolia/shared/schemas";
 import { CardId } from "@skolia/shared/schemas";
+import { and, col, compile, desc, eq, exists, fn, inQuery, insertInto, isNotNull, le, lit, ne, not, or, select, type Query } from "@skolia/util/query";
 import { sql, type Sql } from "@skolia/util/sql";
 import type { DueCards, ReviewOutcome, StoredPosition, StoredReading } from "../ports.ts";
 import { fromJson, fsrs, newCard, review, toJson } from "./scheduler.ts";
@@ -26,18 +27,21 @@ function scheduled(row: Record<string, SqlStorageValue>): ScheduledCard {
 }
 
 /** A group's cards, as a condition on card. */
-const IN_GROUP: Readonly<Record<CardGroup, Sql>> = { words: sql`card.kind != 'cloze'`, forms: sql`card.kind = 'cloze'` };
+const IN_GROUP: Readonly<Record<CardGroup, Sql>> = { words: ne("card.kind", lit("cloze")), forms: eq("card.kind", lit("cloze")) };
 
 /** A language's active cards due by now. */
-const due = (lang: Lang, now: Timestamp) => sql`WHERE card.lang = ${lang} AND card.active = 1 AND card.schedule_status != 'new' AND card.due_at <= ${now}`;
+const due = (lang: Lang, now: Timestamp) => and(eq("card.lang", lang), eq("card.active", lit(1)), ne("card.schedule_status", lit("new")), le("card.due_at", now));
 
 /** Whether the lemma of the card under alias has been started: one of its word cards reviewed. */
 const started = (alias: "card" | "u") =>
-  sql`EXISTS (SELECT 1 FROM card AS w WHERE w.lemma_id = ${sql.id(alias, "lemma_id")} AND w.kind != 'cloze' AND w.first_reviewed IS NOT NULL)`;
+  exists(
+    select({})
+      .from("card", "w")
+      .where(eq("w.lemma_id", col(`${alias}.lemma_id`)), ne("w.kind", lit("cloze")), isNotNull("w.first_reviewed")),
+  );
 
 /** The card under alias is a language's new card. */
-const NEW = (alias: "card" | "u", lang: Lang) =>
-  sql`${sql.id(alias, "lang")} = ${lang} AND ${sql.id(alias, "active")} = 1 AND ${sql.id(alias, "schedule_status")} = 'new'`;
+const isNew = (alias: "card" | "u", lang: Lang) => and(eq(`${alias}.lang`, lang), eq(`${alias}.active`, lit(1)), eq(`${alias}.schedule_status`, lit("new")));
 
 /** A group's new cards that today's allowance leaves to show, as a condition on card, and
  * at most how many. Words: every new word card of a started lemma, and all those of the
@@ -46,18 +50,41 @@ const NEW = (alias: "card" | "u", lang: Lang) =>
  * them in the allowance's terms, words by lemma and forms by card. */
 function freshCards(group: CardGroup, lang: Lang, newLeft: NewLeft): { where: Sql; cap: number; count: Sql } {
   switch (group) {
-    case "words":
+    case "words": {
+      const firstLemmas = select({ lemma_id: "u.lemma_id" })
+        .from("card", "u")
+        .where(isNew("u", lang), ne("u.kind", lit("cloze")), not(started("u")))
+        .groupBy("u.lemma_id")
+        .orderBy(fn.min("u.created"), "u.lemma_id")
+        .limit(newLeft.words);
       return {
-        where: sql`${NEW("card", lang)} AND card.kind != 'cloze' AND (${started("card")} OR card.lemma_id IN (
-          SELECT lemma_id FROM card AS u WHERE ${NEW("u", lang)} AND u.kind != 'cloze' AND NOT ${started("u")}
-          GROUP BY lemma_id ORDER BY min(created), lemma_id LIMIT ${newLeft.words}))`,
+        where: and(isNew("card", lang), ne("card.kind", lit("cloze")), or(started("card"), inQuery("card.lemma_id", firstLemmas))),
         cap: Number.POSITIVE_INFINITY,
-        count: sql`count(DISTINCT card.lemma_id)`,
+        count: fn.countDistinct("card.lemma_id"),
       };
+    }
     case "forms":
-      return { where: sql`${NEW("card", lang)} AND card.kind = 'cloze' AND ${started("card")}`, cap: newLeft.forms, count: sql`count(*)` };
+      return { where: and(isNew("card", lang), eq("card.kind", lit("cloze")), started("card")), cap: newLeft.forms, count: fn.count() };
   }
 }
+
+/** A card, with its cloze's columns if it's a cloze card, for scheduled(). */
+const SCHEDULED = select({
+  id: "card.id",
+  lemmaId: "card.lemma_id",
+  kind: "card.kind",
+  isNew: eq("card.schedule_status", lit("new")),
+  dueAt: "card.due_at",
+  documentId: "cloze.document_id",
+  sentence: "cloze.sentence",
+  sentenceStart: "cloze.sentence_start",
+  blankStart: "cloze.blank_start",
+  blankEnd: "cloze.blank_end",
+  feats: "cloze.feats",
+  why: "cloze.why",
+})
+  .from("card")
+  .leftJoin("cloze", eq("cloze.card_id", col("card.id")));
 
 export class User extends DurableObject<object> {
   constructor(ctx: DurableObjectState, env: object) {
@@ -65,7 +92,8 @@ export class User extends DurableObject<object> {
     void ctx.blockConcurrencyWhile(() => this.#migrate(MIGRATIONS.length));
   }
 
-  #exec({ text, params }: Sql): SqlStorageCursor<Record<string, SqlStorageValue>> {
+  #exec(query: Query | Sql): SqlStorageCursor<Record<string, SqlStorageValue>> {
+    const { text, params } = compile(query);
     return this.ctx.storage.sql.exec(text, ...params);
   }
 
@@ -194,15 +222,10 @@ export class User extends DurableObject<object> {
   due(lang: Lang, now: Timestamp, dayStart: Timestamp, limit: number, group: CardGroup | undefined): DueCards {
     const newLeft = this.#newLeft(lang, dayStart);
     const groups = group === undefined ? CARD_GROUPS : [group];
-    const select = sql`SELECT card.id, card.lemma_id AS "lemmaId", card.kind, card.schedule_status = 'new' AS "isNew", due_at AS "dueAt",
-        cloze.document_id AS "documentId", sentence, sentence_start AS "sentenceStart", blank_start AS "blankStart",
-        blank_end AS "blankEnd", feats, why
-      FROM card LEFT JOIN cloze ON cloze.card_id = card.id`;
-    const inGroup = group === undefined ? sql`1` : IN_GROUP[group];
-    const dueNow = this.#exec(sql`${select} ${due(lang, now)} AND ${inGroup} ORDER BY due_at LIMIT ${limit}`).toArray();
+    const dueNow = this.#exec(SCHEDULED.where(due(lang, now), group !== undefined && IN_GROUP[group]).orderBy("card.due_at").limit(limit)).toArray();
     const fresh = groups.flatMap((g) => {
       const { where, cap } = freshCards(g, lang, newLeft);
-      return this.#exec(sql`${select} WHERE ${where} ORDER BY card.created, card.lemma_id, card.kind DESC LIMIT ${Math.min(cap, limit)}`).toArray();
+      return this.#exec(SCHEDULED.where(where).orderBy("card.created", "card.lemma_id", desc("card.kind")).limit(Math.min(cap, limit))).toArray();
     });
     return { cards: [...dueNow, ...fresh].slice(0, limit).map(scheduled), newLeft };
   }
@@ -213,9 +236,9 @@ export class User extends DurableObject<object> {
     return LANGS.map((lang) => {
       const newLeft = this.#newLeft(lang, dayStart);
       const tally = (group: CardGroup): Tally => {
-        const dueNow = this.#exec(sql`SELECT count(*) AS n FROM card ${due(lang, now)} AND ${IN_GROUP[group]}`).one()["n"];
+        const dueNow = this.#exec(select({ n: fn.count() }).from("card").where(due(lang, now), IN_GROUP[group])).one()["n"];
         const { where, cap, count } = freshCards(group, lang, newLeft);
-        const fresh = this.#exec(sql`SELECT ${count} AS n FROM card WHERE ${where}`).one()["n"];
+        const fresh = this.#exec(select({ n: count }).from("card").where(where)).one()["n"];
         return { due: Number(dueNow), new: Math.min(Number(fresh), cap) };
       };
       return { lang, words: tally("words"), forms: tally("forms") };
@@ -273,16 +296,21 @@ export class User extends DurableObject<object> {
   }
 
   reading(documentId: DocumentId): ReadingEntry | null {
-    const row = this.#exec(sql`SELECT ${READING_ENTRY} FROM reading_list WHERE document_id = ${documentId}`).toArray()[0];
+    const row = this.#exec(select(READING_ENTRY).from("reading_list").where(eq("document_id", documentId))).toArray()[0];
     return row === undefined ? null : schemas.ReadingEntry.parse(row);
   }
 
   setReading(documentId: DocumentId, lang: Lang, status: ReadingStatus, now: Timestamp): ReadingEntry {
     const row = this.#exec(
-      sql`INSERT INTO reading_list (document_id, lang, status, added_at, updated_at) VALUES ${sql.tuple([documentId, lang, status, now, now])}
-       ON CONFLICT (document_id) DO UPDATE SET status = excluded.status,
-         updated_at = iif(excluded.status = reading_list.status, reading_list.updated_at, excluded.updated_at)
-       RETURNING ${READING_ENTRY}`,
+      insertInto("reading_list")
+        .values({ document_id: documentId, lang, status, added_at: now, updated_at: now })
+        .onConflict(["document_id"], {
+          set: {
+            status: col("excluded.status"),
+            updated_at: fn.iif(eq("excluded.status", col("reading_list.status")), "reading_list.updated_at", "excluded.updated_at"),
+          },
+        })
+        .returning(READING_ENTRY),
     ).one();
     return schemas.ReadingEntry.parse(row);
   }

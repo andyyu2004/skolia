@@ -81,6 +81,11 @@ const literal = (value: SqlValue): string => {
   return `'${value.replaceAll("'", "''")}'`;
 };
 
+/** A value written in as a literal rather than a parameter: for a constant in code that a
+ * partial index's WHERE has to see, as SQLite only uses one when the query names the same
+ * constant. */
+sql.literal = (value: SqlValue): Sql => Sql.raw(literal(value));
+
 /** The query with its parameters written in as literals, for SQL run without parameters
  * (wrangler d1 execute --file). Its own text mustn't have a ? but its placeholders. */
 sql.inline = ({ text, params }: Sql): string => {

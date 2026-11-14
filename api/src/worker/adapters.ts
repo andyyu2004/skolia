@@ -32,6 +32,7 @@ import {
 import { paginate, type PageRequest } from "@skolia/shared/page";
 import type { BundleParadigm, IngestJob, Pronunciation, Relation, Sense } from "@skolia/shared/schema";
 import * as schemas from "@skolia/shared/schemas";
+import { and, col, compile, contains, desc, eq, exists, fn, gt, inList, is, lit, or, row, select, unionAll, type Query, type Select } from "@skolia/util/query";
 import { sql, type Sql } from "@skolia/util/sql";
 import type {
   BlobStore,
@@ -144,7 +145,10 @@ const LexiconRow = z.object({
 
 const FeatureRow = z.object({ id: z.number().int(), feature: z.string(), value: z.string() });
 
-export const prepare = (db: D1Database, { text, params }: Sql): D1PreparedStatement => db.prepare(text).bind(...params);
+export const prepare = (db: D1Database, query: Query | Sql): D1PreparedStatement => {
+  const { text, params } = compile(query);
+  return db.prepare(text).bind(...params);
+};
 
 /** Each language's lexicon database, skolia-lexicon-{lang}[-env], bound as LEXICON_{LANG}
  * (api/wrangler.jsonc). */
@@ -223,23 +227,33 @@ export class D1Lexicon implements Lexicon {
   }
 }
 
-const COLUMNS = sql`entry.title, entry.imported_at AS imported, entry.visibility, entry.licence, entry.author, entry.source,
-    document.lang, document.words, "user"."name" AS importerName,
-    (SELECT json_group_object(tag.kind, tag.value) FROM user_document_tag AS tag
-      WHERE tag.user_id = entry.user_id AND tag.document_id = entry.document_id) AS tags`;
-const JOINS = sql`JOIN document ON document.id = entry.document_id
-  JOIN "user" ON "user"."id" = entry.user_id`;
+const COLUMNS = {
+  title: "entry.title",
+  imported: "entry.imported_at",
+  visibility: "entry.visibility",
+  licence: "entry.licence",
+  author: "entry.author",
+  source: "entry.source",
+  lang: "document.lang",
+  words: "document.words",
+  importerName: "user.name",
+  tags: select({ tags: fn.jsonGroupObject("tag.kind", "tag.value") })
+    .from("user_document_tag", "tag")
+    .where(eq("tag.user_id", col("entry.user_id")), eq("tag.document_id", col("entry.document_id"))),
+};
 
-const SELECT_DOCUMENT = sql`SELECT entry.document_id AS id, entry.user_id AS "user", ${COLUMNS}
-  FROM user_document AS entry
-  ${JOINS}`;
+const joined = (query: Select): Select =>
+  query.join("document", eq("document.id", col("entry.document_id"))).join("user", eq("user.id", col("entry.user_id")));
+
+const SELECT_DOCUMENT = joined(select({ id: "entry.document_id", user: "entry.user_id", ...COLUMNS }).from("user_document", "entry"));
 
 /** Entries by one of their tags: its key columns are the tag row's, so the list's order is
  * user_document_tag_value_idx's within the tag. */
-const SELECT_TAGGED = sql`SELECT tagged.document_id AS id, tagged.user_id AS "user", ${COLUMNS}
-  FROM user_document_tag AS tagged
-  JOIN user_document AS entry ON entry.user_id = tagged.user_id AND entry.document_id = tagged.document_id
-  ${JOINS}`;
+const SELECT_TAGGED = joined(
+  select({ id: "tagged.document_id", user: "tagged.user_id", ...COLUMNS })
+    .from("user_document_tag", "tagged")
+    .join("user_document", "entry", and(eq("entry.user_id", col("tagged.user_id")), eq("entry.document_id", col("tagged.document_id")))),
+);
 
 type KindValues = readonly [kind: string, values: readonly string[]];
 
@@ -250,41 +264,43 @@ type KindValues = readonly [kind: string, values: readonly string[]];
  * - the public entries, by primary key, or with tags, one part for each value of the
  *   first kind, by user_document_tag_value_idx, the other kinds looked up for each entry;
  * - the viewer's own, by primary key, their tags looked up for each entry. */
-export function listQuery(viewer: UserId | null, { tags, lang, title, mine }: DocumentFilter, { after, limit }: PageRequest<DocumentKey>): Sql {
+export function listQuery(viewer: UserId | null, { tags, lang, title, mine }: DocumentFilter, { after, limit }: PageRequest<DocumentKey>): Query {
   const kinds: readonly KindValues[] = Object.entries(tags).filter(([, values]) => values.length > 0);
   const [first, ...others] = kinds;
-  const narrowed = [
-    lang !== undefined && sql`document.lang = ${lang}`,
-    title !== undefined && sql`entry.title LIKE ${`%${title.replace(/[\\%_]/gu, "\\$&")}%`} ESCAPE '\\'`,
-  ];
-  const from = (alias: "entry" | "tagged") => after !== undefined && sql`(${sql.id(alias, "user_id")}, ${sql.id(alias, "document_id")}) > ${sql.tuple(after)}`;
+  const narrowed = [lang !== undefined && eq("document.lang", lang), title !== undefined && contains("entry.title", title)];
+  const from = (key: "entry" | "tagged") => after !== undefined && gt(row(`${key}.user_id`, `${key}.document_id`), after);
   const own =
-    viewer === null
-      ? []
-      : [sql`${SELECT_DOCUMENT} ${sql.where([sql`entry.user_id = ${viewer}`, !mine && sql`entry.visibility = 'private'`, from("entry"), ...narrowed, ...tagged(kinds)])}`];
+    viewer === null ? [] : [SELECT_DOCUMENT.where(eq("entry.user_id", viewer), !mine && eq("entry.visibility", lit("private")), from("entry"), ...narrowed, ...tagged(kinds))];
   const shared = mine
     ? []
     : first === undefined
-      ? [sql`${SELECT_DOCUMENT} ${sql.where([sql`entry.visibility = 'public'`, from("entry"), ...narrowed])}`]
-      : first[1].map(
-          (value) =>
-            sql`${SELECT_TAGGED} ${sql.where([sql`tagged.kind = ${first[0]}`, sql`tagged.value = ${value}`, sql`entry.visibility = 'public'`, from("tagged"), ...narrowed, ...tagged(others)])}`,
+      ? [SELECT_DOCUMENT.where(eq("entry.visibility", lit("public")), from("entry"), ...narrowed)]
+      : first[1].map((value) =>
+          SELECT_TAGGED.where(eq("tagged.kind", first[0]), eq("tagged.value", value), eq("entry.visibility", lit("public")), from("tagged"), ...narrowed, ...tagged(others)),
         );
-  return sql`${sql.unionAll([...shared, ...own])} ORDER BY "user", id LIMIT ${limit + 1}`;
+  return unionAll([...shared, ...own])
+    .orderBy("user", "id")
+    .limit(limit + 1);
 }
 
 /** The entry has one of the values of each kind, looked up by user_document_tag's primary key. */
 function tagged(kinds: readonly KindValues[]): readonly Sql[] {
-  return kinds.map(
-    ([kind, values]) => sql`EXISTS (SELECT 1 FROM user_document_tag AS has
-        WHERE has.user_id = entry.user_id AND has.document_id = entry.document_id AND has.kind = ${kind} AND has.value IN ${sql.tuple(values)})`,
+  return kinds.map(([kind, values]) =>
+    exists(
+      select({})
+        .from("user_document_tag", "has")
+        .where(eq("has.user_id", col("entry.user_id")), eq("has.document_id", col("entry.document_id")), eq("has.kind", kind), inList("has.value", values)),
+    ),
   );
 }
 
 /** A page of the tags, and one more if there is one. */
-function tagsQuery({ after, limit }: PageRequest<TagKey>): Sql {
-  return sql`SELECT kind, value, description, position FROM tag ${sql.where([after !== undefined && sql`(kind, position) > ${sql.tuple(after)}`])}
-    ORDER BY kind, position LIMIT ${limit + 1}`;
+function tagsQuery({ after, limit }: PageRequest<TagKey>): Query {
+  return select(["kind", "value", "description", "position"])
+    .from("tag")
+    .where(after !== undefined && gt(row("kind", "position"), after))
+    .orderBy("kind", "position")
+    .limit(limit + 1);
 }
 
 function knownQuery(tags: readonly Tag[]): Sql {
@@ -294,9 +310,10 @@ function knownQuery(tags: readonly Tag[]): Sql {
   )})`;
 }
 
-function visibleQuery(id: DocumentId, viewer: UserId | null): Sql {
-  return sql`${SELECT_DOCUMENT} WHERE entry.document_id = ${id} AND (entry.user_id = ${viewer} OR entry.visibility = 'public')
-    ORDER BY entry.user_id IS ${viewer} DESC, entry.imported_at LIMIT 1`;
+function visibleQuery(id: DocumentId, viewer: UserId | null): Query {
+  return SELECT_DOCUMENT.where(eq("entry.document_id", id), or(viewer !== null && eq("entry.user_id", viewer), eq("entry.visibility", lit("public"))))
+    .orderBy(desc(is("entry.user_id", viewer)), "entry.imported_at")
+    .limit(1);
 }
 
 function hasQuery(id: DocumentId): Sql {
@@ -350,25 +367,25 @@ const SOME_ENTRY: DocumentEntry = {
 
 /** D1Documents' queries, exported for the test that checks each one uses an index. */
 export const DOCUMENT_QUERIES = {
-  list: listQuery(null, NO_FILTER, { after: undefined, limit: 24 }).text,
-  listAfter: listQuery(SOMEONE, NO_FILTER, { after: SOME_KEY, limit: 24 }).text,
+  list: compile(listQuery(null, NO_FILTER, { after: undefined, limit: 24 })).text,
+  listAfter: compile(listQuery(SOMEONE, NO_FILTER, { after: SOME_KEY, limit: 24 })).text,
   /** The list narrowed to one kind of tag, two of its values */
-  listTagged: listQuery(null, { ...NO_FILTER, tags: { level: ["A1", "B1"] } }, { after: SOME_KEY, limit: 24 }).text,
-  listTwoKinds: listQuery(SOMEONE, { ...NO_FILTER, tags: TWO_KINDS }, { after: SOME_KEY, limit: 24 }).text,
-  listFiltered: listQuery(SOMEONE, { ...NO_FILTER, lang: "pl", title: "x" }, { after: SOME_KEY, limit: 24 }).text,
-  listMine: listQuery(SOMEONE, { ...NO_FILTER, mine: true }, { after: undefined, limit: 24 }).text,
-  listMineAfter: listQuery(SOMEONE, { ...NO_FILTER, mine: true, tags: TWO_KINDS }, { after: SOME_KEY, limit: 24 }).text,
-  tags: tagsQuery({ after: undefined, limit: 100 }).text,
-  tagsAfter: tagsQuery({ after: ["level", 0], limit: 100 }).text,
-  known: knownQuery([{ kind: "level", value: "A1" }]).text,
-  visible: visibleQuery(SOME_ENTRY.id, SOMEONE).text,
-  has: hasQuery(SOME_ENTRY.id).text,
-  addContent: addContentQuery({ id: SOME_ENTRY.id, lang: "pl", words: 1 }).text,
-  addEntry: addEntryQuery(SOME_ENTRY).text,
-  update: updateQuery(SOME_ENTRY.id, SOMEONE, SOME_ENTRY).text,
-  addTag: addTagQuery(SOMEONE, SOME_ENTRY.id, "level", "A1").text,
-  removeTags: removeTagsQuery(SOMEONE, SOME_ENTRY.id).text,
-  remove: removeQuery(SOME_ENTRY.id, SOMEONE).text,
+  listTagged: compile(listQuery(null, { ...NO_FILTER, tags: { level: ["A1", "B1"] } }, { after: SOME_KEY, limit: 24 })).text,
+  listTwoKinds: compile(listQuery(SOMEONE, { ...NO_FILTER, tags: TWO_KINDS }, { after: SOME_KEY, limit: 24 })).text,
+  listFiltered: compile(listQuery(SOMEONE, { ...NO_FILTER, lang: "pl", title: "x" }, { after: SOME_KEY, limit: 24 })).text,
+  listMine: compile(listQuery(SOMEONE, { ...NO_FILTER, mine: true }, { after: undefined, limit: 24 })).text,
+  listMineAfter: compile(listQuery(SOMEONE, { ...NO_FILTER, mine: true, tags: TWO_KINDS }, { after: SOME_KEY, limit: 24 })).text,
+  tags: compile(tagsQuery({ after: undefined, limit: 100 })).text,
+  tagsAfter: compile(tagsQuery({ after: ["level", 0], limit: 100 })).text,
+  known: compile(knownQuery([{ kind: "level", value: "A1" }])).text,
+  visible: compile(visibleQuery(SOME_ENTRY.id, SOMEONE)).text,
+  has: compile(hasQuery(SOME_ENTRY.id)).text,
+  addContent: compile(addContentQuery({ id: SOME_ENTRY.id, lang: "pl", words: 1 })).text,
+  addEntry: compile(addEntryQuery(SOME_ENTRY)).text,
+  update: compile(updateQuery(SOME_ENTRY.id, SOMEONE, SOME_ENTRY)).text,
+  addTag: compile(addTagQuery(SOMEONE, SOME_ENTRY.id, "level", "A1")).text,
+  removeTags: compile(removeTagsQuery(SOMEONE, SOME_ENTRY.id)).text,
+  remove: compile(removeQuery(SOME_ENTRY.id, SOMEONE)).text,
 } as const;
 
 export class D1Documents implements DocumentStore {
@@ -399,7 +416,7 @@ export class D1Documents implements DocumentStore {
     return (await this.all(knownQuery(tags))).map((row) => KnownTag.parse(row));
   }
 
-  private async all(query: Sql): Promise<readonly Record<string, unknown>[]> {
+  private async all(query: Query | Sql): Promise<readonly Record<string, unknown>[]> {
     const { results } = await prepare(this.db, query).all();
     return results;
   }
