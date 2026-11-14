@@ -273,7 +273,11 @@ export const NewAnnotation = z
   });
 
 export const AnnotationKey = z.tuple([Index, AnnotationId]).readonly();
-export const AnnotationsQuery = pageQuery(AnnotationKey, ANNOTATION_PAGE);
+const Offset = z.coerce.number().int().min(0).max(MAX_TEXT_LENGTH);
+/** A page of an entry's annotations; from and to, only those overlapping [from, to). */
+export const AnnotationsQuery = pageQuery(AnnotationKey, ANNOTATION_PAGE)
+  .extend({ from: Offset.optional(), to: Offset.optional() })
+  .refine((q) => q.from === undefined || q.to === undefined || q.from < q.to, { message: "from must be before to", path: ["to"] });
 
 /** An annotation as D1 has it, its data a JSON string. */
 export const AnnotationRow = Annotation.extend({

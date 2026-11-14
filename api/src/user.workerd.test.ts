@@ -141,10 +141,8 @@ test("a page of the reading list seeks to its key in an index, with or without a
     [true, true],
   ] as const) {
     const query = readingListQuery(
-      "to-read",
-      inLang ? "pl" : undefined,
-      after ? schemas.ReadingKey.parse(["2026-11-07T00:00:00.000Z", "0".repeat(64)]) : undefined,
-      3,
+      { status: "to-read", lang: inLang ? "pl" : undefined },
+      { after: after ? schemas.ReadingKey.parse(["2026-11-07T00:00:00.000Z", "0".repeat(64)]) : undefined, limit: 3 },
     );
     const plan = (await storage.exec<{ detail: string }>(`EXPLAIN QUERY PLAN ${query.sql.text}`, ...query.sql.params)).map(
       (row) => row.detail,

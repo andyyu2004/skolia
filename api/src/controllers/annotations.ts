@@ -5,6 +5,7 @@ import {
   MAX_ANNOTATIONS,
   timestamp,
   type Annotation,
+  type AnnotationFilter,
   type AnnotationId,
   type AnnotationKey,
   type Paginated,
@@ -19,16 +20,17 @@ import { findDocument, noSuchDocument } from "./documents.ts";
 import { NO_CONTENT, fail, ok, type Failed, type Json, type NoContent, type Ok } from "./result.ts";
 
 /** A page of the annotations of the entry the viewer sees for the text, so they go with the
- * title and credit shown. */
+ * title and credit shown, that the filter keeps. */
 export async function list(
   deps: Deps,
   id: string,
   viewer: User | null,
+  filter: AnnotationFilter,
   page: PageRequest<AnnotationKey>,
 ): Promise<Ok<Paginated<Annotation, AnnotationKey>> | Failed<404>> {
   const record = await findDocument(deps, id, viewer);
   if (!record) return noSuchDocument();
-  return ok(await deps.documents.annotations(record.id, record.user, page));
+  return ok(await deps.documents.annotations(record.id, record.user, filter, page));
 }
 
 /** 201 for a new annotation on the user's own entry, 200 when it had it already. */

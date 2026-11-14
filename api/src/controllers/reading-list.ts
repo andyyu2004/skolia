@@ -2,9 +2,9 @@
 import {
   timestamp,
   type DocumentId,
-  type Lang,
   type ListedReading,
   type ReadingEntry,
+  type ReadingFilter,
   type ReadingKey,
   type ReadingStatus,
   type User,
@@ -41,11 +41,10 @@ export async function remove(deps: Deps, user: User, id: DocumentId): Promise<No
 export async function list(
   deps: Deps,
   user: User,
-  status: ReadingStatus,
-  lang: Lang | undefined,
+  filter: ReadingFilter,
   page: PageRequest<ReadingKey>,
 ): Promise<Ok<Paginated<ListedReading, ReadingKey>>> {
-  const { items, next } = await deps.users.readingList(user.id, status, lang, page);
+  const { items, next } = await deps.users.readingList(user.id, filter, page);
   const documents = await deps.documents.visibleAll(
     items.map((item) => item.documentId),
     user.id,

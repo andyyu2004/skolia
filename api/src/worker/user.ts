@@ -15,6 +15,7 @@ import {
   type DocumentId,
   type Paginated,
   type ReadingEntry,
+  type ReadingFilter,
   type ReadingKey,
   type ReadingStatus,
   type WordKey,
@@ -380,17 +381,13 @@ export class User extends DurableObject<object> {
     this.#exec(sql`DELETE FROM reading_list WHERE document_id = ${documentId}`);
   }
 
-  readingList(
-    status: ReadingStatus,
-    lang: Lang | undefined,
-    { after, limit }: PageRequest<ReadingKey>,
-  ): Paginated<StoredReading, ReadingKey> {
-    const rows = this.#exec(readingListQuery(status, lang, after, limit + 1))
+  readingList(filter: ReadingFilter, page: PageRequest<ReadingKey>): Paginated<StoredReading, ReadingKey> {
+    const rows = this.#exec(readingListQuery(filter, page))
       .toArray()
       .map((row): StoredReading => ({ documentId: schemas.DocumentId.parse(row["documentId"]), ...schemas.ReadingEntry.parse(row) }));
     return paginate(
       rows.map((item) => ({ item, key: [item.updatedAt, item.documentId] as const })),
-      limit,
+      page.limit,
     );
   }
 

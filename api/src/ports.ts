@@ -3,6 +3,7 @@
 // tests.
 import type {
   Annotation,
+  AnnotationFilter,
   AnnotationId,
   AnnotationKey,
   AvailableTag,
@@ -27,6 +28,7 @@ import type {
   NewCloze,
   NewLeft,
   ReadingEntry,
+  ReadingFilter,
   ReadingKey,
   ReadingPosition,
   ReadingStatus,
@@ -96,8 +98,13 @@ export interface DocumentStore {
   update(id: DocumentId, user: UserId, fields: EntryFields): Promise<void>;
   /** Delete the user's entry. The text stays, for anyone who imports it again. */
   remove(id: DocumentId, user: UserId): Promise<void>;
-  /** A page of the user's entry's annotations, by where they start. */
-  annotations(id: DocumentId, user: UserId, page: PageRequest<AnnotationKey>): Promise<Paginated<Annotation, AnnotationKey>>;
+  /** A page of the user's entry's annotations that the filter keeps, by where they start. */
+  annotations(
+    id: DocumentId,
+    user: UserId,
+    filter: AnnotationFilter,
+    page: PageRequest<AnnotationKey>,
+  ): Promise<Paginated<Annotation, AnnotationKey>>;
   /** Add the annotation to the user's entry, which must exist, unless it has one with its
    * id already or has MAX_ANNOTATIONS. */
   annotate(id: DocumentId, user: UserId, annotation: Annotation): Promise<Annotated>;
@@ -174,13 +181,8 @@ export interface UserData {
    * only with the status. lang: the text's. */
   setReading(userId: UserId, documentId: DocumentId, lang: Lang, status: ReadingStatus, now: Timestamp): Promise<ReadingEntry>;
   removeReading(userId: UserId, documentId: DocumentId): Promise<void>;
-  /** A page of the texts on the list with the status, in the language if one is given. */
-  readingList(
-    userId: UserId,
-    status: ReadingStatus,
-    lang: Lang | undefined,
-    page: PageRequest<ReadingKey>,
-  ): Promise<Paginated<StoredReading, ReadingKey>>;
+  /** A page of the texts on the list that the filter keeps. */
+  readingList(userId: UserId, filter: ReadingFilter, page: PageRequest<ReadingKey>): Promise<Paginated<StoredReading, ReadingKey>>;
 }
 
 export type StoredPosition = Omit<ReadingPosition, "at"> & { at: Timestamp };

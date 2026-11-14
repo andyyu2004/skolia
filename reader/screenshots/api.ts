@@ -251,7 +251,7 @@ function deps(signedIn: boolean): Deps {
       }),
       removeReading: async () => {},
       // One page: there are only a few
-      readingList: async (_userId, status, lang) => ({
+      readingList: async (_userId, { status, lang }) => ({
         items: readingList.filter(
           (r) => r.status === status && (lang === undefined || documents.find((d) => d.id === r.documentId)?.lang === lang),
         ),
