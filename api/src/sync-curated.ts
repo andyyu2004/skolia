@@ -28,7 +28,7 @@ import {
   type NewAnnotation,
   type Tags,
 } from "@skolia/shared/api";
-import { annotationId } from "@skolia/shared/annotations";
+import { annotationId, cutsWord } from "@skolia/shared/annotations";
 import { docId } from "@skolia/shared/keys";
 import { allPages, type Cursor } from "@skolia/shared/page";
 import * as schemas from "@skolia/shared/schemas";
@@ -94,6 +94,8 @@ export async function toCurated(path: string, lang: Lang, resolved: Resolved): P
         throw new Error(
           `${path}: the annotation at ${annotation.start}-${annotation.end}: ${parsed.error.issues[0]?.message ?? "not valid"}`,
         );
+      const cut = cutsWord(text, annotation.start, annotation.end, lang);
+      if (cut) throw new Error(`${path}: ${cut}`);
       return { id: await annotationId(parsed.data), request: annotation };
     }),
   );

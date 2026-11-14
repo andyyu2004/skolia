@@ -11,7 +11,7 @@ import {
   type Paginated,
   type User,
 } from "@skolia/shared/api";
-import { annotationId } from "@skolia/shared/annotations";
+import { annotationId, cutsWord } from "@skolia/shared/annotations";
 import { textKey } from "@skolia/shared/keys";
 import type { PageRequest } from "@skolia/shared/page";
 import type * as schemas from "@skolia/shared/schemas";
@@ -44,8 +44,10 @@ export async function add(
   if (!record) return noEntry();
   const text = await deps.blobs.get(textKey(record.id));
   if (!text) throw new Error(`document ${record.id} has no text`);
-  const length = new TextDecoder().decode(text.body).length;
-  if (body.end > length) return fail(400, `the annotation ends at ${body.end}, after the text's end at ${length}`);
+  const decoded = new TextDecoder().decode(text.body);
+  if (body.end > decoded.length) return fail(400, `the annotation ends at ${body.end}, after the text's end at ${decoded.length}`);
+  const cut = cutsWord(decoded, body.start, body.end, record.lang);
+  if (cut) return fail(400, cut);
   const annotated = await deps.documents.annotate(record.id, user.id, {
     ...body,
     id: await annotationId(body),

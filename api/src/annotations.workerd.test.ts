@@ -58,15 +58,15 @@ async function starts(app: App, headers: Headers | undefined, id: string): Promi
 test("an entry's user adds annotations, which whoever sees the entry sees in order", async () => {
   const app = setup();
   const id = await imported(app, importer, PUBLIC);
-  const second = await body("add", annotate(app, importer, id, audio(5, 10, { source: "https://example.org/story" })), 201);
+  const second = await body("add", annotate(app, importer, id, audio(7, 14, { source: "https://example.org/story" })), 201);
   assert.deepEqual(
     { ...second, id: undefined },
     {
       id: undefined,
-      start: 5,
-      end: 10,
+      start: 7,
+      end: 14,
       kind: "audio",
-      data: { url: "https://example.org/5.mp3" },
+      data: { url: "https://example.org/7.mp3" },
       licence: "cc-by",
       author: "Helena",
       source: "https://example.org/story",
@@ -76,11 +76,11 @@ test("an entry's user adds annotations, which whoever sees the entry sees in ord
   const { author: _, ...anonymous } = audio(0, 4);
   await body("add", annotate(app, importer, id, anonymous), 201);
   const alice = await local.signIn((await local.signUp(ALICE)).id);
-  for (const headers of [importer, alice, undefined]) assert.deepEqual(await starts(app, headers, id), [0, 5]);
+  for (const headers of [importer, alice, undefined]) assert.deepEqual(await starts(app, headers, id), [0, 7]);
   const { items } = await body("annotations", annotations(app, undefined, id));
   assert.deepEqual([items[0]?.author, items[0]?.source], [null, null]);
   assert.deepEqual(items[1], second);
-  const translated = await body("note", annotate(app, importer, id, note(0, 10, " I'm going to the old dog. ")), 201);
+  const translated = await body("note", annotate(app, importer, id, note(0, 19, " I'm going to the old dog. ")), 201);
   assert.deepEqual([translated.kind, translated.data], ["text", { text: "I'm going to the old dog." }]);
   const listed = (await body("annotations", annotations(app, alice, id))).items.find((a) => a.id === translated.id);
   assert.deepEqual(listed, translated);
@@ -120,8 +120,8 @@ test("each user sees their own entry's annotations, and others the earliest publ
     client(setup({ at: "2026-11-05T00:00:00Z" }), alice).documents.$post({ json: { text: TEXT, lang: "pl", ...PUBLIC } }),
   );
   assert.deepEqual(await starts(app, alice, id), []);
-  await body("alice adds", annotate(app, alice, id, audio(5, 10)), 201);
-  assert.deepEqual(await starts(app, alice, id), [5]);
+  await body("alice adds", annotate(app, alice, id, audio(7, 14)), 201);
+  assert.deepEqual(await starts(app, alice, id), [7]);
   assert.deepEqual(await starts(app, importer, id), [0]);
   assert.deepEqual(await starts(app, undefined, id), [0]);
 });
@@ -198,16 +198,41 @@ test("an annotation's data must be its kind's, its range in the text and its lic
   assert.deepEqual(await starts(app, importer, id), [5, 5]);
 });
 
+test("an annotation's range starts and ends between words, in UTF-16 code units", async () => {
+  const text = "Zażółć gęślą jaźń.\n\nPies 🐕 szczeka, a kot śpi.";
+  const app = setup();
+  const id = await imported(app, importer, {}, text);
+  const on = (part: string, from = 0) => audio(text.indexOf(part, from), text.indexOf(part, from) + part.length);
+  for (const part of ["Zażółć", "gęślą jaźń", "jaźń.", "Pies 🐕 szczeka, a kot śpi.", "🐕", "🐕 szczeka", " 🐕 ", ", a "])
+    await body(part, annotate(app, importer, id, on(part)), 201);
+  await body("the whole text", annotate(app, importer, id, audio(0, text.length)), 201);
+  const refused = async (what: string, json: NewAnnotation, error: string) => {
+    const response = await expectStatus(what, annotate(app, importer, id, json), 400);
+    assert.deepEqual(await response.json(), { error }, what);
+  };
+  await refused("mid-word start", audio(2, 6), "the annotation starts inside a word, at 2");
+  await refused("mid-word end", audio(0, 9), "the annotation ends inside a word, at 9");
+  await refused("after a diacritic", audio(7, 11), "the annotation ends inside a word, at 11");
+  const dog = text.indexOf("🐕");
+  await refused("into the word after the emoji", audio(dog, dog + 5), `the annotation ends inside a word, at ${dog + 5}`);
+});
+
 test("an entry's annotations come a page at a time, by where they start", async () => {
   const app = setup();
   const id = await imported(app, importer, PUBLIC);
-  for (const start of [8, 0, 3, 3, 12])
-    await body("add", annotate(app, importer, id, audio(start, start + 2, { author: `${start}-${Math.random()}` })), 201);
+  for (const [start, end] of [
+    [7, 14],
+    [0, 3],
+    [4, 6],
+    [4, 6],
+    [15, 18],
+  ] as const)
+    await body("add", annotate(app, importer, id, audio(start, end, { author: `${start}-${Math.random()}` })), 201);
   const { items, next } = await body("annotations", annotations(app, undefined, id));
   assert.equal(next, null);
   assert.deepEqual(
     items.map((a) => a.start),
-    [0, 3, 3, 8, 12],
+    [0, 4, 4, 7, 15],
   );
   assert.deepEqual(
     await walk(2, (after?: Cursor<AnnotationKey>) => body("annotations", annotations(app, undefined, id, { after, limit: "2" }))),
@@ -218,7 +243,7 @@ test("an entry's annotations come a page at a time, by where they start", async 
 
 test("from and to keep the annotations that overlap [from, to), a page at a time", async () => {
   const app = setup();
-  const id = await imported(app, importer, PUBLIC);
+  const id = await imported(app, importer, PUBLIC, "Mama kocha i w dom.");
   for (const [start, end] of [
     [0, 4],
     [5, 10],
@@ -276,7 +301,7 @@ test("from and to keep the annotations that overlap [from, to), a page at a time
 test("an entry has at most MAX_ANNOTATIONS, and its annotations go with it", async () => {
   const app = setup();
   const id = await imported(app, importer);
-  const { id: kept } = await body("add", annotate(app, importer, id, audio(0, 1)), 201);
+  const { id: kept } = await body("add", annotate(app, importer, id, audio(0, 3)), 201);
   const user = (await body("me", client(app, importer).me.$get())).id;
   const db = local.env.DB;
   await db.batch(
@@ -288,11 +313,11 @@ test("an entry has at most MAX_ANNOTATIONS, and its annotations go with it", asy
       ),
     ),
   );
-  const full = await expectStatus("full", annotate(app, importer, id, audio(2, 3)), 409);
+  const full = await expectStatus("full", annotate(app, importer, id, audio(4, 6)), 409);
   assert.deepEqual(await full.json(), { error: `an entry has at most ${MAX_ANNOTATIONS} annotations` });
-  await expectStatus("one it has", annotate(app, importer, id, audio(0, 1)), 200);
+  await expectStatus("one it has", annotate(app, importer, id, audio(0, 3)), 200);
   await expectStatus("removes one", unannotate(app, importer, id, kept), 204);
-  await body("room again", annotate(app, importer, id, audio(2, 3)), 201);
+  await body("room again", annotate(app, importer, id, audio(4, 6)), 201);
   await expectStatus("deletes the entry", client(app, importer).documents[":id"].$delete({ param: { id } }), 204);
   await body("imports again", client(app, importer).documents.$post({ json: { text: TEXT, lang: "pl" } }));
   assert.deepEqual(await starts(app, importer, id), []);
