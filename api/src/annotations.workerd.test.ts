@@ -18,9 +18,16 @@ useLocal();
 
 const PUBLIC = { visibility: "public", licence: "cc0" } as const;
 
+type Credit = Partial<Pick<NewAnnotation, "licence" | "author" | "source">>;
+
 /** A recording of the text's characters start to end. */
-function audio(start: number, end: number, fields: Partial<NewAnnotation> = {}): NewAnnotation {
-  return { start, end, kind: "audio", data: { url: `https://example.org/${start}.mp3` }, licence: "cc-by", author: "Helena", ...fields };
+function audio(start: number, end: number, credit: Credit = {}, url = `https://example.org/${start}.mp3`): NewAnnotation {
+  return { start, end, kind: "audio", data: { url }, licence: "cc-by", author: "Helena", ...credit };
+}
+
+/** A note on the text's characters start to end. */
+function note(start: number, end: number, text: string, credit: Credit = {}): NewAnnotation {
+  return { start, end, kind: "text", data: { text }, licence: "cc0", ...credit };
 }
 
 async function imported(app: App, headers: Headers, fields: Partial<ImportRequest> = {}, text = TEXT): Promise<DocumentId> {
@@ -72,6 +79,11 @@ test("an entry's user adds annotations, which whoever sees the entry sees in ord
   const { items } = await body("annotations", annotations(app, undefined, id));
   assert.deepEqual([items[0]?.author, items[0]?.source], [null, null]);
   assert.deepEqual(items[1], second);
+  const translated = await body("note", annotate(app, importer, id, note(0, 10, " I'm going to the old dog. ")), 201);
+  assert.deepEqual([translated.kind, translated.data], ["text", { text: "I'm going to the old dog." }]);
+  const listed = (await body("annotations", annotations(app, alice, id))).items.find((a) => a.id === translated.id);
+  assert.deepEqual(listed, translated);
+  if (listed?.kind === "text") assert.equal(listed.data.text.length, 25);
 });
 
 test("adding the same annotation again keeps the one there; a changed one is another", async () => {
@@ -140,15 +152,25 @@ test("an annotation's data must be its kind's, its range in the text and its lic
     const response = await expectStatus(what, annotate(app, importer, id, json), 400);
     assert.deepEqual(await response.json(), { error }, what);
   };
-  await refused("unknown kind", audio(0, 4, { kind: "video" }), "no annotation kind video");
-  await refused("not a kind", audio(0, 4, { kind: "Audio" }), "an annotation's kind is lowercase letters, digits and hyphens");
-  await refused("http", audio(0, 4, { data: { url: "http://example.org/a.mp3" } }), "data doesn't fit annotation kind audio");
-  await refused("no url", audio(0, 4, { data: {} }), "data doesn't fit annotation kind audio");
-  await refused(
+  // What the typed client won't send
+  const malformed = async (what: string, json: unknown, error: string) => {
+    const response = await raw(app, "POST", `/api/documents/${id}/annotations`, importer, json);
+    assert.deepEqual([response.status, await response.json()], [400, { error }], what);
+  };
+  const range = { start: 0, end: 4, licence: "cc0" };
+  await malformed("unknown kind", { ...range, kind: "video", data: { url: "https://example.org/a.mp4" } }, "kind must be audio or text");
+  await malformed("no kind", { ...range, data: { url: "https://example.org/a.mp3" } }, "kind must be audio or text");
+  await malformed("another kind's data", { ...range, kind: "audio", data: { text: "Pies" } }, "audio annotation data needs a url");
+  await malformed("no url", { ...range, kind: "audio", data: {} }, "audio annotation data needs a url");
+  await malformed(
     "more than a url",
-    audio(0, 4, { data: { url: "https://example.org/a.mp3", speed: 2 } }),
-    "data doesn't fit annotation kind audio",
+    { ...range, kind: "audio", data: { url: "https://example.org/a.mp3", speed: 2 } },
+    "audio annotation data has only url",
   );
+  await malformed("no data", { ...range, kind: "text" }, "text annotation data must be {text}");
+  await refused("http", audio(0, 4, {}, "http://example.org/a.mp3"), "url must be an https URL");
+  await refused("blank text", note(0, 4, "  "), "text must be non-empty");
+  await refused("long text", note(0, 4, "x".repeat(2001)), "text is at most 2000 characters");
   await refused("empty", audio(4, 4), "an annotation must end after it starts");
   await refused("backwards", audio(4, 2), "an annotation must end after it starts");
   await refused(
@@ -168,9 +190,10 @@ test("an annotation's data must be its kind's, its range in the text and its lic
   // UTF-16, as JavaScript counts: the dog is two units
   assert.equal(text.length, 16);
   await body("to the end", annotate(app, importer, id, audio(5, text.length)), 201);
+  await body("longest text", annotate(app, importer, id, note(5, 6, "x".repeat(2000))), 201);
   const tooBig = await raw(app, "POST", `/api/documents/${id}/annotations`, importer, audio(0, 4, { author: "x".repeat(20_000) }));
   assert.deepEqual([tooBig.status, await tooBig.json()], [413, { error: "an annotation is at most 16384 bytes" }]);
-  assert.deepEqual(await starts(app, importer, id), [5]);
+  assert.deepEqual(await starts(app, importer, id), [5, 5]);
 });
 
 test("an entry's annotations come a page at a time, by where they start", async () => {
