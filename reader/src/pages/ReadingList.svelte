@@ -13,11 +13,11 @@
   const inLang = () => (lang === "all" ? undefined : lang);
 
   /** The page's sections, in the order they're shown: what's being read first. */
-  const ORDER: readonly ReadingStatus[] = ["in-progress", "to-read", "done"];
+  const ORDER: readonly ReadingStatus[] = ["reading", "to-read", "finished"];
   const lists = ORDER.map((status) => ({ status, list: createReadingList(status, inLang) }));
 </script>
 
-<Page title="My list" wide>
+<Page title="Reading list" wide>
   {#snippet actions()}
     {#if user}
       <select class="lang" bind:value={lang} aria-label="Language">
@@ -48,8 +48,10 @@
             {#snippet empty()}
               {#if status === "to-read"}
                 Nothing to read yet. Add a text from its page, or find one in <a href="#/">Explore</a>.
+              {:else if status === "reading"}
+                You're not reading anything now.
               {:else}
-                Nothing {READING_STATUS_LABELS[status].toLowerCase()}.
+                Nothing finished yet.
               {/if}
             {/snippet}
             {#snippet aside(doc)}

@@ -410,7 +410,7 @@ export type ClozeStart = {
 };
 
 /** Where a text is on the user's reading list. A text that isn't on it has none. */
-export const READING_STATUSES = ["to-read", "in-progress", "done"] as const;
+export const READING_STATUSES = ["to-read", "reading", "finished"] as const;
 export type ReadingStatus = (typeof READING_STATUSES)[number];
 
 /** A text on the user's reading list: its status, when it went on the list, and when its

@@ -23,7 +23,7 @@ test("explore", async ({ page }) => {
 
 test("my list", async ({ page }) => {
   await open(page, "#/list");
-  await expect(page.getByText("In progress · 1 text")).toBeVisible();
+  await expect(page.getByText("Reading now · 1 text")).toBeVisible();
   await expect(page).toHaveScreenshot("my-list.png", { fullPage: true });
 });
 

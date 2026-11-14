@@ -7,7 +7,7 @@ import { iso } from "@skolia/util/checks";
 export const up = `CREATE TABLE reading_list (
   document_id TEXT NOT NULL PRIMARY KEY,
   lang TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('to-read', 'in-progress', 'done')),
+  status TEXT NOT NULL CHECK (status IN ('to-read', 'reading', 'finished')),
   added_at TEXT NOT NULL ${iso("added_at")},
   updated_at TEXT NOT NULL ${iso("updated_at")}
 ) STRICT, WITHOUT ROWID;

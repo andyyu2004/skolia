@@ -38,7 +38,7 @@
   <nav>
     <a href="#/" aria-current={page === "explore" ? "page" : undefined}>Explore</a>
     {#if user}
-      <a href="#/list" aria-current={page === "list" ? "page" : undefined}>My list</a>
+      <a href="#/list" aria-current={page === "list" ? "page" : undefined}>Reading list</a>
       <a href="#/upload" aria-current={page === "upload" ? "page" : undefined}>Upload</a>
       <a href="#/review" aria-current={page === "review" ? "page" : undefined}>Review</a>
     {/if}

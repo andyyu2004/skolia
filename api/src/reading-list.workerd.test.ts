@@ -41,9 +41,9 @@ test("a text goes on the list with a status, changes status and comes off it", a
   assert.deepEqual(await entry(app, importer, id), { entry: null });
   const added = { status: "to-read", addedAt: "2026-11-04T00:00:00.000Z", updatedAt: "2026-11-04T00:00:00.000Z" };
   assert.deepEqual(await body("add", save(app, importer, id, "to-read")), { entry: added });
-  const started = { ...added, status: "in-progress", updatedAt: LATER };
-  assert.deepEqual(await body("start", save(setup({ at: LATER }), importer, id, "in-progress")), { entry: started });
-  assert.deepEqual(await body("same status", save(setup({ at: LATEST }), importer, id, "in-progress")), { entry: started });
+  const started = { ...added, status: "reading", updatedAt: LATER };
+  assert.deepEqual(await body("start", save(setup({ at: LATER }), importer, id, "reading")), { entry: started });
+  assert.deepEqual(await body("same status", save(setup({ at: LATEST }), importer, id, "reading")), { entry: started });
   assert.deepEqual(await entry(app, importer, id), { entry: started });
   await expectStatus("remove", remove(app, importer, id), 204);
   assert.deepEqual(await entry(app, importer, id), { entry: null });
@@ -63,10 +63,10 @@ test("each status's list has its texts latest change first, a page at a time, in
   assert.deepEqual(await listOf(app, "to-read"), [english, third, ...tied]);
   assert.deepEqual(await listOf(app, "to-read", "pl"), [third, ...tied]);
   assert.deepEqual(await listOf(app, "to-read", "en"), [english]);
-  await expectStatus("finish", save(at(LATEST), importer, first, "done"), 200);
+  await expectStatus("finish", save(at(LATEST), importer, first, "finished"), 200);
   assert.deepEqual(await listOf(app, "to-read"), [english, third, second]);
-  assert.deepEqual(await listOf(app, "done"), [first]);
-  assert.deepEqual(await listOf(app, "in-progress"), []);
+  assert.deepEqual(await listOf(app, "finished"), [first]);
+  assert.deepEqual(await listOf(app, "reading"), []);
 });
 
 test("the list shows each text as the user sees it, and leaves out one they can no longer see", async () => {
@@ -93,7 +93,7 @@ test("only a text the user can see goes on their list, and each user has their o
   const theirs = await imported(app, "Prywatny tekst.", { headers: alice });
   assert.equal((await save(app, importer, theirs, "to-read")).status, 404);
   assert.equal((await save(app, importer, "0".repeat(64), "to-read")).status, 404);
-  await expectStatus("alice's own", save(app, alice, theirs, "done"), 200);
+  await expectStatus("alice's own", save(app, alice, theirs, "finished"), 200);
   assert.deepEqual(await entry(app, importer, theirs), { entry: null });
 });
 
@@ -106,7 +106,7 @@ test("the list needs a signed-in user, a document id, a status and pages it gave
   assert.equal((await client(app).me["reading-list"][":id"].$get({ param: { id } })).status, 401);
   assert.equal((await client(app).me["reading-list"].$get({ query: { status: "to-read" } })).status, 401);
   assert.equal((await save(app, importer, "not-an-id", "to-read")).status, 400);
-  assert.equal((await raw(app, "PUT", `/api/me/reading-list/${id}`, importer, { status: "reading" })).status, 400);
+  assert.equal((await raw(app, "PUT", `/api/me/reading-list/${id}`, importer, { status: "read" })).status, 400);
   assert.equal((await raw(app, "GET", "/api/me/reading-list", importer, undefined)).status, 400);
   assert.equal((await raw(app, "GET", "/api/me/reading-list?status=to-read&lang=xx", importer, undefined)).status, 400);
   await refusesBadPages(READING_PAGE.max, (query) => list.$get({ query: { ...query, status: "to-read" } }));

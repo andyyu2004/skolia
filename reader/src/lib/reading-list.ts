@@ -9,8 +9,8 @@ import { userQuery } from "./queries.ts";
 
 export const READING_STATUS_LABELS: Readonly<Record<ReadingStatus, string>> = {
   "to-read": "To read",
-  "in-progress": "In progress",
-  done: "Done",
+  reading: "Reading now",
+  finished: "Finished",
 };
 
 const LISTS_KEY = ["me", "reading-list", "list"] as const;

@@ -89,9 +89,9 @@ const statuses: readonly (readonly [DocumentIdType, Status])[] = [
   [PETER_RABBIT.id, { state: "failed", updated: "2026-11-08T10:00:00.000Z", error: "The analyser stopped" }],
 ];
 
-/** The user's reading list: Lalka in progress, Le Petit Prince to read. */
+/** The user's reading list: Lalka being read, Le Petit Prince to read. */
 const readingList: readonly StoredReading[] = [
-  { documentId: LALKA, status: "in-progress", addedAt: Timestamp.parse("2026-11-07T10:00:00.000Z"), updatedAt: Timestamp.parse("2026-11-08T18:00:00.000Z") },
+  { documentId: LALKA, status: "reading", addedAt: Timestamp.parse("2026-11-07T10:00:00.000Z"), updatedAt: Timestamp.parse("2026-11-08T18:00:00.000Z") },
   { documentId: PETIT_PRINCE.id, status: "to-read", addedAt: Timestamp.parse("2026-11-08T09:00:00.000Z"), updatedAt: Timestamp.parse("2026-11-08T09:00:00.000Z") },
 ];
 
