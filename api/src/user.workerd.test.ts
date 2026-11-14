@@ -97,6 +97,32 @@ test("an applied migration that was edited, or that the code doesn't have, stops
   await assert.rejects(grace.migrate(LATEST));
 });
 
+test("with MUTABLE_FINAL_USER_MIGRATION, an edited last migration is reverted with the down it was applied with, then applied again", async () => {
+  const mallory = local.env.USER.getByName("mallory");
+  await mallory.migrate(LATEST - 1);
+  const last = MIGRATIONS[LATEST - 1]!;
+  const storage = await storageOf("mallory");
+  await storage.exec("create table draft (id text)");
+  await storage.exec(
+    "insert into migration_log (version, name, direction, checksum, down, applied_at) values (?, ?, 'up', 'edited', 'DROP TABLE draft', '2026-11-07T00:00:00.000Z')",
+    LATEST,
+    last.name,
+  );
+  assert.deepEqual((await mallory.migrationStatus()).problems, []);
+  await mallory.migrate(LATEST);
+  assert.ok(!(await tables("mallory")).includes("draft"));
+  const { version, log } = await mallory.migrationStatus();
+  assert.equal(version, LATEST);
+  assert.deepEqual(
+    log.slice(-3).map((e) => [e.version, e.direction, e.checksum, e.down]),
+    [
+      [LATEST, "up", "edited", "DROP TABLE draft"],
+      [LATEST, "down", await checksum("DROP TABLE draft"), null],
+      [LATEST, "up", await checksum(last.up), last.down],
+    ],
+  );
+});
+
 test("the tables are STRICT, the user's are WITHOUT ROWID, and timestamps must be toISOString()'s", async () => {
   const heidi = local.env.USER.getByName("heidi");
   await heidi.words(FIRST_PAGE);

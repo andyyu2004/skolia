@@ -56,7 +56,17 @@ import type { DueCards, ReviewOutcome, StoredPosition, StoredReading } from "../
 import { fromJson, fsrs, newCard, review, toJson } from "./scheduler.ts";
 import { MIGRATIONS } from "../user/migrations/index.ts";
 import { READING_ENTRY, readingListQuery } from "../user/queries.ts";
-import { LogEntry, MigrationError, applied, plan, problems, withChecksums, type Checksummed } from "../user/migrator.ts";
+import {
+  LogEntry,
+  MigrationError,
+  applied,
+  plan,
+  problems,
+  revertEdited,
+  withChecksums,
+  type Checksummed,
+  type Step,
+} from "../user/migrator.ts";
 
 export interface MigrationStatus {
   version: number | null;
@@ -136,8 +146,14 @@ const SCHEDULED = select({
   .from("card")
   .leftJoin("cloze", eq("cloze.card_id", col("card.id")));
 
-export class User extends DurableObject<object> {
-  constructor(ctx: DurableObjectState, env: object) {
+export interface UserEnv {
+  /** "true" on previews and locally. For this object's migrations (user/migrations) only, not D1's: an edited
+   * last migration is reverted with the down it was applied with, and applied again. */
+  MUTABLE_FINAL_USER_MIGRATION?: string;
+}
+
+export class User extends DurableObject<UserEnv> {
+  constructor(ctx: DurableObjectState, env: UserEnv) {
     super(ctx, env);
     void ctx.blockConcurrencyWhile(() => this.#migrate(MIGRATIONS.length));
   }
@@ -156,7 +172,8 @@ export class User extends DurableObject<object> {
     const log = this.#log();
     try {
       const stack = applied(log);
-      return { version: stack.length, log, problems: problems(stack, migrations) };
+      const { kept } = await this.#revertEdited(stack, migrations);
+      return { version: stack.length, log, problems: problems(kept, migrations) };
     } catch (error) {
       if (!(error instanceof MigrationError)) throw error;
       return { version: null, log, problems: [error.message] };
@@ -393,18 +410,24 @@ export class User extends DurableObject<object> {
 
   async #migrate(target: number): Promise<void> {
     const migrations = await (checksummed ??= withChecksums(MIGRATIONS));
-    const stack = applied(this.#log());
-    const found = problems(stack, migrations);
+    const { kept, revert } = await this.#revertEdited(applied(this.#log()), migrations);
+    const found = problems(kept, migrations);
     if (found.length > 0) throw new MigrationError(found.join("; "));
-    for (const step of plan(stack.length, target, migrations)) {
+    for (const step of [...revert, ...plan(kept.length, target, migrations)]) {
       this.ctx.storage.transactionSync(() => {
         this.ctx.storage.sql.exec(step.sql);
         this.#exec(
-          sql`INSERT INTO migration_log (version, name, direction, checksum, applied_at)
-            VALUES ${sql.tuple([step.version, step.name, step.direction, step.checksum, new Date().toISOString()])}`,
+          sql`INSERT INTO migration_log (version, name, direction, checksum, down, applied_at)
+            VALUES ${sql.tuple([step.version, step.name, step.direction, step.checksum, step.down, new Date().toISOString()])}`,
         );
       });
     }
+  }
+
+  /** The applied migrations that stay, and the step that reverts an edited last one where that's allowed */
+  async #revertEdited(stack: LogEntry[], migrations: readonly Checksummed[]): Promise<{ kept: LogEntry[]; revert: Step[] }> {
+    const step = this.env.MUTABLE_FINAL_USER_MIGRATION === "true" ? await revertEdited(stack, migrations) : null;
+    return step === null ? { kept: stack, revert: [] } : { kept: stack.slice(0, -1), revert: [step] };
   }
 
   #log(): LogEntry[] {
@@ -423,8 +446,11 @@ export class User extends DurableObject<object> {
         CREATE TRIGGER IF NOT EXISTS migration_log_no_delete BEFORE DELETE ON migration_log
           BEGIN SELECT RAISE(ABORT, 'migration_log is append-only'); END;
       `);
+      if (this.#exec(sql`SELECT 1 FROM pragma_table_info('migration_log') WHERE name = 'down'`).toArray().length === 0) {
+        this.#exec(sql`ALTER TABLE migration_log ADD COLUMN down TEXT CHECK (direction = 'up' OR down IS NULL)`);
+      }
     });
-    return this.#exec(sql`SELECT seq, version, name, direction, checksum, applied_at AS "appliedAt" FROM migration_log ORDER BY seq`)
+    return this.#exec(sql`SELECT seq, version, name, direction, checksum, down, applied_at AS "appliedAt" FROM migration_log ORDER BY seq`)
       .toArray()
       .map((row) => LogEntry.parse(row));
   }

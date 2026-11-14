@@ -91,7 +91,7 @@ def config(env: str) -> None:
     web = promote("wrangler.jsonc", env)
     web["workers_dev"] = True
     web["preview_urls"] = False
-    web["vars"] = {**as_object(web.get("vars"), "vars"), "BASE_URL": url(env)}
+    web["vars"] = {**as_object(web.get("vars"), "vars"), "BASE_URL": url(env), "MUTABLE_FINAL_USER_MIGRATION": "true"}
     ingest = promote("wrangler.ingest.jsonc", env)
     ingest["vars"] = {**as_object(ingest.get("vars"), "vars"), "SLEEP_AFTER": PREVIEW_SLEEP_AFTER}
     configs = {f"wrangler.{env}.json": web, f"wrangler.ingest.{env}.json": ingest}

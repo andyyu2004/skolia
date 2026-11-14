@@ -54,7 +54,10 @@ export async function startLocal(): Promise<Local> {
   assert.ok(existsSync(`${DIST}main.js`), "api/dist/main.js is missing: just build first");
   const server = createTestHarness({
     root: API,
-    workers: [{ configPath: "./wrangler.jsonc", env: "", prebuiltWorkerDir: DIST }, { configPath: "./src/testing/ingest-recorder.jsonc" }],
+    workers: [
+      { configPath: "./wrangler.jsonc", env: "", prebuiltWorkerDir: DIST, vars: { MUTABLE_FINAL_USER_MIGRATION: "true" } },
+      { configPath: "./src/testing/ingest-recorder.jsonc" },
+    ],
   });
   await server.listen();
   const worker = server.getWorker<TestEnv>();
