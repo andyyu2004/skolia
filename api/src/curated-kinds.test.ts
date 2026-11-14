@@ -181,6 +181,19 @@ test("a span only on what's trimmed is refused", async () => {
   );
 });
 
+test("a span that cuts through a word is refused, as the API refuses it", async () => {
+  const yaml = (text: string) =>
+    `kind: inline\ntitle: A\nlicence: cc0\ntext: '${text}'\nannotations:\n  x:\n    kind: text\n    text: a\n    licence: cc0\n`;
+  await assert.rejects(
+    resolveCurated([parseCurated("pl/a.yaml", "pl", yaml("Pi[es]{x} szczeka."))], noFetch),
+    /pl\/a\.yaml: the annotation starts inside a word, at 2/u,
+  );
+  await assert.rejects(
+    resolveCurated([parseCurated("pl/a.yaml", "pl", yaml("[Pies szcz]{x}eka."))], noFetch),
+    /pl\/a\.yaml: the annotation ends inside a word, at 9/u,
+  );
+});
+
 test("a public inline text needs a licence that allows sharing it", async () => {
   const file = parseCurated("pl/a.yaml", "pl", "kind: inline\ntitle: A\nlicence: all-rights-reserved\ntext: B\n");
   await assert.rejects(resolveCurated([file], noFetch), /pl\/a\.yaml: a public text needs/u);
