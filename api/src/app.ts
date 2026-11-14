@@ -103,7 +103,7 @@ export function createApp(deps: Deps) {
     .get("/api/me/reading-list", zValidator("query", schemas.ReadingQuery, badRequest()), (c) =>
       signedIn(c, (user) => {
         const { status, lang, ...page } = c.req.valid("query");
-        return readingList.list(deps, user, status, lang, page);
+        return readingList.list(deps, user, { status, lang }, page);
       }),
     )
     .get("/api/me/reading-list/:id", zValidator("param", z.object({ id: schemas.DocumentId }), badRequest(DOCUMENT_ID_MESSAGE)), (c) =>
@@ -152,9 +152,10 @@ export function createApp(deps: Deps) {
     .get("/api/documents/:id/bundle/:name", async (c) =>
       send(c, await documents.part(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers), "bundle", c.req.param("name"), c.req.header("if-none-match"))),
     )
-    .get("/api/documents/:id/annotations", zValidator("query", schemas.AnnotationsQuery, badRequest()), async (c) =>
-      send(c, await annotations.list(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers), c.req.valid("query"))),
-    )
+    .get("/api/documents/:id/annotations", zValidator("query", schemas.AnnotationsQuery, badRequest()), async (c) => {
+      const { from, to, ...page } = c.req.valid("query");
+      return send(c, await annotations.list(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers), { from, to }, page));
+    })
     .post("/api/documents/:id/annotations", annotationLimit, zValidator("json", schemas.NewAnnotation, badRequest()), (c) =>
       signedIn(c, (user) => annotations.add(deps, user, c.req.param("id"), c.req.valid("json"))),
     )

@@ -6,6 +6,7 @@ import {
   MAX_ANNOTATIONS,
   UPOS,
   type Annotation,
+  type AnnotationFilter,
   type AnnotationId,
   type AnnotationKey,
   type CardCounts,
@@ -30,6 +31,7 @@ import {
   type Timestamp,
   type UserId,
   type ReadingEntry,
+  type ReadingFilter,
   type ReadingKey,
   type ReadingStatus,
   type ReviewRequest, type Settings, type AvailableTag, type Tags, type Word, type WordStatus } from "@skolia/shared/api";
@@ -132,8 +134,8 @@ export class DurableObjectUsers implements UserData {
     await this.users.getByName(userId).removeReading(documentId);
   }
 
-  async readingList(userId: UserId, status: ReadingStatus, lang: Lang | undefined, page: PageRequest<ReadingKey>): Promise<Paginated<StoredReading, ReadingKey>> {
-    return this.users.getByName(userId).readingList(status, lang, page);
+  async readingList(userId: UserId, filter: ReadingFilter, page: PageRequest<ReadingKey>): Promise<Paginated<StoredReading, ReadingKey>> {
+    return this.users.getByName(userId).readingList(filter, page);
   }
 }
 
@@ -353,10 +355,19 @@ function removeQuery(id: DocumentId, user: UserId): Sql {
 
 const ANNOTATION_COLUMNS = sql`id, start, "end", kind, data, licence, author, source, added_at AS added`;
 
-/** A page of the entry's annotations, and one more if there is one, by user_document_annotation_start_idx. */
-function annotationsQuery(id: DocumentId, user: UserId, { after, limit }: PageRequest<AnnotationKey>): Sql {
+/** A page of the entry's annotations that overlap the range, and one more if there is one,
+ * by user_document_annotation_start_idx. The index bounds start; end is checked on each row,
+ * so a range late in the text reads the annotations that start before it, at most
+ * MAX_ANNOTATIONS. */
+function annotationsQuery(id: DocumentId, user: UserId, { from, to }: AnnotationFilter, { after, limit }: PageRequest<AnnotationKey>): Sql {
   return sql`SELECT ${ANNOTATION_COLUMNS} FROM user_document_annotation
-    ${sql.where([sql`user_id = ${user}`, sql`document_id = ${id}`, after !== undefined && sql`(start, id) > ${sql.tuple(after)}`])}
+    ${sql.where([
+      sql`user_id = ${user}`,
+      sql`document_id = ${id}`,
+      to !== undefined && sql`start < ${to}`,
+      from !== undefined && sql`"end" > ${from}`,
+      after !== undefined && sql`(start, id) > ${sql.tuple(after)}`,
+    ])}
     ORDER BY start, id LIMIT ${limit + 1}`;
 }
 
@@ -428,8 +439,9 @@ export const DOCUMENT_QUERIES = {
   addTag: compile(addTagQuery(SOMEONE, SOME_ENTRY.id, "level", "A1")).text,
   removeTags: compile(removeTagsQuery(SOMEONE, SOME_ENTRY.id)).text,
   remove: compile(removeQuery(SOME_ENTRY.id, SOMEONE)).text,
-  annotations: annotationsQuery(SOME_ENTRY.id, SOMEONE, { after: undefined, limit: 500 }).text,
-  annotationsAfter: annotationsQuery(SOME_ENTRY.id, SOMEONE, { after: [0, SOME_ANNOTATION.id], limit: 500 }).text,
+  annotations: annotationsQuery(SOME_ENTRY.id, SOMEONE, { from: undefined, to: undefined }, { after: undefined, limit: 500 }).text,
+  annotationsAfter: annotationsQuery(SOME_ENTRY.id, SOMEONE, { from: undefined, to: undefined }, { after: [0, SOME_ANNOTATION.id], limit: 500 }).text,
+  annotationsInRange: annotationsQuery(SOME_ENTRY.id, SOMEONE, { from: 100, to: 200 }, { after: [0, SOME_ANNOTATION.id], limit: 500 }).text,
   annotate: annotateQuery(SOME_ENTRY.id, SOMEONE, SOME_ANNOTATION).text,
   annotation: annotationQuery(SOME_ENTRY.id, SOMEONE, SOME_ANNOTATION.id).text,
   unannotate: unannotateQuery(SOME_ENTRY.id, SOMEONE, SOME_ANNOTATION.id).text,
@@ -513,8 +525,8 @@ export class D1Documents implements DocumentStore {
     await prepare(this.db, removeQuery(id, user)).run();
   }
 
-  async annotations(id: DocumentId, user: UserId, page: PageRequest<AnnotationKey>): Promise<Paginated<Annotation, AnnotationKey>> {
-    const rows = (await this.all(annotationsQuery(id, user, page))).map((row) => schemas.AnnotationRow.parse(row));
+  async annotations(id: DocumentId, user: UserId, filter: AnnotationFilter, page: PageRequest<AnnotationKey>): Promise<Paginated<Annotation, AnnotationKey>> {
+    const rows = (await this.all(annotationsQuery(id, user, filter, page))).map((row) => schemas.AnnotationRow.parse(row));
     return paginate(
       rows.map((item) => ({ item, key: [item.start, item.id] as const })),
       page.limit,

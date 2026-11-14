@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { CARD_GROUPS, LANGS, WORD_CARD_KINDS, MATURE_DAYS, timestamp, type CardCounts, type CardGroup, type NewLeft, type Tally, type CardId as CardIdType, type ClozeKey, type ClozeStart, type DocumentId, type Paginated, type ReadingEntry, type ReadingKey, type ReadingStatus, type WordKey, type NewCloze, type Timestamp, type Lang, type LemmaId, type ReviewRequest, type ScheduledCard, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
+import { CARD_GROUPS, LANGS, WORD_CARD_KINDS, MATURE_DAYS, timestamp, type CardCounts, type CardGroup, type NewLeft, type Tally, type CardId as CardIdType, type ClozeKey, type ClozeStart, type DocumentId, type Paginated, type ReadingEntry, type ReadingFilter, type ReadingKey, type ReadingStatus, type WordKey, type NewCloze, type Timestamp, type Lang, type LemmaId, type ReviewRequest, type ScheduledCard, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
 import { paginate, type PageRequest } from "@skolia/shared/page";
 import * as schemas from "@skolia/shared/schemas";
 import { CardId } from "@skolia/shared/schemas";
@@ -319,13 +319,13 @@ export class User extends DurableObject<object> {
     this.#exec(sql`DELETE FROM reading_list WHERE document_id = ${documentId}`);
   }
 
-  readingList(status: ReadingStatus, lang: Lang | undefined, { after, limit }: PageRequest<ReadingKey>): Paginated<StoredReading, ReadingKey> {
-    const rows = this.#exec(readingListQuery(status, lang, after, limit + 1))
+  readingList(filter: ReadingFilter, page: PageRequest<ReadingKey>): Paginated<StoredReading, ReadingKey> {
+    const rows = this.#exec(readingListQuery(filter, page))
       .toArray()
       .map((row): StoredReading => ({ documentId: schemas.DocumentId.parse(row["documentId"]), ...schemas.ReadingEntry.parse(row) }));
     return paginate(
       rows.map((item) => ({ item, key: [item.updatedAt, item.documentId] as const })),
-      limit,
+      page.limit,
     );
   }
 

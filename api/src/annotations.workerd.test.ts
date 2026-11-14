@@ -24,7 +24,7 @@ function annotate(app: App, headers: Headers | undefined, id: string, json: NewA
   return client(app, headers).documents[":id"].annotations.$post({ param: { id }, json });
 }
 
-function annotations(app: App, headers: Headers | undefined, id: string, query: { readonly after?: Cursor<AnnotationKey> | undefined; readonly limit?: string } = {}) {
+function annotations(app: App, headers: Headers | undefined, id: string, query: { readonly after?: Cursor<AnnotationKey> | undefined; readonly limit?: string; readonly from?: string; readonly to?: string } = {}) {
   return client(app, headers).documents[":id"].annotations.$get({ param: { id }, query });
 }
 
@@ -145,6 +145,27 @@ test("an entry's annotations come a page at a time, by where they start", async 
   assert.deepEqual(items.map((a) => a.start), [0, 3, 3, 8, 12]);
   assert.deepEqual(await walk(2, (after?: Cursor<AnnotationKey>) => body("annotations", annotations(app, undefined, id, { after, limit: "2" }))), items);
   await refusesBadPages(ANNOTATION_PAGE.max, (query) => annotations(app, undefined, id, query));
+});
+
+test("from and to keep the annotations that overlap [from, to), a page at a time", async () => {
+  const app = setup();
+  const id = await imported(app, importer, PUBLIC);
+  for (const [start, end] of [[0, 4], [5, 10], [12, 14], [0, 18]] as const) await body("add", annotate(app, importer, id, audio(start, end)), 201);
+  // Annotations starting at the same place are in id order, a hash's, so these compare as sets
+  const ranges = (items: readonly { start: number; end: number }[]) => items.map((a) => [a.start, a.end]).sort(([a, b], [c, d]) => a! - c! || b! - d!);
+  const within = async (from?: string, to?: string) =>
+    ranges((await body(`${from}-${to}`, annotations(app, undefined, id, { ...(from === undefined ? {} : { from }), ...(to === undefined ? {} : { to }) }))).items);
+  assert.deepEqual(await within("3", "6"), [[0, 4], [0, 18], [5, 10]]);
+  assert.deepEqual(await within("4", "5"), [[0, 18]]);
+  assert.deepEqual(await within("10"), [[0, 18], [12, 14]]);
+  assert.deepEqual(await within(undefined, "1"), [[0, 4], [0, 18]]);
+  assert.deepEqual(await within("14", "18"), [[0, 18]]);
+  assert.equal((await within()).length, 4);
+  const paged = await walk(1, (after?: Cursor<AnnotationKey>) => body("annotations", annotations(app, undefined, id, { after, limit: "1", from: "3", to: "6" })));
+  assert.deepEqual(ranges(paged), [[0, 4], [0, 18], [5, 10]]);
+  for (const [from, to] of [["6", "6"], ["6", "5"], ["-1", "5"], ["x", "5"], ["0", "20001"]] as const) {
+    await expectStatus(`${from}-${to}`, annotations(app, undefined, id, { from, to }), 400);
+  }
 });
 
 test("an entry has at most MAX_ANNOTATIONS, and its annotations go with it", async () => {

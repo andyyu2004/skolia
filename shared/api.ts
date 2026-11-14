@@ -423,6 +423,10 @@ export type ReadingStatus = (typeof READING_STATUSES)[number];
  * status last changed. */
 export type ReadingEntry = z.output<typeof schemas.ReadingEntry>;
 
+/** Which texts a page of the reading list keeps: those with the status, and those in the
+ * language if one is given. */
+export type ReadingFilter = { readonly status: ReadingStatus; readonly lang: Lang | undefined };
+
 /** Where a text is in the list of one status: by when its status last changed, latest
  * first, then by id. */
 export type ReadingKey = z.output<typeof schemas.ReadingKey>;
@@ -436,6 +440,10 @@ export type AnnotationId = z.output<typeof schemas.AnnotationId>;
 export type NewAnnotation = z.input<typeof schemas.NewAnnotation>;
 /** Where an annotation is in its entry's list: where it starts, then its id. */
 export type AnnotationKey = z.output<typeof schemas.AnnotationKey>;
+
+/** Which of an entry's annotations a page keeps: those overlapping [from, to), in UTF-16
+ * units, either side open when it's left out. */
+export type AnnotationFilter = { readonly from: number | undefined; readonly to: number | undefined };
 
 export const ANNOTATION_KIND = /^[a-z][a-z0-9-]{0,31}$/u;
 

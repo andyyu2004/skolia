@@ -1,7 +1,7 @@
 // An entry's annotations: what its user attached to ranges of its text (shared/annotations.ts),
 // seen by whoever sees the entry.
 import type * as z from "zod";
-import { MAX_ANNOTATIONS, timestamp, type Annotation, type AnnotationId, type AnnotationKey, type Paginated, type User } from "@skolia/shared/api";
+import { MAX_ANNOTATIONS, timestamp, type Annotation, type AnnotationFilter, type AnnotationId, type AnnotationKey, type Paginated, type User } from "@skolia/shared/api";
 import { annotationId } from "@skolia/shared/annotations";
 import { textKey } from "@skolia/shared/keys";
 import type { PageRequest } from "@skolia/shared/page";
@@ -11,11 +11,11 @@ import { findDocument, noSuchDocument } from "./documents.ts";
 import { NO_CONTENT, fail, ok, type Failed, type Json, type NoContent, type Ok } from "./result.ts";
 
 /** A page of the annotations of the entry the viewer sees for the text, so they go with the
- * title and credit shown. */
-export async function list(deps: Deps, id: string, viewer: User | null, page: PageRequest<AnnotationKey>): Promise<Ok<Paginated<Annotation, AnnotationKey>> | Failed<404>> {
+ * title and credit shown, that the filter keeps. */
+export async function list(deps: Deps, id: string, viewer: User | null, filter: AnnotationFilter, page: PageRequest<AnnotationKey>): Promise<Ok<Paginated<Annotation, AnnotationKey>> | Failed<404>> {
   const record = await findDocument(deps, id, viewer);
   if (!record) return noSuchDocument();
-  return ok(await deps.documents.annotations(record.id, record.user, page));
+  return ok(await deps.documents.annotations(record.id, record.user, filter, page));
 }
 
 /** 201 for a new annotation on the user's own entry, 200 when it had it already. */
