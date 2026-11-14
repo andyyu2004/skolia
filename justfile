@@ -12,11 +12,18 @@ _default:
 
 # Typecheck and lint everything
 check:
+    pnpm exec biome ci
     pnpm check
     cd analysis && uv run ruff check . && uv run ruff format --check . && uv run pyright
     terraform -chdir=infra fmt -check
     TF_DATA_DIR=.terraform-validate terraform -chdir=infra init -backend=false -input=false >/dev/null
     TF_DATA_DIR=.terraform-validate terraform -chdir=infra validate
+
+# Format everything just check checks the format of
+fmt:
+    pnpm exec biome format --write
+    cd analysis && uv run ruff format .
+    terraform -chdir=infra fmt
 
 # Unit tests, and the built Worker's Durable Object in workerd
 test: build
