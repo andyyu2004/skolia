@@ -69,10 +69,7 @@ test("a person ending fused to the word before is drawn as an ending", () => {
 test("a head chain that loops is cut so every word has a depth", () => {
   const sentence = parseSentence([token("a", "NOUN", 1, "nmod"), token("b", "NOUN", 0, "nmod")]);
   assert.equal(sentence.tops.length, 1);
-  assert.deepEqual(
-    sentence.words.map((w) => w.depth).sort(),
-    [0, 1],
-  );
+  assert.deepEqual(sentence.words.map((w) => w.depth).sort(), [0, 1]);
 });
 
 test("an agreeing word's chain includes the case of the word it agrees with", () => {

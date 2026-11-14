@@ -11,7 +11,16 @@
   import { sheet } from "../../lib/sheet.svelte.ts";
   import { readLink, writeLink, type WordKey } from "../../lib/link.ts";
   import { onDestroy, tick, untrack } from "svelte";
-  import { SAVE_AFTER_MS, firstBelow, onScreen, positionsOf, scrollToTop, snippet, wordElements, type Positions } from "../../lib/position.ts";
+  import {
+    SAVE_AFTER_MS,
+    firstBelow,
+    onScreen,
+    positionsOf,
+    scrollToTop,
+    snippet,
+    wordElements,
+    type Positions,
+  } from "../../lib/position.ts";
   import type { ReaderMode } from "../../lib/mode.ts";
   import { createWords } from "../../lib/words.ts";
   import { createClozes } from "../../lib/clozes.ts";
@@ -143,7 +152,6 @@
     event.preventDefault();
   }
 
-
   function headText(sentence: number, index: number): string | null {
     const id = doc?.pieceOf.get(tokenKey(sentence, index));
     return id === undefined ? null : (doc?.words[id]?.text ?? null);
@@ -175,9 +183,7 @@
     if (!doc || !linked || !location.hash.startsWith(`#/doc/${id}`)) return;
     const word = piece?.words.find((w) => w.token.upos !== "PUNCT") ?? piece?.words[0];
     const query = writeLink(
-      word
-        ? { word: [word.sentence, word.index], view: sheet.view, layout: sheet.layout, whole: sheet.whole }
-        : null,
+      word ? { word: [word.sentence, word.index], view: sheet.view, layout: sheet.layout, whole: sheet.whole } : null,
     );
     const hash = `#/doc/${id}${query}`;
     if (hash !== location.hash) history.replaceState(history.state, "", hash);
@@ -331,13 +337,13 @@
               >
                 {#if mode === "reading"}
                   <svg viewBox="0 0 16 16" aria-hidden="true"
-                    ><path d="M8 4.5C6.8 3.6 5 3.2 2.5 3.2v9c2.5 0 4.3.4 5.5 1.3 1.2-.9 3-1.3 5.5-1.3v-9c-2.5 0-4.3.4-5.5 1.3zM8 4.5v9" /></svg
+                    ><path
+                      d="M8 4.5C6.8 3.6 5 3.2 2.5 3.2v9c2.5 0 4.3.4 5.5 1.3 1.2-.9 3-1.3 5.5-1.3v-9c-2.5 0-4.3.4-5.5 1.3zM8 4.5v9"
+                    /></svg
                   >
                   Reading
                 {:else}
-                  <svg viewBox="0 0 16 16" aria-hidden="true"
-                    ><path d="M3 5.5h7.5v7.5H3zM5.5 3H13v7.5" /></svg
-                  >
+                  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 5.5h7.5v7.5H3zM5.5 3H13v7.5" /></svg>
                   Learning
                 {/if}
               </Button>
@@ -357,12 +363,22 @@
         </div>
       </div>
       <p class="credit">
-        {#if summary.author}<span>{summary.author}</span>{/if}
+        {#if summary.author}
+          <span>{summary.author}</span>
+        {/if}
         <span>
-          {#if licence.url}<a href={licence.url} rel="license noreferrer">{licence.short}</a>{:else}{licence.short}{/if}
+          {#if licence.url}
+            <a href={licence.url} rel="license noreferrer">{licence.short}</a>
+          {:else}
+            {licence.short}
+          {/if}
         </span>
-        {#if summary.source}<span><a href={summary.source} rel="noreferrer">source</a></span>{/if}
-        {#if summary.visibility === "private"}<span>private</span>{/if}
+        {#if summary.source}
+          <span><a href={summary.source} rel="noreferrer">source</a></span>
+        {/if}
+        {#if summary.visibility === "private"}
+          <span>private</span>
+        {/if}
         {#if notice.kind === "queued" || notice.kind === "updating"}
           {@const place = queueText(summary)}
           <em class="processing">{notice.kind === "queued" ? "Queued" : "Updating"}{place ? `: ${place}` : ""}</em>
@@ -374,7 +390,9 @@
         {@const start = reading?.analysis.sentences[resume[0]]?.tokens[resume[1]]?.start}
         <p class="continue">
           <Button variant="quiet" small onclick={() => void continueReading()}>Continue reading</Button>
-          {#if reading && start !== undefined}<span class="from">{snippet(reading.text, start)}</span>{/if}
+          {#if reading && start !== undefined}
+            <span class="from">{snippet(reading.text, start)}</span>
+          {/if}
           <Button variant="icon" aria-label="Close" onclick={() => (resume = null)}>
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" /></svg>
           </Button>
@@ -406,7 +424,12 @@
         {#each doc.pieces as p, i (i)}
           <!-- Words are spans, not buttons: a button is laid out as an inline block, so a
                line could break between a word and the punctuation after it -->
-          {#if p.kind === "gap"}{p.text}{:else if p.punct}<span class="punct">{p.text}</span>{:else}<span
+          {#if p.kind === "gap"}
+            {p.text}
+          {:else if p.punct}
+            <span class="punct">{p.text}</span>
+          {:else}
+            <span
               role="button"
               tabindex={p.id === tabStop ? 0 : -1}
               class={["w", { selected: p.id === selected, head: p.id === headPiece, trigger: p.id === triggerPiece }]}
@@ -416,8 +439,10 @@
                   event.preventDefault();
                   toggle(p.id);
                 }
-              }}>{p.text}</span
-            >{/if}
+              }}
+              >{p.text}</span
+            >
+          {/if}
         {/each}
       </article>
       {#if reading}

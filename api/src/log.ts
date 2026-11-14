@@ -16,7 +16,12 @@ const METHOD = {
 /** An Error turns into {} in JSON */
 function plain(value: unknown): unknown {
   if (value instanceof Error) {
-    return { name: value.name, message: value.message, stack: value.stack, ...(value.cause === undefined ? {} : { cause: plain(value.cause) }) };
+    return {
+      name: value.name,
+      message: value.message,
+      stack: value.stack,
+      ...(value.cause === undefined ? {} : { cause: plain(value.cause) }),
+    };
   }
   return value;
 }

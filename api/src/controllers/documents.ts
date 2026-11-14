@@ -51,7 +51,11 @@ export async function listed(deps: Deps, record: StoredDocument, viewer: User | 
 }
 
 /** A page of the documents the user imported, public or private. */
-export async function mine(deps: Deps, user: User, page: PageRequest<DocumentKey>): Promise<Ok<Paginated<DocumentSummary, DocumentKey>> | Failed<401>> {
+export async function mine(
+  deps: Deps,
+  user: User,
+  page: PageRequest<DocumentKey>,
+): Promise<Ok<Paginated<DocumentSummary, DocumentKey>> | Failed<401>> {
   return list(deps, user, { tags: {}, lang: undefined, title: undefined, mine: true }, page);
 }
 
@@ -92,7 +96,10 @@ export async function importText(
   const own = known ? await ownEntry(deps, id, user) : null;
   if (own === null) {
     if (!known) await deps.blobs.put(textKey(id), body.text, "text/plain; charset=utf-8");
-    await deps.documents.add({ id, lang: body.lang, words: countWords(body.text) }, { id, user: user.id, imported: timestamp(deps.now()), ...fields });
+    await deps.documents.add(
+      { id, lang: body.lang, words: countWords(body.text) },
+      { id, user: user.id, imported: timestamp(deps.now()), ...fields },
+    );
   } else if (own.visibility === "private" && fields.visibility === "public") {
     await deps.documents.update(id, user.id, { ...fields, title: own.title, tags: own.tags });
   }
@@ -161,7 +168,12 @@ export function placeIn(jobs: IngestJobs | null, id: DocumentId): QueuePlace {
 }
 
 /** The id is the text's hash, so the text at this URL never changes. */
-export async function text(deps: Deps, id: string, viewer: User | null, ifNoneMatch: string | undefined): Promise<BlobResult | NotModified | Failed<404 | 500>> {
+export async function text(
+  deps: Deps,
+  id: string,
+  viewer: User | null,
+  ifNoneMatch: string | undefined,
+): Promise<BlobResult | NotModified | Failed<404 | 500>> {
   const record = await findDocument(deps, id, viewer);
   if (!record) return noSuchDocument();
   return stored(deps, textKey(record.id), undefined, ifNoneMatch, fail(500, "missing text"));
@@ -228,8 +240,20 @@ async function current(deps: Deps, record: StoredDocument, versions: VersionsOf,
 type RequeueReason = "imported" | "reimported" | "stuck" | "outdated";
 
 /** Queue the document, keeping the last analysis readable until the new one is ready. */
-async function requeue(deps: Deps, record: Pick<StoredDocument, "id" | "lang">, status: Status | null, at: Date, reason: RequeueReason): Promise<Status> {
-  logger.info("queueing document", { doc: record.id, lang: record.lang, reason, previous: status?.state ?? null, since: status?.updated ?? null });
+async function requeue(
+  deps: Deps,
+  record: Pick<StoredDocument, "id" | "lang">,
+  status: Status | null,
+  at: Date,
+  reason: RequeueReason,
+): Promise<Status> {
+  logger.info("queueing document", {
+    doc: record.id,
+    lang: record.lang,
+    reason,
+    previous: status?.state ?? null,
+    since: status?.updated ?? null,
+  });
   const queued: Status = { state: "queued", updated: timestamp(at) };
   for (const key of ["analyzer", "lexicon", "analysis", "bundle"] as const) {
     const value = status?.[key];
@@ -296,7 +320,12 @@ export function parseVersions(raw: string): Versions | null {
 }
 
 function summarize({ user, importerName, ...record }: StoredDocument, status: Status | null, viewer: User | null): DocumentSummary {
-  const summary: DocumentSummary = { ...record, importer: { id: user, name: importerName }, mine: user === viewer?.id, state: status?.state ?? "failed" };
+  const summary: DocumentSummary = {
+    ...record,
+    importer: { id: user, name: importerName },
+    mine: user === viewer?.id,
+    state: status?.state ?? "failed",
+  };
   const analysis = nameOf(status?.analysis);
   const bundle = nameOf(status?.bundle);
   if (analysis !== undefined && bundle !== undefined) summary.reading = { analysis, bundle };

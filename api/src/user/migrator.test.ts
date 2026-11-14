@@ -36,9 +36,7 @@ test("a log that skips or reverts out of order is refused", () => {
 
 test("applied migrations must still be in the code, unedited and under the same name", () => {
   assert.deepEqual(problems([entry(1, "up"), entry(2, "up")], MIGRATIONS), []);
-  assert.deepEqual(problems([entry(1, "up", { checksum: "edited" })], MIGRATIONS), [
-    "version 1 (one) was edited after it was applied",
-  ]);
+  assert.deepEqual(problems([entry(1, "up", { checksum: "edited" })], MIGRATIONS), ["version 1 (one) was edited after it was applied"]);
   assert.deepEqual(problems([entry(1, "up", { name: "uno" })], MIGRATIONS), ["version 1 was applied as uno but is one in the code"]);
   assert.deepEqual(problems([entry(1, "up"), entry(2, "up")], [ONE]), ["version 2 (two) is applied but isn't in the code"]);
 });

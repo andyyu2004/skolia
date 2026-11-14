@@ -55,10 +55,10 @@
           aria-describedby="new-lemmas-per-day-hint"
           bind:value={newLemmasPerDay}
           oninput={() => save.reset()}
-        />
+        >
         {#snippet hint()}
-          How many words you haven't reviewed before come up each day, in each language, each with its cards for
-          recognising and recalling it. The default is {DEFAULT_NEW_LEMMAS_PER_DAY}.
+          How many words you haven't reviewed before come up each day, in each language, each with its cards for recognising and recalling
+          it. The default is {DEFAULT_NEW_LEMMAS_PER_DAY}.
         {/snippet}
       </Field>
       <Field label="New forms a day" for="new-forms-per-day">
@@ -74,21 +74,23 @@
           aria-describedby="new-forms-per-day-hint"
           bind:value={newFormsPerDay}
           oninput={() => save.reset()}
-        />
+        >
         {#snippet hint()}
-          How many new sentences, with a form of a word to fill in, come up each day, in each language. A word's forms
-          wait until you've reviewed the word. The default is {DEFAULT_NEW_FORMS_PER_DAY}.
+          How many new sentences, with a form of a word to fill in, come up each day, in each language. A word's forms wait until you've
+          reviewed the word. The default is {DEFAULT_NEW_FORMS_PER_DAY}.
         {/snippet}
       </Field>
       <label class="check">
-        <input type="checkbox" disabled={!loaded} bind:checked={formsWithWords} onchange={() => save.reset()} />
+        <input type="checkbox" disabled={!loaded} bind:checked={formsWithWords} onchange={() => save.reset()}>
         Review forms with words
       </label>
       <div class="actions">
         <Button type="submit" variant="primary" disabled={save.isPending || !loaded}>Save</Button>
         <span role="status" class="muted">{save.isSuccess ? "Saved" : ""}</span>
       </div>
-      {#if error}<p class="error" role="alert">{error}</p>{/if}
+      {#if error}
+        <p class="error" role="alert">{error}</p>
+      {/if}
     </form>
   {/if}
 </Page>

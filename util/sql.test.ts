@@ -63,7 +63,10 @@ test("id quotes plain names, and throws on anything else", () => {
 
 test("inline writes the parameters in as literals", () => {
   const name = "x'); DROP TABLE user; --";
-  assert.equal(sql.inline(sql`INSERT INTO t VALUES (${name}, ${3}, ${-1.5}, ${null});`), `INSERT INTO t VALUES ('x''); DROP TABLE user; --', 3, -1.5, NULL);`);
+  assert.equal(
+    sql.inline(sql`INSERT INTO t VALUES (${name}, ${3}, ${-1.5}, ${null});`),
+    `INSERT INTO t VALUES ('x''); DROP TABLE user; --', 3, -1.5, NULL);`,
+  );
   assert.equal(sql.inline(sql`DELETE FROM t;`), "DELETE FROM t;");
   assert.throws(() => sql.inline(sql`SELECT ${Number.NaN}`), /no SQL literal/u);
   assert.throws(() => sql.inline(sql`SELECT '?', ${1}`), /1 parameters for 2 placeholders/u);

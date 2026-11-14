@@ -11,7 +11,16 @@ import { join } from "node:path";
 import { hc } from "hono/client";
 import { parse as parseYaml } from "yaml";
 import * as z from "zod";
-import { DOCUMENT_PAGE, LANGS, type DocumentId, type DocumentKey, type DocumentSummary, type DocumentUpdate, type Lang, type Tags } from "@skolia/shared/api";
+import {
+  DOCUMENT_PAGE,
+  LANGS,
+  type DocumentId,
+  type DocumentKey,
+  type DocumentSummary,
+  type DocumentUpdate,
+  type Lang,
+  type Tags,
+} from "@skolia/shared/api";
 import { docId } from "@skolia/shared/keys";
 import { allPages, type Cursor } from "@skolia/shared/page";
 import * as schemas from "@skolia/shared/schemas";
@@ -168,7 +177,8 @@ export async function sync(api: Api, texts: readonly Curated[], { check = false,
   for (const change of changes) {
     const what = describe(change);
     if (change.kind === "import") await expectOk(await api.documents.$post({ json: change.text.request }), what);
-    else if (change.kind === "update") await expectOk(await api.documents[":id"].$patch({ param: { id: change.id }, json: change.update }), what);
+    else if (change.kind === "update")
+      await expectOk(await api.documents[":id"].$patch({ param: { id: change.id }, json: change.update }), what);
     else await expectOk(await api.documents[":id"].$delete({ param: { id: change.document.id } }), what);
   }
   return changes;

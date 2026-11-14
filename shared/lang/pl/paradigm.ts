@@ -100,9 +100,7 @@ export function layout(builder: Builder, forms: Form[], entry: Pick<Entry, "upos
   switch (entry.upos) {
     case "NOUN":
     case "PROPN":
-      return compact([
-        builder.table("Declension", graded, caseRow, caseLabels(), numberColumn, numberLabels()),
-      ]);
+      return compact([builder.table("Declension", graded, caseRow, caseLabels(), numberColumn, numberLabels())]);
     case "ADJ":
     case "DET":
     case "PRON":
@@ -127,9 +125,7 @@ function verbTables(builder: Builder, forms: Form[], token: Shown): Table[] {
   const finite = positive.filter((f) => f.feats.VerbForm === "Fin");
   const persons = personLabels();
   const indicative = (tense: string) =>
-    finite.filter(
-      (f) => f.feats.Mood === "Ind" && f.feats.Tense === tense && PERSON_ORDER.includes(f.feats.Person ?? ""),
-    );
+    finite.filter((f) => f.feats.Mood === "Ind" && f.feats.Tense === tense && PERSON_ORDER.includes(f.feats.Person ?? ""));
   const participle = (voice: "Act" | "Pass", title: string): Table | null => {
     const all = positive.filter((f) => f.feats.VerbForm === "Part" && f.feats.Voice === voice);
     if (t.VerbForm === "Part" && t.Voice === voice) {
@@ -194,9 +190,7 @@ function comparison(builder: Builder, forms: Form[]): Table | null {
  * (inanimate, for masculine); for indeclinables (adverbs) every form. */
 function isCitationForm(f: Form, gender: "Masc" | "Neut"): boolean {
   if (f.feats.Case === undefined) return true;
-  const ofGender =
-    f.feats.Gender === gender &&
-    (gender !== "Masc" || (f.feats.Animacy !== "Hum" && f.feats.Animacy !== "Nhum"));
+  const ofGender = f.feats.Gender === gender && (gender !== "Masc" || (f.feats.Animacy !== "Hum" && f.feats.Animacy !== "Nhum"));
   return f.feats.Case === "Nom" && f.feats.Number === "Sing" && ofGender;
 }
 

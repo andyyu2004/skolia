@@ -40,9 +40,11 @@
         {#each tags as tag (formatTag(tag))}
           {@const key = formatTag(tag)}
           <label>
-            <input type="checkbox" checked={selected.includes(key)} onchange={(event) => toggle(key, event.currentTarget.checked)} />
+            <input type="checkbox" checked={selected.includes(key)} onchange={(event) => toggle(key, event.currentTarget.checked)}>
             <span class="tag">{tagLabel(tag)}</span>
-            {#if tag.description}<span class="description">{tag.description}</span>{/if}
+            {#if tag.description}
+              <span class="description">{tag.description}</span>
+            {/if}
           </label>
         {/each}
       </fieldset>

@@ -95,9 +95,7 @@ export class Ingester extends DurableObject<Env> {
     const container = this.ctx.container;
     if (!container?.running) return null;
     try {
-      const response = await container
-        .getTcpPort(PORT)
-        .fetch("http://ingest/jobs", { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+      const response = await container.getTcpPort(PORT).fetch("http://ingest/jobs", { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
       if (!response.ok) {
         await response.body?.cancel();
         return null;
@@ -198,9 +196,7 @@ export class Ingester extends DurableObject<Env> {
     const deadline = Date.now() + START_TIMEOUT_MS;
     for (;;) {
       try {
-        const response = await container
-          .getTcpPort(PORT)
-          .fetch("http://ingest/busy", { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+        const response = await container.getTcpPort(PORT).fetch("http://ingest/busy", { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
         await response.body?.cancel();
         if (response.ok) return;
       } catch {
@@ -237,9 +233,7 @@ export class Ingester extends DurableObject<Env> {
 
   private async busy(container: Container): Promise<boolean> {
     try {
-      const response = await container
-        .getTcpPort(PORT)
-        .fetch("http://ingest/busy", { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+      const response = await container.getTcpPort(PORT).fetch("http://ingest/busy", { signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
       const body: unknown = await response.json();
       return typeof body === "object" && body !== null && "busy" in body && body.busy === true;
     } catch (error: unknown) {
@@ -251,7 +245,10 @@ export class Ingester extends DurableObject<Env> {
 
 export default {
   async queue(batch, env) {
-    logger.info("received jobs", { docs: batch.messages.map((message) => message.body.doc), attempts: batch.messages.map((message) => message.attempts) });
+    logger.info("received jobs", {
+      docs: batch.messages.map((message) => message.body.doc),
+      attempts: batch.messages.map((message) => message.attempts),
+    });
     const byLang = new Map<Lang, Message<IngestJob>[]>();
     for (const message of batch.messages) {
       const lang = message.body.lang;

@@ -52,13 +52,10 @@
       ? fitted(sentence, { shape, measure, cases: focus.chain, width: available })
       : layout(sentence, { shape, direction: "across", measure, cases: focus.chain }),
   );
-  const near = (e: Edge): boolean =>
-    e.kind === "dependency" && (selected.has(e.link.from.index) || selected.has(e.link.to.index));
+  const near = (e: Edge): boolean => e.kind === "dependency" && (selected.has(e.link.from.index) || selected.has(e.link.to.index));
   /** Highlighted lines after the rest, so where lines share a stretch the highlight shows */
   const edges = $derived(
-    [...diagram.edges].sort(
-      (a, b) => Number(a.kind === "case") - Number(b.kind === "case") || Number(near(a)) - Number(near(b)),
-    ),
+    [...diagram.edges].sort((a, b) => Number(a.kind === "case") - Number(b.kind === "case") || Number(near(a)) - Number(near(b))),
   );
   const key = (e: Edge): string => `${e.kind} ${e.link.from.index} ${e.link.to.index}`;
 
@@ -141,7 +138,8 @@
               class={{ selected: span.words.some((w) => selected.has(w.index)) }}
               x={span.at.x}
               y={span.at.y}
-              onclick={() => first && onselect(first.index)}>{span.text}</text
+              onclick={() => first && onselect(first.index)}
+              >{span.text}</text
             >
           {/each}
         </g>
@@ -166,21 +164,18 @@
         {/if}
         {#each box.lines as line, j (j)}
           <text x={line.at.x} y={line.at.y}
-            >{#each line.runs as run, k (k)}<tspan
+            >{#each line.runs as run, k (k)}
+              <tspan
                 class={[CLASS[run.role], { why: run.role === "case" && isSelected && focus.chain.length > 0 }]}
                 font-size={SIZE[run.role]}
-                lang={run.role === "form" ? lang : undefined}>{run.text}</tspan
-              >{/each}</text
+                lang={run.role === "form" ? lang : undefined}
+                >{run.text}</tspan
+              >
+            {/each}</text
           >
         {/each}
         {#if word.index === focus.trigger}
-          <line
-            class="trigger"
-            x1={box.underline[0].x}
-            y1={box.underline[0].y}
-            x2={box.underline[1].x}
-            y2={box.underline[1].y}
-          />
+          <line class="trigger" x1={box.underline[0].x} y1={box.underline[0].y} x2={box.underline[1].x} y2={box.underline[1].y} />
         {/if}
       </g>
     {/each}

@@ -35,9 +35,7 @@ export async function checksum(sql: string): Promise<string> {
 }
 
 export async function withChecksums(migrations: readonly Migration[]): Promise<Checksummed[]> {
-  return Promise.all(
-    migrations.map(async (m) => ({ ...m, upChecksum: await checksum(m.up), downChecksum: await checksum(m.down) })),
-  );
+  return Promise.all(migrations.map(async (m) => ({ ...m, upChecksum: await checksum(m.up), downChecksum: await checksum(m.down) })));
 }
 
 export function applied(log: readonly LogEntry[]): LogEntry[] {
@@ -62,7 +60,8 @@ export function problems(stack: readonly LogEntry[], migrations: readonly Checks
   return stack.flatMap((entry) => {
     const migration = migrations[entry.version - 1];
     if (migration === undefined) return [`version ${entry.version} (${entry.name}) is applied but isn't in the code`];
-    if (migration.name !== entry.name) return [`version ${entry.version} was applied as ${entry.name} but is ${migration.name} in the code`];
+    if (migration.name !== entry.name)
+      return [`version ${entry.version} was applied as ${entry.name} but is ${migration.name} in the code`];
     if (migration.upChecksum !== entry.checksum) return [`version ${entry.version} (${entry.name}) was edited after it was applied`];
     return [];
   });

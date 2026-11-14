@@ -14,14 +14,21 @@
   import Upload from "./pages/Upload.svelte";
   import { versionUrl } from "./lib/version.ts";
 
-  type Route = { page: "explore" } | { page: "list" } | { page: "upload" } | { page: "review"; lang: Lang | null; group: CardGroup | null } | { page: "settings" } | { page: "reader"; id: DocumentId };
+  type Route =
+    | { page: "explore" }
+    | { page: "list" }
+    | { page: "upload" }
+    | { page: "review"; lang: Lang | null; group: CardGroup | null }
+    | { page: "settings" }
+    | { page: "reader"; id: DocumentId };
 
   function parse(hash: string): Route {
     if (hash === "#/list") return { page: "list" };
     if (hash === "#/upload") return { page: "upload" };
     if (hash === "#/review") return { page: "review", lang: null, group: null };
     const [, review, group] = /^#\/review\/([a-z]+)(?:\/(words|forms))?$/.exec(hash) ?? [];
-    if (review !== undefined && isLang(review)) return { page: "review", lang: review, group: group === "words" || group === "forms" ? group : null };
+    if (review !== undefined && isLang(review))
+      return { page: "review", lang: review, group: group === "words" || group === "forms" ? group : null };
     if (hash === "#/settings") return { page: "settings" };
     // After the id, a word in the text (lib/link.ts), which Reader reads
     const [, doc] = /^#\/doc\/([^?]+)(?:\?.*)?$/.exec(hash) ?? [];

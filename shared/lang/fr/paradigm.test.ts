@@ -20,7 +20,14 @@ function token(text: string, lemma: string, upos: Token["upos"], feats: Feats): 
 }
 
 function current(tables: Table[]): string[] {
-  return tables.flatMap((t) => t.rows.flatMap((r) => r.cells.flat().filter((f) => f.current).map((f) => f.text)));
+  return tables.flatMap((t) =>
+    t.rows.flatMap((r) =>
+      r.cells
+        .flat()
+        .filter((f) => f.current)
+        .map((f) => f.text),
+    ),
+  );
 }
 
 const FEATS: Feats[] = [
@@ -101,14 +108,7 @@ function titles(tables: Table[]): string[] {
 test("a verb has a table per simple tense it has forms for, then its participles", () => {
   const prends = token("prends", "prendre", "VERB", FEATS[2] ?? {});
   const tables = paradigmTables(BUNDLE, PRENDRE, prends, french.paradigm);
-  assert.deepEqual(titles(tables), [
-    "Infinitive",
-    "Present",
-    "Imperfect",
-    "Conditional",
-    "Present participle",
-    "Past participle",
-  ]);
+  assert.deepEqual(titles(tables), ["Infinitive", "Present", "Imperfect", "Conditional", "Present participle", "Past participle"]);
   // prends is the 1st and 2nd person singular; only the token's own (2nd) is marked
   const present = tables.find((t) => t.title === "Present");
   assert.ok(present);

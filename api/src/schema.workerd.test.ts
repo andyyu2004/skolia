@@ -21,14 +21,28 @@ test("every D1 table is STRICT, and timestamps must be toISOString()'s", async (
   ).all();
   assert.deepEqual(
     results,
-    ["account", "apikey", "document", "session", "tag", "user", "user_document", "user_document_tag", "verification"].map((name) => ({ name, strict: 1 })),
+    ["account", "apikey", "document", "session", "tag", "user", "user_document", "user_document_tag", "verification"].map((name) => ({
+      name,
+      strict: 1,
+    })),
   );
   const user = await local.signUp(ALICE);
   const document = env.DB.prepare(`insert into document (id, lang, words) values (?, 'pl', ?)`);
   await document.bind("a", 1).run();
   await assert.rejects(document.bind("b", "many").run(), /cannot store TEXT/);
-  const entry = (document: string, visibility: string, licence: string, { source = null, imported = "2026-11-07T00:00:00.000Z", owner = user.id }: { source?: string | null; imported?: string; owner?: string } = {}) =>
-    env.DB.prepare(`insert or replace into user_document values (?, ?, 't', ?, ?, ?, null, ?)`).bind(owner, document, imported, visibility, licence, source).run();
+  const entry = (
+    document: string,
+    visibility: string,
+    licence: string,
+    {
+      source = null,
+      imported = "2026-11-07T00:00:00.000Z",
+      owner = user.id,
+    }: { source?: string | null; imported?: string; owner?: string } = {},
+  ) =>
+    env.DB.prepare(`insert or replace into user_document values (?, ?, 't', ?, ?, ?, null, ?)`)
+      .bind(owner, document, imported, visibility, licence, source)
+      .run();
   await entry("a", "public", "cc0");
   for (const imported of ["2026-11-07T00:00:00Z", "2026-11-07 00:00:00", "yesterday"]) {
     await assert.rejects(entry("a", "public", "cc0", { imported }), /CHECK constraint failed/);
@@ -60,7 +74,9 @@ test("no document query scans a whole table or sorts its rows", async () => {
   );
   // A list's page walks its indexes in the list's order; visible sorts one text's entries
   const paged = (name: string) => name.startsWith("list") || name.startsWith("tags");
-  const wrong = plans.filter(({ name, plan }) => plan.some((d) => /^SCAN \S+$/u.test(d) || (paged(name) && /USE TEMP B-TREE FOR .*ORDER BY/u.test(d))));
+  const wrong = plans.filter(({ name, plan }) =>
+    plan.some((d) => /^SCAN \S+$/u.test(d) || (paged(name) && /USE TEMP B-TREE FOR .*ORDER BY/u.test(d))),
+  );
   assert.deepEqual(wrong, [], wrong.map(({ name, plan }) => `${name}: ${plan.join("; ")}`).join("\n"));
 });
 
@@ -70,7 +86,14 @@ test("a tag's kind and value are kind:value's, and each kind's tags have their o
   await add("form", "poem", 0);
   await add("form", "story", 1);
   await assert.rejects(add("form", "play", 1), /UNIQUE constraint failed/);
-  for (const [kind, value] of [["Form", "x"], ["form", ""], ["form", "a b"], ["form:x", "y"], ["-form", "y"], ["form", "-x"]] as const) {
+  for (const [kind, value] of [
+    ["Form", "x"],
+    ["form", ""],
+    ["form", "a b"],
+    ["form:x", "y"],
+    ["-form", "y"],
+    ["form", "-x"],
+  ] as const) {
     await assert.rejects(add(kind, value, 9), /CHECK constraint failed/, `${kind}:${value}`);
   }
   await local.env.DB.prepare("delete from tag where kind = 'form'").run();
@@ -80,9 +103,13 @@ test("an entry's tags are tags skolia has, one of each kind, and go with the ent
   const { env } = local;
   const user = await local.signUp(ALICE);
   await env.DB.prepare("insert into document (id, lang, words) values ('a', 'pl', 1)").run();
-  await env.DB.prepare(`insert into user_document values (?, 'a', 't', '2026-11-07T00:00:00.000Z', 'public', 'cc0', null, null)`).bind(user.id).run();
+  await env.DB.prepare(`insert into user_document values (?, 'a', 't', '2026-11-07T00:00:00.000Z', 'public', 'cc0', null, null)`)
+    .bind(user.id)
+    .run();
   const tag = (kind: string, value: string, document = "a") =>
-    env.DB.prepare("insert into user_document_tag (user_id, document_id, kind, value) values (?, ?, ?, ?)").bind(user.id, document, kind, value).run();
+    env.DB.prepare("insert into user_document_tag (user_id, document_id, kind, value) values (?, ?, ?, ?)")
+      .bind(user.id, document, kind, value)
+      .run();
   const { results: known } = await env.DB.prepare("select kind, value from tag").all<{ kind: string; value: string }>();
   for (const { kind, value } of known) {
     await tag(kind, value);
@@ -104,7 +131,11 @@ test("a list narrowed by tags seeks each value from the cursor, and merges them"
     .bind(...Array.from({ length: params }, () => "x"))
     .all<{ detail: string }>();
   const plan = results.map((r) => r.detail);
-  const seeks = plan.filter((d) => /^SEARCH tagged USING COVERING INDEX user_document_tag_value_idx \(kind=\? AND value=\? AND \(user_id,document_id\)>\(\?,\?\)\)$/u.test(d));
+  const seeks = plan.filter((d) =>
+    /^SEARCH tagged USING COVERING INDEX user_document_tag_value_idx \(kind=\? AND value=\? AND \(user_id,document_id\)>\(\?,\?\)\)$/u.test(
+      d,
+    ),
+  );
   assert.equal(seeks.length, 2, plan.join("; "));
   assert.equal(plan[0], "MERGE (UNION ALL)", plan.join("; "));
 });

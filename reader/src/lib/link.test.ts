@@ -7,10 +7,7 @@ const ID = "a".repeat(64);
 test("a link writes only what differs from the defaults", () => {
   assert.equal(writeLink(null), "");
   assert.equal(writeLink({ word: [3, 12], view: "word", layout: "tree", whole: true }), "?w=3.12");
-  assert.equal(
-    writeLink({ word: [3, 12], view: "sentence", layout: "tree", whole: true }),
-    "?w=3.12&view=sentence&draw=tree&whole=1",
-  );
+  assert.equal(writeLink({ word: [3, 12], view: "sentence", layout: "tree", whole: true }), "?w=3.12&view=sentence&draw=tree&whole=1");
   assert.equal(writeLink({ word: [0, 0], view: "sentence", layout: "arcs", whole: false }), "?w=0.0&view=sentence");
 });
 

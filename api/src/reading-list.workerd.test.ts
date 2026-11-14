@@ -10,7 +10,11 @@ useLocal();
 const LATER = "2026-11-04T01:00:00.000Z";
 const LATEST = "2026-11-04T02:00:00.000Z";
 
-async function imported(app: App, text: string, { headers = importer, lang = "pl", visibility = "private" }: { headers?: Headers; lang?: Lang; visibility?: "public" | "private" } = {}): Promise<DocumentId> {
+async function imported(
+  app: App,
+  text: string,
+  { headers = importer, lang = "pl", visibility = "private" }: { headers?: Headers; lang?: Lang; visibility?: "public" | "private" } = {},
+): Promise<DocumentId> {
   const json = { text, lang, visibility, licence: visibility === "public" ? ("cc0" as const) : ("unknown" as const) };
   return (await body("import", client(app, headers).documents.$post({ json }), 202)).id;
 }
@@ -79,11 +83,17 @@ test("the list shows each text as the user sees it, and leaves out one they can 
   const page = await body("list", client(app, importer).me["reading-list"].$get({ query: { status: "to-read" } }));
   assert.deepEqual(
     page.items.map((item) => [item.document.id, item.document.mine, item.document.importer.name]),
-    [own, shared].sort().reverse().map((id) => (id === own ? [own, true, "Ivy"] : [shared, false, "Alice"])),
+    [own, shared]
+      .sort()
+      .reverse()
+      .map((id) => (id === own ? [own, true, "Ivy"] : [shared, false, "Alice"])),
   );
   await expectStatus("alice deletes hers", client(app, alice).documents[":id"].$delete({ param: { id: shared } }), 204);
   const after = await body("list", client(app, importer).me["reading-list"].$get({ query: { status: "to-read" } }));
-  assert.deepEqual(after.items.map((item) => item.document.id), [own]);
+  assert.deepEqual(
+    after.items.map((item) => item.document.id),
+    [own],
+  );
   assert.equal((await entry(app, importer, shared)).entry?.status, "to-read");
 });
 

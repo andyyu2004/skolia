@@ -47,7 +47,7 @@
     {#if user}
       <button type="button" class="avatar-button" popovertarget="account-menu" aria-label="Account: {user.name}">
         {#if user.image}
-          <img class="avatar" src={user.image} alt="" referrerpolicy="no-referrer" />
+          <img class="avatar" src={user.image} alt="" referrerpolicy="no-referrer">
         {:else}
           <span class="avatar initial" aria-hidden="true">{initial(user.name)}</span>
         {/if}
@@ -60,9 +60,7 @@
         </p>
         <ul>
           <li>
-            <a href="#/settings" aria-current={page === "settings" ? "page" : undefined} onclick={() => menu?.hidePopover()}
-              >Settings</a
-            >
+            <a href="#/settings" aria-current={page === "settings" ? "page" : undefined} onclick={() => menu?.hidePopover()}>Settings</a>
           </li>
           <li>
             <button
@@ -73,7 +71,8 @@
                   await signOut();
                   if (page === "list" || page === "upload" || page === "review" || page === "settings") location.hash = "#/";
                   await forgetUser(client);
-                })}>Sign out</button
+                })}
+              >Sign out</button
             >
           </li>
         </ul>

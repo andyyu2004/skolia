@@ -9,8 +9,7 @@ const measure = (text: string): number => text.length * 7;
 const draw = (sentence: Sentence, options: Partial<LayoutOptions> = {}): Diagram =>
   layout(sentence, { shape: "arcs", direction: "across", measure, ...options });
 const box = (d: Diagram, form: string) => d.boxes.find((b) => b.word.form === form);
-const edge = (d: Diagram, from: string, to: string) =>
-  d.edges.find((e) => e.link.from.form === from && e.link.to.form === to);
+const edge = (d: Diagram, from: string, to: string) => d.edges.find((e) => e.link.from.form === from && e.link.to.form === to);
 
 test("an arc is one level above the arcs it spans", () => {
   const sentence = parseSentence(SENTENCE);
@@ -56,7 +55,10 @@ test("at a word, shorter arcs leave nearer their side so longer ones pass outsid
 test("across, the words read left to right with the arcs above them", () => {
   const d = draw(parseSentence(SENTENCE));
   const xs = d.boxes.map((b) => b.x);
-  assert.deepEqual(xs, [...xs].sort((a, b) => a - b));
+  assert.deepEqual(
+    xs,
+    [...xs].sort((a, b) => a - b),
+  );
   const obj = edge(d, "je", "rybę");
   const top = Math.min(...d.boxes.map((b) => b.y));
   assert.ok(obj && obj.points.every((p) => p.y <= top));
@@ -67,7 +69,10 @@ test("across, the words read left to right with the arcs above them", () => {
 test("down, the words read top to bottom with the arcs to their left and no labels on them", () => {
   const d = draw(parseSentence(SENTENCE), { direction: "down" });
   const ys = d.boxes.map((b) => b.y);
-  assert.deepEqual(ys, [...ys].sort((a, b) => a - b));
+  assert.deepEqual(
+    ys,
+    [...ys].sort((a, b) => a - b),
+  );
   const left = Math.min(...d.boxes.map((b) => b.x));
   for (const e of d.edges) {
     assert.ok(e.points.every((p) => p.x <= left));
@@ -98,10 +103,7 @@ test("a case reason a dependency carries is drawn on it, not as a line of its ow
   const sentence = parseSentence(SENTENCE);
   const d = draw(sentence, { cases: caseChain(sentence, new Set([3])) });
   assert.equal(edge(d, "je", "rybę")?.why, true);
-  assert.equal(
-    d.edges.filter((e) => e.kind === "case").length,
-    0,
-  );
+  assert.equal(d.edges.filter((e) => e.kind === "case").length, 0);
 });
 
 test("a case reason no dependency carries is drawn past the words, into the word with it", () => {

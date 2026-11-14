@@ -1,6 +1,23 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MAX_NEW_PER_DAY, WORD_PAGE, lemmaParam, type CardCounts, type CardGroup, type Due, type Lang, type LemmaId, type NewClozeInput, type Rating, type Reviewed, type ReviewRequestInput, type Settings, type Word, type WordKey, type WordStatus } from "@skolia/shared/api";
+import {
+  MAX_NEW_PER_DAY,
+  WORD_PAGE,
+  lemmaParam,
+  type CardCounts,
+  type CardGroup,
+  type Due,
+  type Lang,
+  type LemmaId,
+  type NewClozeInput,
+  type Rating,
+  type Reviewed,
+  type ReviewRequestInput,
+  type Settings,
+  type Word,
+  type WordKey,
+  type WordStatus,
+} from "@skolia/shared/api";
 import { allPages, type Cursor } from "@skolia/shared/page";
 import { ALICE, NOW, client, loadLexicon, local, raw, refusesBadPages, setup, useLocal, walk, type App } from "./testing/app.ts";
 import { body } from "./testing/responses.ts";
@@ -13,7 +30,12 @@ async function signedIn(): Promise<Headers> {
   return local.signIn((await local.signUp(ALICE)).id);
 }
 
-async function due(app: App, headers: Headers, lang: Lang, { dayStart = DAY_START, group }: { dayStart?: string; group?: CardGroup | undefined } = {}): Promise<Due> {
+async function due(
+  app: App,
+  headers: Headers,
+  lang: Lang,
+  { dayStart = DAY_START, group }: { dayStart?: string; group?: CardGroup | undefined } = {},
+): Promise<Due> {
   // Hono's JSON type makes the entries' optional fields `| undefined`; it's the same JSON
   return (await body("due", client(app, headers).me.cards.due.$get({ query: { lang, dayStart, group } }))) as Due;
 }
@@ -145,7 +167,10 @@ test("a review schedules the card, a retried review is counted once, and the day
   assert.deepEqual(await body("review retried", review(app, headers, good)), reviewed);
   // The word's other card comes with it, though the day's allowance is used up
   const after = await due(app, headers, "pl");
-  assert.deepEqual(after.cards.map((c) => c.id), [other.id]);
+  assert.deepEqual(
+    after.cards.map((c) => c.id),
+    [other.id],
+  );
   assert.deepEqual(after.newLeft, { words: 0, forms: 20 });
   // The next day's allowance
   assert.deepEqual(
@@ -184,7 +209,10 @@ test("a word uses one place in the day's allowance, however many of its cards ar
   const [bRecognition, bProduction] = left.cards;
   assert.ok(bRecognition && bProduction);
   await body("review", review(app, headers, answer(bRecognition.id, 3)));
-  assert.deepEqual((await due(app, headers, "pl")).cards.map((c) => c.id), [bProduction.id]);
+  assert.deepEqual(
+    (await due(app, headers, "pl")).cards.map((c) => c.id),
+    [bProduction.id],
+  );
   // The next day: b's other card is reviewed, but b was started the day before
   const at = "2026-11-05T00:00:00.000Z";
   const nextDay = setup({ at });
@@ -214,14 +242,21 @@ test("cloze cards have their own daily allowance, and a new one waits for its wo
   await body("review", review(app, headers, answer(recognition.id, 3)));
   // Started, its word gets a cloze card a day; the words' allowance is used up, but not by it
   const both = await due(app, headers, "pl");
-  assert.deepEqual(both.cards.map((c) => c.kind), ["production", "cloze"]);
+  assert.deepEqual(
+    both.cards.map((c) => c.kind),
+    ["production", "cloze"],
+  );
   assert.deepEqual(both.newLeft, { words: 0, forms: 1 });
   assert.deepEqual(await kinds("words"), ["production"]);
   const [cloze] = (await due(app, headers, "pl", { group: "forms" })).cards;
   assert.ok(cloze);
   // Made at the same time, either can come first
   assert.ok(clozes.some((c) => c.cardId === cloze.id));
-  assert.deepEqual(await counts(app, headers), [none("en"), none("fr"), { lang: "pl", words: { due: 0, new: 1 }, forms: { due: 0, new: 1 } }]);
+  assert.deepEqual(await counts(app, headers), [
+    none("en"),
+    none("fr"),
+    { lang: "pl", words: { due: 0, new: 1 }, forms: { due: 0, new: 1 } },
+  ]);
 
   await body("review", review(app, headers, answer(cloze.id, 1)));
   assert.deepEqual((await due(app, headers, "pl")).newLeft, { words: 0, forms: 0 });
@@ -248,11 +283,7 @@ test("each language is reviewed on its own, with its own daily allowance of new 
   await mark(app, headers, "en:cat:NOUN", "active");
   await mark(app, headers, "en:bird:NOUN", "known");
   const words = (due: number, fresh: number) => ({ due, new: fresh });
-  assert.deepEqual(await counts(app, headers), [
-    { ...none("en"), words: words(0, 1) },
-    none("fr"),
-    { ...none("pl"), words: words(0, 1) },
-  ]);
+  assert.deepEqual(await counts(app, headers), [{ ...none("en"), words: words(0, 1) }, none("fr"), { ...none("pl"), words: words(0, 1) }]);
   const [polish] = (await due(app, headers, "pl")).cards;
   assert.equal(polish?.lemmaId, "pl:pies:NOUN");
   assert.equal((await review(app, headers, answer(polish.id, 1))).status, 200);
@@ -345,8 +376,13 @@ test("the words come a page at a time, by lemma id", async () => {
   const headers = await signedIn();
   const lemmas: readonly LemmaId[] = ["pl:pies:NOUN", "pl:dom:NOUN", "pl:kot:NOUN", "pl:być:VERB", "pl:ale:CCONJ"];
   for (const lemmaId of lemmas) assert.equal((await mark(app, headers, lemmaId, "known")).status, 204);
-  const listed = await walk(2, (after?: Cursor<WordKey>) => body("words", client(app, headers).me.words.$get({ query: { after, limit: "2" } })));
-  assert.deepEqual(listed.map((w) => w.lemmaId), [...lemmas].sort());
+  const listed = await walk(2, (after?: Cursor<WordKey>) =>
+    body("words", client(app, headers).me.words.$get({ query: { after, limit: "2" } })),
+  );
+  assert.deepEqual(
+    listed.map((w) => w.lemmaId),
+    [...lemmas].sort(),
+  );
   await refusesBadPages(WORD_PAGE.max, (query) => client(app, headers).me.words.$get({ query }));
 });
 
@@ -419,28 +455,62 @@ test("a lexicon lookup gives each language's loaded version, leaving out ids it 
         upos: "NOUN",
         gloss: "dog",
         pronunciations: [{ ipa: "/ˈpjɛs/" }],
-        paradigms: [{ homonym: "", forms: [["pies", [0]], ["psa", [1, 2]]] }],
+        paradigms: [
+          {
+            homonym: "",
+            forms: [
+              ["pies", [0]],
+              ["psa", [1, 2]],
+            ],
+          },
+        ],
       },
     ],
-    [{ Case: "Nom", Number: "Sing" }, { Case: "Gen", Number: "Sing" }, { Case: "Acc", Number: "Sing" }, { Case: "Dat", Number: "Sing" }],
+    [
+      { Case: "Nom", Number: "Sing" },
+      { Case: "Gen", Number: "Sing" },
+      { Case: "Acc", Number: "Sing" },
+      { Case: "Dat", Number: "Sing" },
+    ],
   );
   await loadLexicon("en", "lex/1", [{ lemmaId: "en:dog:NOUN", lemma: "dog", upos: "NOUN", gloss: "a domesticated canid" }]);
   const { entries, featureSets } = await body("lookup", lookUp(app, ["pl:pies:NOUN", "en:dog:NOUN", "pl:kot:NOUN"]));
-  assert.deepEqual(
-    entries.map((e) => [e.lemmaId, e.senses[0]?.gloss]).sort(),
-    [
-      ["en:dog:NOUN", "a domesticated canid"],
-      ["pl:pies:NOUN", "dog"],
-    ],
-  );
+  assert.deepEqual(entries.map((e) => [e.lemmaId, e.senses[0]?.gloss]).sort(), [
+    ["en:dog:NOUN", "a domesticated canid"],
+    ["pl:pies:NOUN", "dog"],
+  ]);
   const pies = entries.find((e) => e.lemmaId === "pl:pies:NOUN");
   assert.deepEqual(pies?.pronunciations, [{ ipa: "/ˈpjɛs/" }]);
-  assert.deepEqual(pies?.paradigms, [{ homonym: "", forms: [["pies", [0]], ["psa", [1, 2]]] }]);
+  assert.deepEqual(pies?.paradigms, [
+    {
+      homonym: "",
+      forms: [
+        ["pies", [0]],
+        ["psa", [1, 2]],
+      ],
+    },
+  ]);
   // Only the sets the paradigms use, from the served version; dog has no paradigm
   assert.deepEqual(featureSets, {
     pl: { "0": { Case: "Nom", Number: "Sing" }, "1": { Case: "Gen", Number: "Sing" }, "2": { Case: "Acc", Number: "Sing" } },
   });
   assert.equal((await lookUp(app, [])).status, 400);
-  assert.equal((await lookUp(app, Array.from({ length: 101 }, (_, i): LemmaId => `pl:w${i}:NOUN`))).status, 400);
-  assert.equal((await lookUp(app, Array.from({ length: 100 }, (_, i): LemmaId => `pl:w${i}:NOUN`))).status, 200);
+  assert.equal(
+    (
+      await lookUp(
+        app,
+        Array.from({ length: 101 }, (_, i): LemmaId => `pl:w${i}:NOUN`),
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await lookUp(
+        app,
+        Array.from({ length: 100 }, (_, i): LemmaId => `pl:w${i}:NOUN`),
+      )
+    ).status,
+    200,
+  );
 });

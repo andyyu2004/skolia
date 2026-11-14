@@ -1,9 +1,55 @@
 import { DurableObject } from "cloudflare:workers";
-import { CARD_GROUPS, LANGS, WORD_CARD_KINDS, MATURE_DAYS, timestamp, type CardCounts, type CardGroup, type NewLeft, type Tally, type CardId as CardIdType, type ClozeKey, type ClozeStart, type DocumentId, type Paginated, type ReadingEntry, type ReadingKey, type ReadingStatus, type WordKey, type NewCloze, type Timestamp, type Lang, type LemmaId, type ReviewRequest, type ScheduledCard, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
+import {
+  CARD_GROUPS,
+  LANGS,
+  WORD_CARD_KINDS,
+  MATURE_DAYS,
+  timestamp,
+  type CardCounts,
+  type CardGroup,
+  type NewLeft,
+  type Tally,
+  type CardId as CardIdType,
+  type ClozeKey,
+  type ClozeStart,
+  type DocumentId,
+  type Paginated,
+  type ReadingEntry,
+  type ReadingKey,
+  type ReadingStatus,
+  type WordKey,
+  type NewCloze,
+  type Timestamp,
+  type Lang,
+  type LemmaId,
+  type ReviewRequest,
+  type ScheduledCard,
+  type Settings,
+  type Word,
+  type WordStatus,
+} from "@skolia/shared/api";
 import { paginate, type PageRequest } from "@skolia/shared/page";
 import * as schemas from "@skolia/shared/schemas";
 import { CardId } from "@skolia/shared/schemas";
-import { and, col, compile, desc, eq, exists, fn, inQuery, insertInto, isNotNull, le, lit, ne, not, or, select, type Query } from "@skolia/util/query";
+import {
+  and,
+  col,
+  compile,
+  desc,
+  eq,
+  exists,
+  fn,
+  inQuery,
+  insertInto,
+  isNotNull,
+  le,
+  lit,
+  ne,
+  not,
+  or,
+  select,
+  type Query,
+} from "@skolia/util/query";
 import { sql, type Sql } from "@skolia/util/sql";
 import type { DueCards, ReviewOutcome, StoredPosition, StoredReading } from "../ports.ts";
 import { fromJson, fsrs, newCard, review, toJson } from "./scheduler.ts";
@@ -22,7 +68,8 @@ let checksummed: Promise<Checksummed[]> | undefined;
 /** A row of due()'s query: a card, with its cloze's columns if it's a cloze card. */
 function scheduled(row: Record<string, SqlStorageValue>): ScheduledCard {
   const { id, lemmaId, kind, dueAt, documentId, sentence, sentenceStart, blankStart, blankEnd, feats, why } = row;
-  const cloze = documentId === null ? null : { documentId, sentence, sentenceStart, blankStart, blankEnd, feats: JSON.parse(String(feats)), why };
+  const cloze =
+    documentId === null ? null : { documentId, sentence, sentenceStart, blankStart, blankEnd, feats: JSON.parse(String(feats)), why };
   return schemas.ScheduledCard.parse({ id, lemmaId, kind, dueAt, isNew: row["isNew"] === 1, cloze });
 }
 
@@ -30,7 +77,8 @@ function scheduled(row: Record<string, SqlStorageValue>): ScheduledCard {
 const IN_GROUP: Readonly<Record<CardGroup, Sql>> = { words: ne("card.kind", lit("cloze")), forms: eq("card.kind", lit("cloze")) };
 
 /** A language's active cards due by now. */
-const due = (lang: Lang, now: Timestamp) => and(eq("card.lang", lang), eq("card.active", lit(1)), ne("card.schedule_status", lit("new")), le("card.due_at", now));
+const due = (lang: Lang, now: Timestamp) =>
+  and(eq("card.lang", lang), eq("card.active", lit(1)), ne("card.schedule_status", lit("new")), le("card.due_at", now));
 
 /** Whether the lemma of the card under alias has been started: one of its word cards reviewed. */
 const started = (alias: "card" | "u") =>
@@ -41,7 +89,8 @@ const started = (alias: "card" | "u") =>
   );
 
 /** The card under alias is a language's new card. */
-const isNew = (alias: "card" | "u", lang: Lang) => and(eq(`${alias}.lang`, lang), eq(`${alias}.active`, lit(1)), eq(`${alias}.schedule_status`, lit("new")));
+const isNew = (alias: "card" | "u", lang: Lang) =>
+  and(eq(`${alias}.lang`, lang), eq(`${alias}.active`, lit(1)), eq(`${alias}.schedule_status`, lit("new")));
 
 /** A group's new cards that today's allowance leaves to show, as a condition on card, and
  * at most how many. Words: every new word card of a started lemma, and all those of the
@@ -167,7 +216,9 @@ export class User extends DurableObject<object> {
   async makeCloze(cloze: NewCloze, now: Timestamp): Promise<{ cardId: CardIdType; made: boolean }> {
     const s = await fsrs();
     return this.ctx.storage.transactionSync(() => {
-      const had = this.#exec(sql`SELECT card_id FROM cloze WHERE document_id = ${cloze.documentId} AND blank_start = ${cloze.blankStart}`).toArray()[0];
+      const had = this.#exec(
+        sql`SELECT card_id FROM cloze WHERE document_id = ${cloze.documentId} AND blank_start = ${cloze.blankStart}`,
+      ).toArray()[0];
       if (had !== undefined) return { cardId: CardId.parse(had["card_id"]), made: false };
       const id = CardId.parse(crypto.randomUUID());
       this.#exec(
@@ -212,7 +263,9 @@ export class User extends DurableObject<object> {
          WHERE lang = ${lang} AND first_reviewed >= ${dayStart} AND kind != 'cloze'
            AND NOT EXISTS (SELECT 1 FROM card AS e WHERE e.lemma_id = c.lemma_id AND e.kind != 'cloze' AND e.first_reviewed < ${dayStart})`,
     ).one()["n"];
-    const forms = this.#exec(sql`SELECT count(*) AS n FROM card WHERE lang = ${lang} AND first_reviewed >= ${dayStart} AND kind = 'cloze'`).one()["n"];
+    const forms = this.#exec(
+      sql`SELECT count(*) AS n FROM card WHERE lang = ${lang} AND first_reviewed >= ${dayStart} AND kind = 'cloze'`,
+    ).one()["n"];
     return { words: Math.max(0, newLemmasPerDay - Number(lemmas)), forms: Math.max(0, newFormsPerDay - Number(forms)) };
   }
 
@@ -222,10 +275,16 @@ export class User extends DurableObject<object> {
   due(lang: Lang, now: Timestamp, dayStart: Timestamp, limit: number, group: CardGroup | undefined): DueCards {
     const newLeft = this.#newLeft(lang, dayStart);
     const groups = group === undefined ? CARD_GROUPS : [group];
-    const dueNow = this.#exec(SCHEDULED.where(due(lang, now), group !== undefined && IN_GROUP[group]).orderBy("card.due_at").limit(limit)).toArray();
+    const dueNow = this.#exec(
+      SCHEDULED.where(due(lang, now), group !== undefined && IN_GROUP[group])
+        .orderBy("card.due_at")
+        .limit(limit),
+    ).toArray();
     const fresh = groups.flatMap((g) => {
       const { where, cap } = freshCards(g, lang, newLeft);
-      return this.#exec(SCHEDULED.where(where).orderBy("card.created", "card.lemma_id", desc("card.kind")).limit(Math.min(cap, limit))).toArray();
+      return this.#exec(
+        SCHEDULED.where(where).orderBy("card.created", "card.lemma_id", desc("card.kind")).limit(Math.min(cap, limit)),
+      ).toArray();
     });
     return { cards: [...dueNow, ...fresh].slice(0, limit).map(scheduled), newLeft };
   }
@@ -284,7 +343,9 @@ export class User extends DurableObject<object> {
 
   position(documentId: DocumentId): StoredPosition | null {
     const row = this.#exec(sql`SELECT sentence, token, at FROM reading_position WHERE document_id = ${documentId}`).toArray()[0];
-    return row === undefined ? null : { sentence: Number(row["sentence"]), token: Number(row["token"]), at: schemas.Timestamp.parse(row["at"]) };
+    return row === undefined
+      ? null
+      : { sentence: Number(row["sentence"]), token: Number(row["token"]), at: schemas.Timestamp.parse(row["at"]) };
   }
 
   setPosition(documentId: DocumentId, { sentence, token, at }: StoredPosition): void {
@@ -319,7 +380,11 @@ export class User extends DurableObject<object> {
     this.#exec(sql`DELETE FROM reading_list WHERE document_id = ${documentId}`);
   }
 
-  readingList(status: ReadingStatus, lang: Lang | undefined, { after, limit }: PageRequest<ReadingKey>): Paginated<StoredReading, ReadingKey> {
+  readingList(
+    status: ReadingStatus,
+    lang: Lang | undefined,
+    { after, limit }: PageRequest<ReadingKey>,
+  ): Paginated<StoredReading, ReadingKey> {
     const rows = this.#exec(readingListQuery(status, lang, after, limit + 1))
       .toArray()
       .map((row): StoredReading => ({ documentId: schemas.DocumentId.parse(row["documentId"]), ...schemas.ReadingEntry.parse(row) }));

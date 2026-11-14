@@ -8,7 +8,19 @@ import { extname, join } from "node:path";
 import { brotliCompressSync, brotliDecompressSync } from "node:zlib";
 import type { Page, Route } from "@playwright/test";
 import { createApp } from "@skolia/api/app";
-import { blankOut, matchesTags, type Cloze, type DocumentId as DocumentIdType, type Lang, type LemmaId as LemmaIdType, type LexiconEntry, type ScheduledCard, type Settings, type User, type UserId as UserIdType } from "@skolia/shared/api";
+import {
+  blankOut,
+  matchesTags,
+  type Cloze,
+  type DocumentId as DocumentIdType,
+  type Lang,
+  type LemmaId as LemmaIdType,
+  type LexiconEntry,
+  type ScheduledCard,
+  type Settings,
+  type User,
+  type UserId as UserIdType,
+} from "@skolia/shared/api";
 import { LANGUAGES } from "@skolia/shared/lang";
 import { partKey, statusKey, textKey } from "@skolia/shared/keys";
 import type { Blob, Bundle, Status } from "@skolia/shared/schema";
@@ -61,9 +73,31 @@ function stored(n: number, fields: Partial<StoredDocument>): StoredDocument {
   return { ...lalka, id: DocumentId.parse(String(n).repeat(64)), user: SKOLIA, importerName: "skolia", ...fields };
 }
 
-const PETIT_PRINCE = stored(1, { title: "Le Petit Prince, chapitre I", lang: "fr", licence: "cc-by-sa", author: "Antoine de Saint-Exupéry", words: 412, tags: { level: "B1" } });
-const NOTATKI = stored(2, { title: "Notatki", visibility: "private", licence: "cc-by", author: null, user: user.id, importerName: user.name, words: 38, tags: {} });
-const PETER_RABBIT = stored(3, { title: "The Tale of Peter Rabbit", lang: "en", author: "Beatrix Potter", words: 951, tags: { level: "A2" } });
+const PETIT_PRINCE = stored(1, {
+  title: "Le Petit Prince, chapitre I",
+  lang: "fr",
+  licence: "cc-by-sa",
+  author: "Antoine de Saint-Exupéry",
+  words: 412,
+  tags: { level: "B1" },
+});
+const NOTATKI = stored(2, {
+  title: "Notatki",
+  visibility: "private",
+  licence: "cc-by",
+  author: null,
+  user: user.id,
+  importerName: user.name,
+  words: 38,
+  tags: {},
+});
+const PETER_RABBIT = stored(3, {
+  title: "The Tale of Peter Rabbit",
+  lang: "en",
+  author: "Beatrix Potter",
+  words: 951,
+  tags: { level: "A2" },
+});
 
 /** The levels migration 0008 makes. */
 const LEVELS = (
@@ -91,8 +125,18 @@ const statuses: readonly (readonly [DocumentIdType, Status])[] = [
 
 /** The user's reading list: Lalka being read, Le Petit Prince to read. */
 const readingList: readonly StoredReading[] = [
-  { documentId: LALKA, status: "reading", addedAt: Timestamp.parse("2026-11-07T10:00:00.000Z"), updatedAt: Timestamp.parse("2026-11-08T18:00:00.000Z") },
-  { documentId: PETIT_PRINCE.id, status: "to-read", addedAt: Timestamp.parse("2026-11-08T09:00:00.000Z"), updatedAt: Timestamp.parse("2026-11-08T09:00:00.000Z") },
+  {
+    documentId: LALKA,
+    status: "reading",
+    addedAt: Timestamp.parse("2026-11-07T10:00:00.000Z"),
+    updatedAt: Timestamp.parse("2026-11-08T18:00:00.000Z"),
+  },
+  {
+    documentId: PETIT_PRINCE.id,
+    status: "to-read",
+    addedAt: Timestamp.parse("2026-11-08T09:00:00.000Z"),
+    updatedAt: Timestamp.parse("2026-11-08T09:00:00.000Z"),
+  },
 ];
 
 const JSON_TYPE = "application/json";
@@ -102,13 +146,23 @@ const blobs: ReadonlyMap<string, StoredBlob> = new Map([
   [textKey(LALKA), { body: new Uint8Array(fixture("lalka.txt")), contentType: "text/plain; charset=utf-8" }],
   [ANALYSIS, { body: new Uint8Array(brotliCompressSync(fixture("lalka.analysis.json"))), contentType: JSON_TYPE }],
   [BUNDLE, { body: new Uint8Array(brotliCompressSync(fixture("lalka.bundle.json"))), contentType: JSON_TYPE }],
-  ...statuses.map(([id, status]) => [statusKey(id), { body: new TextEncoder().encode(JSON.stringify(status)), contentType: JSON_TYPE }] as const),
+  ...statuses.map(
+    ([id, status]) => [statusKey(id), { body: new TextEncoder().encode(JSON.stringify(status)), contentType: JSON_TYPE }] as const,
+  ),
 ]);
 
 function entry(lemmaId: LemmaIdType): LexiconEntry | null {
   const found = bundle.entries[lemmaId];
   if (!found) return null;
-  return { lemmaId, lemma: found.lemma, upos: found.upos, senses: found.senses, relations: found.relations, pronunciations: [], paradigms: found.paradigms };
+  return {
+    lemmaId,
+    lemma: found.lemma,
+    upos: found.upos,
+    senses: found.senses,
+    relations: found.relations,
+    pronunciations: [],
+    paradigms: found.paradigms,
+  };
 }
 
 const featureSets = Object.fromEntries(bundle.feats.map((feats, id) => [String(id), feats]));
@@ -126,10 +180,31 @@ function clozeOf(sentence: number, index: number): Cloze {
 }
 
 const cards: readonly ScheduledCard[] = [
-  { id: CardId.parse("00000000-0000-4000-8000-000000000001"), lemmaId: LemmaId.parse("pl:sklep:NOUN"), kind: "recognition", isNew: false, dueAt: Timestamp.parse("2026-11-09T08:00:00.000Z"), cloze: null },
-  { id: CardId.parse("00000000-0000-4000-8000-000000000002"), lemmaId: LemmaId.parse("pl:wojna:NOUN"), kind: "production", isNew: true, dueAt: Timestamp.parse("2026-11-09T08:00:00.000Z"), cloze: null },
+  {
+    id: CardId.parse("00000000-0000-4000-8000-000000000001"),
+    lemmaId: LemmaId.parse("pl:sklep:NOUN"),
+    kind: "recognition",
+    isNew: false,
+    dueAt: Timestamp.parse("2026-11-09T08:00:00.000Z"),
+    cloze: null,
+  },
+  {
+    id: CardId.parse("00000000-0000-4000-8000-000000000002"),
+    lemmaId: LemmaId.parse("pl:wojna:NOUN"),
+    kind: "production",
+    isNew: true,
+    dueAt: Timestamp.parse("2026-11-09T08:00:00.000Z"),
+    cloze: null,
+  },
   // kolację, in "schodzą się na kolację": na takes the accusative for where to
-  { id: CardId.parse("00000000-0000-4000-8000-000000000003"), lemmaId: LemmaId.parse("pl:kolacja:NOUN"), kind: "cloze", isNew: true, dueAt: Timestamp.parse("2026-11-09T08:00:00.000Z"), cloze: clozeOf(1, 14) },
+  {
+    id: CardId.parse("00000000-0000-4000-8000-000000000003"),
+    lemmaId: LemmaId.parse("pl:kolacja:NOUN"),
+    kind: "cloze",
+    isNew: true,
+    dueAt: Timestamp.parse("2026-11-09T08:00:00.000Z"),
+    cloze: clozeOf(1, 14),
+  },
 ];
 
 /** The API's ports, in memory, for one test. Writes the pages make are accepted and
@@ -151,7 +226,11 @@ function deps(signedIn: boolean): Deps {
         newLeft: { words: 4, forms: 3 },
       }),
       counts: async () => [{ lang: "pl", words: { due: 2, new: 4 }, forms: { due: 0, new: 2 } }],
-      review: async (_userId, request) => ({ kind: "reviewed", cardId: request.cardId, dueAt: Timestamp.parse("2026-11-10T10:00:00.000Z") }),
+      review: async (_userId, request) => ({
+        kind: "reviewed",
+        cardId: request.cardId,
+        dueAt: Timestamp.parse("2026-11-10T10:00:00.000Z"),
+      }),
       makeCloze: async () => ({ cardId: CardId.parse("00000000-0000-4000-8000-000000000009"), made: true }),
       clozes: async () => ({ items: [], next: null }),
       deleteCloze: async () => true,
@@ -165,11 +244,17 @@ function deps(signedIn: boolean): Deps {
         const found = readingList.find((r) => r.documentId === id);
         return found ? { status: found.status, addedAt: found.addedAt, updatedAt: found.updatedAt } : null;
       },
-      setReading: async (_userId, _id, _lang, status) => ({ status, addedAt: Timestamp.parse(NOW.toISOString()), updatedAt: Timestamp.parse(NOW.toISOString()) }),
+      setReading: async (_userId, _id, _lang, status) => ({
+        status,
+        addedAt: Timestamp.parse(NOW.toISOString()),
+        updatedAt: Timestamp.parse(NOW.toISOString()),
+      }),
       removeReading: async () => {},
       // One page: there are only a few
       readingList: async (_userId, status, lang) => ({
-        items: readingList.filter((r) => r.status === status && (lang === undefined || documents.find((d) => d.id === r.documentId)?.lang === lang)),
+        items: readingList.filter(
+          (r) => r.status === status && (lang === undefined || documents.find((d) => d.id === r.documentId)?.lang === lang),
+        ),
         next: null,
       }),
     },
@@ -191,7 +276,12 @@ function deps(signedIn: boolean): Deps {
       tags: async () => ({ items: LEVELS, next: null }),
       known: async (wanted) => LEVELS.filter((l) => wanted.some((w) => w.kind === l.kind && w.value === l.value)),
       visible: async (id, viewer) => visible(viewer).find((d) => d.id === id) ?? null,
-      visibleAll: async (ids, viewer) => new Map(visible(viewer).filter((d) => ids.includes(d.id)).map((d) => [d.id, d] as const)),
+      visibleAll: async (ids, viewer) =>
+        new Map(
+          visible(viewer)
+            .filter((d) => ids.includes(d.id))
+            .map((d) => [d.id, d] as const),
+        ),
       has: async (id) => documents.some((d) => d.id === id),
       add: async () => {},
       update: async () => {},
@@ -223,7 +313,11 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
 async function forward(route: Route, app: ReturnType<typeof createApp>, failed: string[]): Promise<void> {
   const request = route.request();
   const body = request.postDataBuffer();
-  const response = await app.request(request.url(), { method: request.method(), headers: { "accept-encoding": "gzip, deflate, br", ...(await request.allHeaders()) }, ...(body ? { body: new Uint8Array(body) } : {}) });
+  const response = await app.request(request.url(), {
+    method: request.method(),
+    headers: { "accept-encoding": "gzip, deflate, br", ...(await request.allHeaders()) },
+    ...(body ? { body: new Uint8Array(body) } : {}),
+  });
   const { pathname } = new URL(request.url());
   if (response.status >= 400 && response.status !== 401) failed.push(`${request.method()} ${pathname}: ${response.status}`);
   const headers = Object.fromEntries(response.headers);

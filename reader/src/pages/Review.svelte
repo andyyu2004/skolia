@@ -60,12 +60,16 @@
     return groups.reduce((n, g) => n + c[g].due + c[g].new, 0);
   }
 
-  const busiest = $derived(counts?.reduce<CardCounts | null>((best, c) => (toReview(c) > (best ? toReview(best) : 0) ? c : best), null)?.lang ?? null);
+  const busiest = $derived(
+    counts?.reduce<CardCounts | null>((best, c) => (toReview(c) > (best ? toReview(best) : 0) ? c : best), null)?.lang ?? null,
+  );
   const selected = $derived(lang ?? busiest);
   const withCards = $derived((counts ?? []).filter((c) => toReview(c) > 0));
   const selectedCounts = $derived(counts?.find((c) => c.lang === selected) ?? null);
   const group = $derived<CardGroup | null>(
-    split ? (wanted ?? (selectedCounts && toReview(selectedCounts, "words") === 0 && toReview(selectedCounts, "forms") > 0 ? "forms" : "words")) : null,
+    split
+      ? (wanted ?? (selectedCounts && toReview(selectedCounts, "words") === 0 && toReview(selectedCounts, "forms") > 0 ? "forms" : "words"))
+      : null,
   );
   const session = $derived(dueQuery(selected, group));
   const dueCards = createQuery(() => ({ ...session, enabled: !!user && split !== null }));
@@ -228,16 +232,22 @@
 {#snippet sentence(c: DueCard, cloze: Cloze, filled: boolean)}
   {@const parts = blankParts(cloze)}
   <p class="sentence" lang={langOf(c)}>
-    {parts.before}{#if filled}<mark>{parts.blank}</mark>{:else}<span class="blank"
-        ><span class="visually-hidden">blank</span></span
-      > <span class="base">({lemmaOf(c)})</span>{/if}{parts.after}
+    {parts.before}{#if filled}
+      <mark>{parts.blank}</mark>
+    {:else}
+      <span class="blank"><span class="visually-hidden">blank</span></span> <span class="base">({lemmaOf(c)})</span>
+    {/if}{parts.after}
   </p>
 {/snippet}
 
 {#snippet why(cloze: Cloze)}
   {@const grammar = featureWords(cloze.feats)}
-  {#if grammar.length > 0}<p class="muted">{grammar.join(" · ")}</p>{/if}
-  {#if cloze.why}<p class="why">{cloze.why}</p>{/if}
+  {#if grammar.length > 0}
+    <p class="muted">{grammar.join(" · ")}</p>
+  {/if}
+  {#if cloze.why}
+    <p class="why">{cloze.why}</p>
+  {/if}
   <p class="source"><a href="#/doc/{cloze.documentId}">Open the text</a></p>
 {/snippet}
 
@@ -265,7 +275,11 @@
   {#if senses.length > 0}
     <ul class="glosses">
       {#each senses as sense, i (i)}
-        <li>{sense.gloss}{#if sense.tags.length > 0} <span class="tags">{sense.tags.join(", ")}</span>{/if}</li>
+        <li
+          >{sense.gloss}{#if sense.tags.length > 0}
+            <span class="tags">{sense.tags.join(", ")}</span>
+          {/if}</li
+        >
       {/each}
     </ul>
   {:else}
@@ -288,89 +302,104 @@
         {/if}
         {#each withCards as c (c.lang)}
           <option value={c.lang}
-            >{LANGUAGE_INFO[c.lang].flag} {LANGUAGE_INFO[c.lang].endonym} · {c.words.due + c.forms.due} due · {c.words.new + c.forms.new} new</option
+            >{LANGUAGE_INFO[c.lang].flag} {LANGUAGE_INFO[c.lang].endonym} · {c.words.due + c.forms.due} due ·
+            {c.words.new + c.forms.new}
+            new</option
           >
         {/each}
       </select>
     {/if}
   {/snippet}
   <div class="review">
-  {#if user === null}
-    <p class="muted">Sign in to review your words.</p>
-    <Button variant="primary" onclick={() => void signIn()}>Sign in</Button>
-  {:else if !counts}
-    {#if !failure}<p class="muted">Loading…</p>{/if}
-  {/if}
-  {#if user && counts && !selected}
-    <p>Nothing to review right now. Words you look up in the reader turn into cards here.</p>
-    <Button variant="quiet" onclick={refresh}>Check again</Button>
-  {/if}
-  {#if user && selected && group}
-    <nav class="groups" aria-label="Cards to review">
-      {#each CARD_GROUPS as g (g)}
-        <a href="#/review/{selected}/{g}" aria-current={g === group ? "page" : undefined}
-          >{GROUP_LABELS[g]}{#if selectedCounts}{" "}<span class="count">{toReview(selectedCounts, g)}</span>{/if}</a
-        >
-      {/each}
-    </nav>
-  {/if}
-  {#if user && selected && !due}
-    {#if !failure}<p class="muted">Loading…</p>{/if}
-  {:else if user && due}
-    <p class="counts muted">{left} to go · {newLeft(due.newLeft)} · <a href="#/settings">Settings</a></p>
-    {#if card}
-      <section class="flashcard" aria-live="polite" aria-atomic="true">
-        <div class="known">
-          {#if card.cloze}
-            <Button variant="quiet" small disabled={busy} title="Delete this card and its reviews" onclick={removeCloze}>Delete</Button>
-          {:else}
-            <Button variant="quiet" small disabled={busy} title="You know this word: stop reviewing it" onclick={markKnown}>Known</Button>
-          {/if}
-        </div>
-        {#if card.cloze}
-          {@render sentence(card, card.cloze, revealed)}
-        {:else if card.kind === "recognition"}
-          {@render lemma(card)}
-        {:else}
-          {@render prompt(card)}
-        {/if}
-        {#if revealed}
-          <hr />
-          {#if card.cloze}
-            {@render why(card.cloze)}
-          {:else if card.kind === "production"}
-            {@render lemma(card)}
-          {/if}
-          {@render answer(card)}
-        {/if}
-      </section>
-      {#if revealed}
-        <div class="grades">
-          {#each RATINGS as rating (rating)}
-            {#if rating === 3}
-              <Button variant="primary" disabled={busy} aria-keyshortcuts={String(rating)} bind:element={goodButton} onclick={() => grade(rating)}
-                >{GRADE_LABELS[rating]}</Button
-              >
-            {:else}
-              <Button variant="quiet" disabled={busy} aria-keyshortcuts={String(rating)} onclick={() => grade(rating)}
-                >{GRADE_LABELS[rating]}</Button
-              >
-            {/if}
-          {/each}
-        </div>
-        <p class="hint">Keys 1 to 4 grade the card.</p>
-      {:else}
-        <Button variant="primary" disabled={busy} aria-keyshortcuts="Space Enter" bind:element={showButton} onclick={reveal}
-          >Show answer</Button
-        >
-        <p class="hint">Space or Enter shows the answer.</p>
+    {#if user === null}
+      <p class="muted">Sign in to review your words.</p>
+      <Button variant="primary" onclick={() => void signIn()}>Sign in</Button>
+    {:else if !counts}
+      {#if !failure}
+        <p class="muted">Loading…</p>
       {/if}
-    {:else}
-      <p>Nothing to review right now. Words you look up in the reader turn into cards here.</p>
-      <Button variant="quiet" disabled={busy || dueCards.isFetching} onclick={refresh}>Check again</Button>
     {/if}
-  {/if}
-  {#if failure}<p class="error" role="alert">{failure}</p>{/if}
+    {#if user && counts && !selected}
+      <p>Nothing to review right now. Words you look up in the reader turn into cards here.</p>
+      <Button variant="quiet" onclick={refresh}>Check again</Button>
+    {/if}
+    {#if user && selected && group}
+      <nav class="groups" aria-label="Cards to review">
+        {#each CARD_GROUPS as g (g)}
+          <a href="#/review/{selected}/{g}" aria-current={g === group ? "page" : undefined}
+            >{GROUP_LABELS[g]}{#if selectedCounts}
+              {" "}<span class="count">{toReview(selectedCounts, g)}</span>
+            {/if}</a
+          >
+        {/each}
+      </nav>
+    {/if}
+    {#if user && selected && !due}
+      {#if !failure}
+        <p class="muted">Loading…</p>
+      {/if}
+    {:else if user && due}
+      <p class="counts muted">{left} to go · {newLeft(due.newLeft)} · <a href="#/settings">Settings</a></p>
+      {#if card}
+        <section class="flashcard" aria-live="polite" aria-atomic="true">
+          <div class="known">
+            {#if card.cloze}
+              <Button variant="quiet" small disabled={busy} title="Delete this card and its reviews" onclick={removeCloze}>Delete</Button>
+            {:else}
+              <Button variant="quiet" small disabled={busy} title="You know this word: stop reviewing it" onclick={markKnown}>Known</Button>
+            {/if}
+          </div>
+          {#if card.cloze}
+            {@render sentence(card, card.cloze, revealed)}
+          {:else if card.kind === "recognition"}
+            {@render lemma(card)}
+          {:else}
+            {@render prompt(card)}
+          {/if}
+          {#if revealed}
+            <hr>
+            {#if card.cloze}
+              {@render why(card.cloze)}
+            {:else if card.kind === "production"}
+              {@render lemma(card)}
+            {/if}
+            {@render answer(card)}
+          {/if}
+        </section>
+        {#if revealed}
+          <div class="grades">
+            {#each RATINGS as rating (rating)}
+              {#if rating === 3}
+                <Button
+                  variant="primary"
+                  disabled={busy}
+                  aria-keyshortcuts={String(rating)}
+                  bind:element={goodButton}
+                  onclick={() => grade(rating)}
+                  >{GRADE_LABELS[rating]}</Button
+                >
+              {:else}
+                <Button variant="quiet" disabled={busy} aria-keyshortcuts={String(rating)} onclick={() => grade(rating)}
+                  >{GRADE_LABELS[rating]}</Button
+                >
+              {/if}
+            {/each}
+          </div>
+          <p class="hint">Keys 1 to 4 grade the card.</p>
+        {:else}
+          <Button variant="primary" disabled={busy} aria-keyshortcuts="Space Enter" bind:element={showButton} onclick={reveal}
+            >Show answer</Button
+          >
+          <p class="hint">Space or Enter shows the answer.</p>
+        {/if}
+      {:else}
+        <p>Nothing to review right now. Words you look up in the reader turn into cards here.</p>
+        <Button variant="quiet" disabled={busy || dueCards.isFetching} onclick={refresh}>Check again</Button>
+      {/if}
+    {/if}
+    {#if failure}
+      <p class="error" role="alert">{failure}</p>
+    {/if}
   </div>
 </Page>
 

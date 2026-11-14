@@ -38,7 +38,9 @@
 <section class="listing">
   <div class="listing-head">
     <span class="listing-count">
-      {#if label}{label}{documents ? " · " : ""}{/if}
+      {#if label}
+        {label}{documents ? " · " : ""}
+      {/if}
       {#if documents}
         {documents.length.toLocaleString()}{hasMore ? "+" : ""} {documents.length === 1 && !hasMore ? "text" : "texts"}
       {/if}

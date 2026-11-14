@@ -1,6 +1,30 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { and, col, compile, contains, deleteFrom, desc, eq, exists, fn, gt, inList, inQuery, insertInto, is, isNotNull, lit, ne, not, or, row, select, unionAll, update } from "./query.ts";
+import {
+  and,
+  col,
+  compile,
+  contains,
+  deleteFrom,
+  desc,
+  eq,
+  exists,
+  fn,
+  gt,
+  inList,
+  inQuery,
+  insertInto,
+  is,
+  isNotNull,
+  lit,
+  ne,
+  not,
+  or,
+  row,
+  select,
+  unionAll,
+  update,
+} from "./query.ts";
 import { sql } from "./sql.ts";
 
 test("a select's strings are columns where expressions go and parameters where values go", () => {
@@ -44,7 +68,12 @@ test("col makes a column of a value's place, lit writes a constant in, and a Sql
 });
 
 test("subqueries, aliases and functions", () => {
-  const query = select({ kind: "tag.kind", more: select({ n: fn.count() }).from("tag", "has").where(eq("has.kind", col("tag.kind"))) })
+  const query = select({
+    kind: "tag.kind",
+    more: select({ n: fn.count() })
+      .from("tag", "has")
+      .where(eq("has.kind", col("tag.kind"))),
+  })
     .from("tag")
     .leftJoin("tag", "has", and(eq("has.kind", col("tag.kind")), ne("has.value", col("tag.value"))))
     .where(not(exists(select({}).from("tag", "has").where(isNotNull("has.description")))))
@@ -61,7 +90,10 @@ test("rows compare with rows of values, and IN takes values, rows of them or a q
   assert.equal(after.text, `("tag"."kind", "tag"."position") > (?, ?)`);
   assert.deepEqual(after.params, ["level", 3]);
   assert.equal(inList("kind", ["a", "b"]).text, `"kind" IN (?, ?)`);
-  const pairs = inList(row("kind", "value"), [["level", "A1"], ["form", "poem"]]);
+  const pairs = inList(row("kind", "value"), [
+    ["level", "A1"],
+    ["form", "poem"],
+  ]);
   assert.equal(pairs.text, `("kind", "value") IN (VALUES (?, ?), (?, ?))`);
   assert.deepEqual(pairs.params, ["level", "A1", "form", "poem"]);
   assert.equal(inQuery("kind", select(["kind"]).from("tag")).text, `"kind" IN (SELECT "kind" FROM "tag")`);
@@ -82,7 +114,9 @@ test("contains escapes LIKE's wildcards", () => {
 
 test("unionAll orders and limits the queries' rows together, by their columns' names", () => {
   const part = (kind: string) => select({ kind: "kind", value: "value" }).from("tag").where(eq("kind", kind));
-  const query = unionAll([part("a"), part("b")]).orderBy("kind", "value").limit(5);
+  const query = unionAll([part("a"), part("b")])
+    .orderBy("kind", "value")
+    .limit(5);
   assert.match(query.sql.text, /^SELECT .* UNION ALL SELECT .* ORDER BY "kind", "value" LIMIT \?$/u);
   assert.deepEqual(query.sql.params, ["a", "b", 5]);
 });
@@ -95,7 +129,10 @@ test("insert, upsert, update and delete", () => {
   const upsert = insertInto("tag")
     .values({ kind: "level", value: "A1", position: 1 })
     .onConflict(["kind", "value"], {
-      set: { position: col("excluded.position"), description: fn.iif(eq("excluded.position", col("tag.position")), "tag.description", null) },
+      set: {
+        position: col("excluded.position"),
+        description: fn.iif(eq("excluded.position", col("tag.position")), "tag.description", null),
+      },
       setWhere: ne("excluded.position", col("tag.position")),
     })
     .returning(["kind"]);
@@ -104,11 +141,16 @@ test("insert, upsert, update and delete", () => {
     `INSERT INTO "tag" ("kind", "value", "position") VALUES (?, ?, ?) ON CONFLICT ("kind", "value") DO UPDATE SET "position" = "excluded"."position", "description" = iif("excluded"."position" = "tag"."position", "tag"."description", ?) WHERE "excluded"."position" != "tag"."position" RETURNING "kind"`,
   );
   assert.equal(
-    insertInto("card").values({ id: "x" }).onConflict(["lemma_id", "kind"], { where: ne("kind", lit("cloze")) }).sql.text,
+    insertInto("card")
+      .values({ id: "x" })
+      .onConflict(["lemma_id", "kind"], { where: ne("kind", lit("cloze")) }).sql.text,
     `INSERT INTO "card" ("id") VALUES (?) ON CONFLICT ("lemma_id", "kind") WHERE "kind" != 'cloze' DO NOTHING`,
   );
 
-  assert.equal(update("tag").set({ description: "d" }).where(eq("kind", "level")).sql.text, `UPDATE "tag" SET "description" = ? WHERE "kind" = ?`);
+  assert.equal(
+    update("tag").set({ description: "d" }).where(eq("kind", "level")).sql.text,
+    `UPDATE "tag" SET "description" = ? WHERE "kind" = ?`,
+  );
   assert.equal(deleteFrom("tag").where(eq("kind", "level")).sql.text, `DELETE FROM "tag" WHERE "kind" = ?`);
   assert.equal(compile(deleteFrom("tag")).text, `DELETE FROM "tag"`);
 });

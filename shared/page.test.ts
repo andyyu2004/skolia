@@ -7,7 +7,11 @@ const Key = z.tuple([z.string(), z.number().int()]);
 const query = pageQuery(Key, { fallback: 2, max: 3 });
 
 test("a cursor gives back the key it was made from, any text in it", () => {
-  for (const key of [["pl:żółw:NOUN", 0], ["a/b+c=", 12], ["", -1]] as const) {
+  for (const key of [
+    ["pl:żółw:NOUN", 0],
+    ["a/b+c=", 12],
+    ["", -1],
+  ] as const) {
     const cursor = encodeCursor(key);
     assert.match(cursor, /^[A-Za-z0-9_-]+$/u);
     assert.deepEqual(query.parse({ after: cursor }).after, key);

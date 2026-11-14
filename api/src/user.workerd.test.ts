@@ -60,7 +60,10 @@ test("migrating down and back up appends to the log instead of rewriting it", as
     log.map((e) => [e.version, e.direction]),
     [...ups, ...downs, ...ups],
   );
-  assert.deepEqual(log.map((e) => e.seq), [...log.map((e) => e.seq)].sort((a, b) => a - b));
+  assert.deepEqual(
+    log.map((e) => e.seq),
+    [...log.map((e) => e.seq)].sort((a, b) => a - b),
+  );
   assert.equal(log[LATEST]?.checksum, await checksum(MIGRATIONS[LATEST - 1]!.down));
   await assert.rejects(dave.migrate(LATEST + 1));
 });
@@ -71,14 +74,18 @@ test("the log can't be updated or deleted from", async () => {
   await assert.rejects(storage.exec("update migration_log set name = 'other'"), /append-only/);
   await assert.rejects(storage.exec("delete from migration_log"), /append-only/);
   const { log } = await local.env.USER.getByName("erin").migrationStatus();
-  assert.deepEqual(log.map((e) => e.name), MIGRATIONS.map((m) => m.name));
+  assert.deepEqual(
+    log.map((e) => e.name),
+    MIGRATIONS.map((m) => m.name),
+  );
 });
 
 test("an applied migration that was edited, or that the code doesn't have, stops migrating", async () => {
   const frank = local.env.USER.getByName("frank");
   await frank.migrate(0);
   const storage = await storageOf("frank");
-  const insert = "insert into migration_log (version, name, direction, checksum, applied_at) values (?, ?, 'up', ?, '2026-11-07T00:00:00.000Z')";
+  const insert =
+    "insert into migration_log (version, name, direction, checksum, applied_at) values (?, ?, 'up', ?, '2026-11-07T00:00:00.000Z')";
   await storage.exec(insert, 1, MIGRATIONS[0]!.name, "edited");
   assert.deepEqual((await frank.migrationStatus()).problems, [`version 1 (${MIGRATIONS[0]!.name}) was edited after it was applied`]);
   await assert.rejects(frank.migrate(0));
@@ -116,7 +123,10 @@ test("the tables are STRICT, the user's are WITHOUT ROWID, and timestamps must b
   await assert.rejects(storage.exec("insert into word values ('pl:kot:NOUN', x'00', '2026-11-07T00:00:00.000Z')"), /cannot store BLOB/);
   assert.equal((await heidi.words(FIRST_PAGE)).items.length, 1);
   await assert.rejects(
-    storage.exec("insert into reading_list values (?, 'pl', 'to-read', '2026-11-07T00:00:00Z', '2026-11-07T00:00:00.000Z')", "0".repeat(64)),
+    storage.exec(
+      "insert into reading_list values (?, 'pl', 'to-read', '2026-11-07T00:00:00Z', '2026-11-07T00:00:00.000Z')",
+      "0".repeat(64),
+    ),
     /CHECK constraint failed/,
   );
 });
@@ -124,11 +134,26 @@ test("the tables are STRICT, the user's are WITHOUT ROWID, and timestamps must b
 test("a page of the reading list seeks to its key in an index, with or without a language, and sorts nothing", async () => {
   await local.env.USER.getByName("ivan").words(FIRST_PAGE);
   const storage = await storageOf("ivan");
-  for (const [inLang, after] of [[false, false], [false, true], [true, false], [true, true]] as const) {
-    const query = readingListQuery("to-read", inLang ? "pl" : undefined, after ? schemas.ReadingKey.parse(["2026-11-07T00:00:00.000Z", "0".repeat(64)]) : undefined, 3);
-    const plan = (await storage.exec<{ detail: string }>(`EXPLAIN QUERY PLAN ${query.sql.text}`, ...query.sql.params)).map((row) => row.detail);
+  for (const [inLang, after] of [
+    [false, false],
+    [false, true],
+    [true, false],
+    [true, true],
+  ] as const) {
+    const query = readingListQuery(
+      "to-read",
+      inLang ? "pl" : undefined,
+      after ? schemas.ReadingKey.parse(["2026-11-07T00:00:00.000Z", "0".repeat(64)]) : undefined,
+      3,
+    );
+    const plan = (await storage.exec<{ detail: string }>(`EXPLAIN QUERY PLAN ${query.sql.text}`, ...query.sql.params)).map(
+      (row) => row.detail,
+    );
     const index = inLang ? "reading_list_lang" : "reading_list_status";
-    assert.ok(plan.length === 1 && plan[0]!.startsWith(`SEARCH reading_list USING INDEX ${index} `), `${inLang} ${after}: ${plan.join("; ")}`);
+    assert.ok(
+      plan.length === 1 && plan[0]!.startsWith(`SEARCH reading_list USING INDEX ${index} `),
+      `${inLang} ${after}: ${plan.join("; ")}`,
+    );
   }
 });
 
@@ -160,7 +185,13 @@ test("cloze's migration keeps the word cards and their reviews, and down takes t
   const fsrs = await (await storageOf("ken")).exec<{ kind: string; fsrs: string }>("select kind, fsrs from card order by kind");
   await storage.exec("insert into word values ('pl:pies:NOUN', 'active', ?)", at);
   for (const [i, { kind, fsrs: state }] of fsrs.entries()) {
-    await storage.exec("insert into card (id, lemma_id, kind, created, active, fsrs) values (?, 'pl:pies:NOUN', ?, ?, 1, ?)", `c${i}`, kind, at, state);
+    await storage.exec(
+      "insert into card (id, lemma_id, kind, created, active, fsrs) values (?, 'pl:pies:NOUN', ?, ?, 1, ?)",
+      `c${i}`,
+      kind,
+      at,
+      state,
+    );
   }
   await storage.exec("insert into review values ('r0', 'c0', 3, ?)", at);
   const cards = "select id, lemma_id, kind, active, fsrs from card order by id";
@@ -170,7 +201,13 @@ test("cloze's migration keeps the word cards and their reviews, and down takes t
   assert.deepEqual(await storage.exec(cards), before);
   assert.deepEqual(await storage.exec("select id, card_id from review"), [{ id: "r0", card_id: "c0" }]);
   assert.deepEqual(await storage.exec("pragma foreign_key_check"), []);
-  await assert.rejects(storage.exec("insert into card (id, lemma_id, kind, created, active, fsrs) values ('c9', 'pl:pies:NOUN', 'production', ?, 1, ?)", at, fsrs[0]!.fsrs));
+  await assert.rejects(
+    storage.exec(
+      "insert into card (id, lemma_id, kind, created, active, fsrs) values ('c9', 'pl:pies:NOUN', 'production', ?, 1, ?)",
+      at,
+      fsrs[0]!.fsrs,
+    ),
+  );
   const cloze = {
     lemmaId: "pl:pies:NOUN" as const,
     documentId: schemas.DocumentId.parse("a".repeat(64)),
@@ -183,11 +220,18 @@ test("cloze's migration keeps the word cards and their reviews, and down takes t
   };
   const { cardId } = await judy.makeCloze(cloze, at);
   await judy.review({ id: schemas.ReviewId.parse(crypto.randomUUID()), cardId, rating: 3, at }, at);
-  const clozeRow = "insert into cloze (card_id, document_id, sentence, sentence_start, blank_start, blank_end, feats) values (?, ?, 'Widzę psa.', 0, 0, 5, '{}')";
+  const clozeRow =
+    "insert into cloze (card_id, document_id, sentence, sentence_start, blank_start, blank_end, feats) values (?, ?, 'Widzę psa.', 0, 0, 5, '{}')";
   // A cloze row belongs to a cloze card, not a word's card or none
   await assert.rejects(storage.exec(clozeRow, "c0", cloze.documentId));
   await assert.rejects(storage.exec(clozeRow, "nope", cloze.documentId));
-  await assert.rejects(storage.exec("insert into cloze (card_id, kind, document_id, sentence, sentence_start, blank_start, blank_end, feats) values (?, 'recognition', ?, 'Widzę psa.', 0, 0, 5, '{}')", "c0", cloze.documentId));
+  await assert.rejects(
+    storage.exec(
+      "insert into cloze (card_id, kind, document_id, sentence, sentence_start, blank_start, blank_end, feats) values (?, 'recognition', ?, 'Widzę psa.', 0, 0, 5, '{}')",
+      "c0",
+      cloze.documentId,
+    ),
+  );
 
   // Deleting a card deletes its cloze row and reviews
   await storage.exec("insert into review values ('r1', 'c1', 3, ?)", at);
@@ -198,7 +242,12 @@ test("cloze's migration keeps the word cards and their reviews, and down takes t
   await storage.exec("delete from card where id = ?", other);
   assert.deepEqual(await storage.exec("select count(*) as n from cloze where card_id = ?", other), [{ n: 0 }]);
   assert.deepEqual(await storage.exec("select count(*) as n from review where card_id = ?", other), [{ n: 0 }]);
-  await storage.exec("insert into card (id, lemma_id, kind, created, active, fsrs) values ('c1', 'pl:pies:NOUN', ?, ?, 1, ?)", fsrs[1]!.kind, at, fsrs[1]!.fsrs);
+  await storage.exec(
+    "insert into card (id, lemma_id, kind, created, active, fsrs) values ('c1', 'pl:pies:NOUN', ?, ?, 1, ?)",
+    fsrs[1]!.kind,
+    at,
+    fsrs[1]!.fsrs,
+  );
 
   await judy.migrate(3);
   assert.deepEqual(await storage.exec(cards), before);

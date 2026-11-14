@@ -90,7 +90,9 @@ test("sync-curated's key signs in the curated user, a system user; new end-to-en
   const app = setup();
   const key = "56".repeat(32);
   await local.env.DB.batch(syncCuratedKeySql(key, "2026-11-04T00:00:00.000Z").map((q) => local.env.DB.prepare(q)));
-  await local.env.DB.batch(e2eKeysSql({ system: "ab".repeat(32), user: "12".repeat(32) }, "2026-11-05T00:00:00.000Z").map((q) => local.env.DB.prepare(q)));
+  await local.env.DB.batch(
+    e2eKeysSql({ system: "ab".repeat(32), user: "12".repeat(32) }, "2026-11-05T00:00:00.000Z").map((q) => local.env.DB.prepare(q)),
+  );
   const me = await body("me", client(app, new Headers({ [API_KEY_HEADER]: key })).me.$get());
   assert.deepEqual([me.id, me.type], [CURATED_USER, "system"]);
 });
@@ -107,7 +109,13 @@ test("signed-in users can't make API keys", async () => {
   const app = setup();
   for (const path of ["create", "list"]) {
     const headers = new Headers({ cookie: importer.get("cookie") ?? "", origin: ORIGIN });
-    const response = await raw(app, path === "create" ? "POST" : "GET", `/api/auth/api-key/${path}`, headers, path === "create" ? {} : undefined);
+    const response = await raw(
+      app,
+      path === "create" ? "POST" : "GET",
+      `/api/auth/api-key/${path}`,
+      headers,
+      path === "create" ? {} : undefined,
+    );
     assert.equal(response.status, 404, path);
   }
   const { results } = await local.env.DB.prepare("select id from apikey").all();

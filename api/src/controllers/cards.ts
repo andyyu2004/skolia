@@ -84,7 +84,12 @@ export async function makeCloze(deps: Deps, user: User, cloze: NewCloze): Promis
   return made ? { status: 201, body: { cardId } } : ok({ cardId });
 }
 
-export async function clozes(deps: Deps, user: User, documentId: DocumentId, page: PageRequest<ClozeKey>): Promise<Ok<Paginated<ClozeStart, ClozeKey>>> {
+export async function clozes(
+  deps: Deps,
+  user: User,
+  documentId: DocumentId,
+  page: PageRequest<ClozeKey>,
+): Promise<Ok<Paginated<ClozeStart, ClozeKey>>> {
   return ok(await deps.users.clozes(user.id, documentId, page));
 }
 

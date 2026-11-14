@@ -202,9 +202,7 @@ export class Builder {
     const groups: { labels: string[]; index: number }[] = [];
     columns.forEach((label, index) => {
       const signature = grid.map((row) => cellText(row[index] ?? [])).join("|");
-      const same = groups.find(
-        (g) => grid.map((row) => cellText(row[g.index] ?? [])).join("|") === signature,
-      );
+      const same = groups.find((g) => grid.map((row) => cellText(row[g.index] ?? [])).join("|") === signature);
       if (same) same.labels.push(label);
       else groups.push({ labels: [label], index });
     });

@@ -22,14 +22,18 @@
 </script>
 
 {#snippet name()}
-  {label}{#if optional}<span class="optional">optional</span>{/if}
+  {label}{#if optional}
+    <span class="optional">optional</span>
+  {/if}
 {/snippet}
 
 {#if id === undefined}
   <fieldset class="field">
     <legend>{@render name()}</legend>
     {@render children()}
-    {#if hint}<p class="hint">{@render hint()}</p>{/if}
+    {#if hint}
+      <p class="hint">{@render hint()}</p>
+    {/if}
   </fieldset>
 {:else}
   <div class="field">
@@ -38,7 +42,9 @@
       {@render aside?.()}
     </div>
     {@render children()}
-    {#if hint}<p class="hint" id="{id}-hint">{@render hint()}</p>{/if}
+    {#if hint}
+      <p class="hint" id="{id}-hint">{@render hint()}</p>
+    {/if}
   </div>
 {/if}
 
