@@ -8,6 +8,7 @@
     "./keys": "./keys.ts",
     "./schemas": "./schemas.ts",
     "./page": "./page.ts",
+    "./annotations": "./annotations.ts",
     "./lang": "./lang/index.ts",
     "./ud": "./ud.ts",
     "./paradigm": "./paradigm.ts",

@@ -1,5 +1,6 @@
 import * as z from "zod";
 import {
+  ANNOTATION_PAGE,
   CARD_GROUPS,
   CARD_KINDS,
   CLOZE_PAGE,
@@ -8,6 +9,7 @@ import {
   WORD_PAGE,
   LANGS,
   LICENCES,
+  MAX_ANNOTATION_TEXT,
   MAX_AUTHOR_LENGTH,
   MAX_CLOZE_SENTENCE,
   MAX_CLOZE_WHY,
@@ -21,6 +23,7 @@ import {
   RATINGS,
   READING_PAGE,
   READING_STATUSES,
+  SHAREABLE_LICENCES,
   TAG_KIND,
   TAG_VALUE,
   UPOS,
@@ -61,7 +64,7 @@ export const LemmaId = z.templateLiteral([Lang, ":", z.string().min(1).max(MAX_L
 
 export const WordStatus = z.enum(WORD_STATUSES);
 
-export const Word = z.object({ lemmaId: LemmaId, status: WordStatus, updated: Timestamp, mature: z.boolean() });
+export const Word = z.object({ lemmaId: LemmaId, status: WordStatus, updatedAt: Timestamp, mature: z.boolean() });
 
 export const SetWord = z.object({ status: WordStatus });
 
@@ -222,6 +225,101 @@ export const DocumentUpdate = z.object({
   tags: Tags.optional(),
 });
 
+/** sha256 hex of what an annotation says (annotationId in annotations.ts). */
+export const AnnotationId = z
+  .string()
+  .regex(/^[0-9a-f]{64}$/u)
+  .brand<"AnnotationId">();
+
+/** A kind's data: its fields, and no others. */
+function kindData<S extends z.ZodRawShape>(kind: string, shape: S) {
+  const fields = Object.keys(shape).join(", ");
+  return z.strictObject(shape, {
+    error: (issue) =>
+      issue.code === "unrecognized_keys"
+        ? `${kind} annotation data has only ${fields}`
+        : issue.input === undefined
+          ? `${kind} annotation data must be {${fields}}`
+          : undefined,
+  });
+}
+
+/** A field's own message, or one saying it's missing. */
+function field(kind: string, name: string, message: string) {
+  return {
+    error: (issue: { readonly input?: unknown }) => (issue.input === undefined ? `${kind} annotation data needs ${name}` : message),
+  };
+}
+
+/** What an annotation holds, by kind. audio: a recording of the range, at an https URL
+ * skolia doesn't host. text: anything written about the range, a note or a translation,
+ * say. Migration 0010 holds the stored data to the same fields; a new kind is a variant here
+ * and a migration. */
+export const AnnotationContent = z.discriminatedUnion(
+  "kind",
+  [
+    z.object({
+      kind: z.literal("audio"),
+      data: kindData("audio", {
+        url: z.url({ protocol: /^https$/u, ...field("audio", "a url", "url must be an https URL") }).max(MAX_SOURCE_LENGTH),
+      }),
+    }),
+    z.object({
+      kind: z.literal("text"),
+      data: kindData("text", {
+        text: z
+          .string(field("text", "text", "text must be a string"))
+          .trim()
+          .min(1, "text must be non-empty")
+          .max(MAX_ANNOTATION_TEXT, `text is at most ${MAX_ANNOTATION_TEXT} characters`),
+      }),
+    }),
+  ],
+  { error: "kind must be audio or text" },
+);
+
+export const Annotation = z.intersection(
+  z.object({
+    id: AnnotationId,
+    start: Index,
+    end: Index,
+    licence: z.enum(SHAREABLE_LICENCES),
+    author: z.string().nullable(),
+    source: z.string().nullable(),
+    addedAt: Timestamp,
+  }),
+  AnnotationContent,
+);
+
+/** An annotation to add: its data must be its kind's, and it must end after it starts. That
+ * it ends within the text is checked against the text. */
+export const NewAnnotation = z
+  .intersection(
+    z.object({
+      start: Index,
+      end: Index,
+      licence: z.enum(SHAREABLE_LICENCES, "an annotation needs a licence that allows sharing it"),
+      author: z.string().trim().max(MAX_AUTHOR_LENGTH).optional(),
+      source: Source.optional(),
+    }),
+    AnnotationContent,
+  )
+  .refine((a) => a.start < a.end, { message: "an annotation must end after it starts", path: ["end"] })
+  .transform((a) => ({ ...a, author: a.author || null, source: a.source ?? null }));
+
+export const AnnotationKey = z.tuple([Index, AnnotationId]).readonly();
+const Offset = z.coerce.number().int().min(0).max(MAX_TEXT_LENGTH);
+/** A page of an entry's annotations; from and to, only those overlapping [from, to). */
+export const AnnotationsQuery = pageQuery(AnnotationKey, ANNOTATION_PAGE)
+  .extend({ from: Offset.optional(), to: Offset.optional() })
+  .refine((q) => q.from === undefined || q.to === undefined || q.from < q.to, { message: "from must be before to", path: ["to"] });
+
+/** An annotation as D1 has it, its data a JSON string. */
+export const AnnotationRow = z
+  .looseObject({ data: z.string() })
+  .transform((row) => ({ ...row, data: JSON.parse(row.data) as unknown }))
+  .pipe(Annotation);
+
 export const State = z.enum(["queued", "analysing", "ready", "failed"]);
 
 export const Status = z.object({
@@ -245,7 +343,7 @@ export const DocumentRow = z.object({
   id: DocumentId,
   title: z.string(),
   lang: Lang,
-  imported: Timestamp,
+  importedAt: Timestamp,
   words: z.number().int(),
   user: UserId,
   visibility: Visibility,

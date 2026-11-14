@@ -16,6 +16,10 @@ export const WORD_PAGE: PageSize = { fallback: 500, max: 1000 };
 export const CLOZE_PAGE: PageSize = { fallback: 500, max: 1000 };
 /** Like a page of documents, a page of the reading list reads each text's status from R2. */
 export const READING_PAGE: PageSize = { fallback: 24, max: 50 };
+export const ANNOTATION_PAGE: PageSize = { fallback: 500, max: 1000 };
+
+/** Most annotations an entry has. */
+export const MAX_ANNOTATIONS = 2000;
 
 export const LANGS = ["en", "fr", "pl"] as const;
 export type Lang = (typeof LANGS)[number];
@@ -86,6 +90,8 @@ export const SHAREABLE_LICENCES = [
   "cc-by-nd",
   "cc-by-nc-nd",
 ] as const satisfies readonly Licence[];
+
+export type ShareableLicence = (typeof SHAREABLE_LICENCES)[number];
 
 export function isShareable(licence: Licence): boolean {
   return SHAREABLE_LICENCES.some((l) => l === licence);
@@ -201,7 +207,7 @@ export interface DocumentSummary {
   id: DocumentId;
   title: string;
   lang: Lang;
-  imported: Timestamp;
+  importedAt: Timestamp;
   words: number;
   visibility: Visibility;
   licence: Licence;
@@ -425,9 +431,34 @@ export type ReadingStatus = (typeof READING_STATUSES)[number];
  * status last changed. */
 export type ReadingEntry = z.output<typeof schemas.ReadingEntry>;
 
+/** Which texts a page of the reading list keeps: those with the status, and those in the
+ * language if one is given. */
+export type ReadingFilter = { readonly status: ReadingStatus; readonly lang: Lang | undefined };
+
 /** Where a text is in the list of one status: by when its status last changed, latest
  * first, then by id. */
 export type ReadingKey = z.output<typeof schemas.ReadingKey>;
+
+/** Something an entry's user attached to a range of its text, start to end in UTF-16 units
+ * as JavaScript counts them: a kind and its data (AnnotationContent). Seen wherever the entry
+ * is, with its own licence, author and source. id: a hash of what it says. */
+export type Annotation = z.output<typeof schemas.Annotation>;
+export type AnnotationId = z.output<typeof schemas.AnnotationId>;
+/** What the reader sends to add one. */
+export type NewAnnotation = z.input<typeof schemas.NewAnnotation>;
+/** Where an annotation is in its entry's list: where it starts, then its id. */
+export type AnnotationKey = z.output<typeof schemas.AnnotationKey>;
+
+/** Which of an entry's annotations a page keeps: those overlapping [from, to), in UTF-16
+ * units, either side open when it's left out. */
+export type AnnotationFilter = { readonly from: number | undefined; readonly to: number | undefined };
+
+/** What an annotation holds, its kind and that kind's data. */
+export type AnnotationContent = z.output<typeof schemas.AnnotationContent>;
+export type AnnotationKind = AnnotationContent["kind"];
+
+/** Longest text a text annotation holds. */
+export const MAX_ANNOTATION_TEXT = 2000;
 
 /** A text on the reading list, with the entry the user sees for it. */
 export type ListedReading = ReadingEntry & { readonly document: DocumentSummary };

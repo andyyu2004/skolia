@@ -58,7 +58,7 @@ const lalka: StoredDocument = {
   id: LALKA,
   title: "Lalka",
   lang: "pl",
-  imported: Timestamp.parse("2026-11-07T09:58:00.000Z"),
+  importedAt: Timestamp.parse("2026-11-07T09:58:00.000Z"),
   words: 72,
   user: user.id,
   importerName: user.name,
@@ -251,7 +251,7 @@ function deps(signedIn: boolean): Deps {
       }),
       removeReading: async () => {},
       // One page: there are only a few
-      readingList: async (_userId, status, lang) => ({
+      readingList: async (_userId, { status, lang }) => ({
         items: readingList.filter(
           (r) => r.status === status && (lang === undefined || documents.find((d) => d.id === r.documentId)?.lang === lang),
         ),
@@ -286,6 +286,9 @@ function deps(signedIn: boolean): Deps {
       add: async () => {},
       update: async () => {},
       remove: async () => {},
+      annotations: async () => ({ items: [], next: null }),
+      annotate: async () => ({ kind: "full" }),
+      unannotate: async () => false,
     },
     blobs: {
       get: async (key) => blobs.get(key) ?? null,

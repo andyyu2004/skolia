@@ -21,10 +21,18 @@ test("every D1 table is STRICT, and timestamps must be toISOString()'s", async (
   ).all();
   assert.deepEqual(
     results,
-    ["account", "apikey", "document", "session", "tag", "user", "user_document", "user_document_tag", "verification"].map((name) => ({
-      name,
-      strict: 1,
-    })),
+    [
+      "account",
+      "apikey",
+      "document",
+      "session",
+      "tag",
+      "user",
+      "user_document",
+      "user_document_annotation",
+      "user_document_tag",
+      "verification",
+    ].map((name) => ({ name, strict: 1 })),
   );
   const user = await local.signUp(ALICE);
   const document = env.DB.prepare(`insert into document (id, lang, words) values (?, 'pl', ?)`);
@@ -40,7 +48,9 @@ test("every D1 table is STRICT, and timestamps must be toISOString()'s", async (
       owner = user.id,
     }: { source?: string | null; imported?: string; owner?: string } = {},
   ) =>
-    env.DB.prepare(`insert or replace into user_document values (?, ?, 't', ?, ?, ?, null, ?)`)
+    env.DB.prepare(
+      `insert or replace into user_document (user_id, document_id, title, imported_at, visibility, licence, author, source) values (?, ?, 't', ?, ?, ?, null, ?)`,
+    )
       .bind(owner, document, imported, visibility, licence, source)
       .run();
   await entry("a", "public", "cc0");
@@ -103,7 +113,9 @@ test("an entry's tags are tags skolia has, one of each kind, and go with the ent
   const { env } = local;
   const user = await local.signUp(ALICE);
   await env.DB.prepare("insert into document (id, lang, words) values ('a', 'pl', 1)").run();
-  await env.DB.prepare(`insert into user_document values (?, 'a', 't', '2026-11-07T00:00:00.000Z', 'public', 'cc0', null, null)`)
+  await env.DB.prepare(
+    `insert into user_document (user_id, document_id, title, imported_at, visibility, licence, author, source) values (?, 'a', 't', '2026-11-07T00:00:00.000Z', 'public', 'cc0', null, null)`,
+  )
     .bind(user.id)
     .run();
   const tag = (kind: string, value: string, document = "a") =>
@@ -122,6 +134,61 @@ test("an entry's tags are tags skolia has, one of each kind, and go with the ent
   await assert.rejects(tag("level", "B1"), /UNIQUE constraint failed/);
   await env.DB.prepare("delete from user_document where document_id = 'a'").run();
   assert.equal(await env.DB.prepare("select 1 from user_document_tag").first(), null);
+});
+
+test("an annotation is a range of an entry's text, with JSON data and a shareable licence, counted on the entry, and goes with the entry", async () => {
+  const { env } = local;
+  const user = await local.signUp(ALICE);
+  await env.DB.prepare("insert into document (id, lang, words) values ('a', 'pl', 1)").run();
+  await env.DB.prepare(
+    `insert into user_document (user_id, document_id, title, imported_at, visibility, licence, author, source) values (?, 'a', 't', '2026-11-07T00:00:00.000Z', 'private', 'unknown', null, null)`,
+  )
+    .bind(user.id)
+    .run();
+  const audio = '{"url":"https://example.org/a.mp3"}';
+  const annotate = ({
+    document = "a",
+    id = "x",
+    start = 0,
+    end = 1,
+    kind = "audio",
+    data = audio,
+    licence = "cc0",
+    source = null as string | null,
+    addedAt = "2026-11-07T00:00:00.000Z",
+  } = {}) =>
+    env.DB.prepare("insert into user_document_annotation values (?, ?, ?, ?, ?, ?, ?, ?, null, ?, ?)")
+      .bind(user.id, document, id, start, end, kind, data, licence, source, addedAt)
+      .run();
+  await annotate();
+  await assert.rejects(annotate(), /UNIQUE constraint failed/);
+  const bad = [
+    { start: -1 },
+    { start: 2, end: 2 },
+    { start: 2, end: 1 },
+    { data: "[]" },
+    { data: "{" },
+    { data: '"x"' },
+    { licence: "all-rights-reserved" },
+    { licence: "unknown" },
+    { source: "ftp://x" },
+    { addedAt: "2026-11-07T00:00:00Z" },
+  ];
+  for (const fields of bad) await assert.rejects(annotate({ id: "y", ...fields }), /CHECK constraint failed/, JSON.stringify(fields));
+  await assert.rejects(annotate({ id: "y", document: "missing" }), /FOREIGN KEY constraint failed/);
+  await annotate({ id: "y", data: '{ "url" : "https://example.org/b.mp3" }', licence: "cc-by-nc-nd", source: "https://example.org" });
+  await annotate({ id: "z", kind: "text", data: `{"text":"${"ż".repeat(2000)}"}` });
+  const count = async () =>
+    (await env.DB.prepare("select annotations_count from user_document where document_id = 'a'").first())?.["annotations_count"];
+  assert.equal(await count(), 3);
+  await env.DB.prepare("delete from user_document_annotation where id = 'y'").run();
+  assert.equal(await count(), 2);
+  await assert.rejects(
+    env.DB.prepare("update user_document set annotations_count = -1 where document_id = 'a'").run(),
+    /CHECK constraint failed/,
+  );
+  await env.DB.prepare("delete from user_document where document_id = 'a'").run();
+  assert.equal(await env.DB.prepare("select 1 from user_document_annotation").first(), null);
 });
 
 test("a list narrowed by tags seeks each value from the cursor, and merges them", async () => {

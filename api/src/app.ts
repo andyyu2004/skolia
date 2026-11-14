@@ -10,6 +10,7 @@ import { zValidator } from "@hono/zod-validator";
 import * as z from "zod";
 import { LANGS, MAX_TEXT_LENGTH, type ApiError, type User, type Version } from "@skolia/shared/api";
 import * as schemas from "@skolia/shared/schemas";
+import * as annotations from "./controllers/annotations.ts";
 import * as cards from "./controllers/cards.ts";
 import * as documents from "./controllers/documents.ts";
 import * as positions from "./controllers/positions.ts";
@@ -24,6 +25,9 @@ const logger = log("api");
 // character limit is checked after parsing.
 const MAX_BODY_BYTES = MAX_TEXT_LENGTH * 6 + 4 * 1024;
 const DOCUMENT_ID_MESSAGE = "document id must be 64 lowercase hex characters";
+const ANNOTATION_ID_MESSAGE = "annotation id must be 64 lowercase hex characters";
+// An annotation's data is a URL or so; this leaves room for a kind with more
+const MAX_ANNOTATION_BYTES = 16 * 1024;
 const LEMMA_ID_MESSAGE = `lemma id must be {lang}:{lemma}:{upos}, lang one of ${LANGS.join(", ")}`;
 
 export type AppType = ReturnType<typeof createApp>;
@@ -33,6 +37,11 @@ export function createApp(deps: Deps) {
   const limit = bodyLimit({
     maxSize: MAX_BODY_BYTES,
     onError: (c) => c.json({ error: `text is longer than ${MAX_TEXT_LENGTH} characters` } satisfies ApiError, 413),
+  });
+
+  const annotationLimit = bodyLimit({
+    maxSize: MAX_ANNOTATION_BYTES,
+    onError: (c) => c.json({ error: `an annotation is at most ${MAX_ANNOTATION_BYTES} bytes` } satisfies ApiError, 413),
   });
 
   /** The controller's result for the signed-in user, or 401. */
@@ -106,7 +115,7 @@ export function createApp(deps: Deps) {
     .get("/api/me/reading-list", zValidator("query", schemas.ReadingQuery, badRequest()), (c) =>
       signedIn(c, (user) => {
         const { status, lang, ...page } = c.req.valid("query");
-        return readingList.list(deps, user, status, lang, page);
+        return readingList.list(deps, user, { status, lang }, page);
       }),
     )
     .get("/api/me/reading-list/:id", zValidator("param", z.object({ id: schemas.DocumentId }), badRequest(DOCUMENT_ID_MESSAGE)), (c) =>
@@ -174,6 +183,18 @@ export function createApp(deps: Deps) {
           c.req.header("if-none-match"),
         ),
       ),
+    )
+    .get("/api/documents/:id/annotations", zValidator("query", schemas.AnnotationsQuery, badRequest()), async (c) => {
+      const { from, to, ...page } = c.req.valid("query");
+      return send(c, await annotations.list(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers), { from, to }, page));
+    })
+    .post("/api/documents/:id/annotations", annotationLimit, zValidator("json", schemas.NewAnnotation, badRequest()), (c) =>
+      signedIn(c, (user) => annotations.add(deps, user, c.req.param("id"), c.req.valid("json"))),
+    )
+    .delete(
+      "/api/documents/:id/annotations/:annotationId",
+      zValidator("param", z.object({ id: z.string(), annotationId: schemas.AnnotationId }), badRequest(ANNOTATION_ID_MESSAGE)),
+      (c) => signedIn(c, (user) => annotations.remove(deps, user, c.req.param("id"), c.req.valid("param").annotationId)),
     );
 
   return app;

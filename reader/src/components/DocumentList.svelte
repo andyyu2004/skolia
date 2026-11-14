@@ -77,7 +77,7 @@
               {/if}
               <span>{doc.words.toLocaleString()} {doc.words === 1 ? "word" : "words"}</span>
               <span>imported by {doc.mine ? "you" : doc.importer.name}</span>
-              <span>{dateFormat.format(new Date(doc.imported))}</span>
+              <span>{dateFormat.format(new Date(doc.importedAt))}</span>
             </span>
             <span class="licence">{LICENCE_INFO[doc.licence].short}</span>
           </a>

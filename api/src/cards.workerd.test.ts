@@ -115,8 +115,8 @@ test("an active word gets a recognition and a production card, new and due now, 
     ],
   );
   assert.deepEqual(await words(app, headers), [
-    { lemmaId: "pl:kot:NOUN", status: "active", updated: "2026-11-04T00:00:00.000Z", mature: false },
-    { lemmaId: "pl:pies:NOUN", status: "active", updated: "2026-11-04T00:00:00.000Z", mature: false },
+    { lemmaId: "pl:kot:NOUN", status: "active", updatedAt: "2026-11-04T00:00:00.000Z", mature: false },
+    { lemmaId: "pl:pies:NOUN", status: "active", updatedAt: "2026-11-04T00:00:00.000Z", mature: false },
   ]);
 });
 

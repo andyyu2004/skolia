@@ -2,6 +2,10 @@
 // Object per user (src/worker/adapters.ts), Better Auth (src/auth.ts), and fakes in the
 // tests.
 import type {
+  Annotation,
+  AnnotationFilter,
+  AnnotationId,
+  AnnotationKey,
   AvailableTag,
   CardCounts,
   CardGroup,
@@ -24,6 +28,7 @@ import type {
   NewCloze,
   NewLeft,
   ReadingEntry,
+  ReadingFilter,
   ReadingKey,
   ReadingPosition,
   ReadingStatus,
@@ -62,7 +67,7 @@ export interface EntryFields {
 export interface DocumentEntry extends EntryFields {
   readonly id: DocumentId;
   readonly user: UserId;
-  readonly imported: Timestamp;
+  readonly importedAt: Timestamp;
 }
 
 /** An entry with its text's language and word count, and its user's name. */
@@ -93,7 +98,23 @@ export interface DocumentStore {
   update(id: DocumentId, user: UserId, fields: EntryFields): Promise<void>;
   /** Delete the user's entry. The text stays, for anyone who imports it again. */
   remove(id: DocumentId, user: UserId): Promise<void>;
+  /** A page of the user's entry's annotations that the filter keeps, by where they start. */
+  annotations(
+    id: DocumentId,
+    user: UserId,
+    filter: AnnotationFilter,
+    page: PageRequest<AnnotationKey>,
+  ): Promise<Paginated<Annotation, AnnotationKey>>;
+  /** Add the annotation to the user's entry, which must exist, unless it has one with its
+   * id already or has MAX_ANNOTATIONS. */
+  annotate(id: DocumentId, user: UserId, annotation: Annotation): Promise<AnnotateResult>;
+  /** False if the user's entry has no annotation with the id. */
+  unannotate(id: DocumentId, user: UserId, annotationId: AnnotationId): Promise<boolean>;
 }
+
+/** added: the annotation is new. exists: the entry had it, as it's given here. full: the
+ * entry has MAX_ANNOTATIONS. */
+export type AnnotateResult = { readonly kind: "added" | "exists"; readonly annotation: Annotation } | { readonly kind: "full" };
 
 export interface StoredBlob {
   body: Uint8Array<ArrayBuffer>;
@@ -160,13 +181,8 @@ export interface UserData {
    * only with the status. lang: the text's. */
   setReading(userId: UserId, documentId: DocumentId, lang: Lang, status: ReadingStatus, now: Timestamp): Promise<ReadingEntry>;
   removeReading(userId: UserId, documentId: DocumentId): Promise<void>;
-  /** A page of the texts on the list with the status, in the language if one is given. */
-  readingList(
-    userId: UserId,
-    status: ReadingStatus,
-    lang: Lang | undefined,
-    page: PageRequest<ReadingKey>,
-  ): Promise<Paginated<StoredReading, ReadingKey>>;
+  /** A page of the texts on the list that the filter keeps. */
+  readingList(userId: UserId, filter: ReadingFilter, page: PageRequest<ReadingKey>): Promise<Paginated<StoredReading, ReadingKey>>;
 }
 
 export type StoredPosition = Omit<ReadingPosition, "at"> & { at: Timestamp };
