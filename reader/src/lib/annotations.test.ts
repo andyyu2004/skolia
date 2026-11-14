@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { Piece } from "@skolia/shared/doc";
 import type { Token } from "@skolia/shared/schema";
+import * as schemas from "@skolia/shared/schemas";
 import { audioAnnotations, inRange, placeAudio } from "./annotations.ts";
 
 const fields = {
@@ -12,20 +13,20 @@ const fields = {
 };
 
 function annotation(start: number, end: number, n = 1) {
-  return { ...fields, id: String(n).repeat(64), start, end, kind: "audio", data: { url: `https://audio.test/${n}.mp3` } };
+  return schemas.Annotation.parse({
+    ...fields,
+    id: String(n).repeat(64),
+    start,
+    end,
+    kind: "audio",
+    data: { url: `https://audio.test/${n}.mp3` },
+  });
 }
 
-test("only audio annotations that parse are kept", () => {
+test("only audio annotations are kept", () => {
   const audio = annotation(0, 5);
-  const kept = audioAnnotations([
-    audio,
-    { ...annotation(5, 9, 2), kind: "text", data: { text: "a note" } },
-    { ...annotation(5, 9, 3), kind: "video", data: { url: "https://video.test/3.mp4" } },
-    { ...annotation(5, 9, 4), data: { url: "http://audio.test/4.mp3" } },
-    { ...annotation(5, 9, 5), id: "not a hash" },
-    null,
-  ]);
-  assert.deepEqual(kept, [audio]);
+  const note = schemas.Annotation.parse({ ...annotation(5, 9, 2), kind: "text", data: { text: "a note" } });
+  assert.deepEqual(audioAnnotations([audio, note]), [audio]);
 });
 
 /** The text's words and the gaps between them, as layout makes them, the tokens' offsets in

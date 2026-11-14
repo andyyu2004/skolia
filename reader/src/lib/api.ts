@@ -5,6 +5,7 @@ import { hc } from "hono/client";
 import type { AppType } from "@skolia/api/app";
 import {
   ANNOTATION_PAGE,
+  type Annotation,
   CLOZE_PAGE,
   TAG_PAGE,
   WORD_PAGE,
@@ -159,9 +160,8 @@ export async function deleteDocument(id: DocumentId): Promise<void> {
   if (!response.ok) throw await failure(response);
 }
 
-/** Every annotation of the entry the viewer sees for the text, unparsed: what the reader
- * doesn't know is skipped (lib/annotations.ts), not an error. */
-export function listAnnotations(id: DocumentId): Promise<readonly unknown[]> {
+/** Every annotation of the entry the viewer sees for the text. */
+export function listAnnotations(id: DocumentId): Promise<readonly Annotation[]> {
   return allPages(async (after?: Cursor<AnnotationKey>) => {
     const response = await api.documents[":id"].annotations.$get({
       param: { id },

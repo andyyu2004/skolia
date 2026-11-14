@@ -2,17 +2,12 @@
 // whole paragraphs, each a play button before the paragraph's first word.
 import type { Annotation } from "@skolia/shared/api";
 import type { Piece } from "@skolia/shared/doc";
-import * as schemas from "@skolia/shared/schemas";
 
 export type AudioAnnotation = Extract<Annotation, { readonly kind: "audio" }>;
 
-/** The audio annotations among the API's. One of a kind this reader doesn't know, or that
- * doesn't parse, is skipped, so a reader older than the API still shows the rest. */
-export function audioAnnotations(items: readonly unknown[]): readonly AudioAnnotation[] {
-  return items.flatMap((item) => {
-    const parsed = schemas.Annotation.safeParse(item);
-    return parsed.success && parsed.data.kind === "audio" ? [parsed.data] : [];
-  });
+/** The audio annotations among the API's. */
+export function audioAnnotations(annotations: readonly Annotation[]): readonly AudioAnnotation[] {
+  return annotations.filter((a): a is AudioAnnotation => a.kind === "audio");
 }
 
 /** An audio annotation and its range in code points, as the analysis counts (git-bug ec23aef). */
