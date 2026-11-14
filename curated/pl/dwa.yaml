@@ -2,16 +2,36 @@ kind: inline
 title: "Dwa"
 author: "Carole Bloch; translated by Aleksandra Migorska"
 licence: cc-by-nc
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0271/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0271/
 tags:
   level: A1
 text: |
-  Dwie małe ręce, aby trzymać.
+  [Dwie małe ręce, aby trzymać.]{02}
 
-  Dwie małe stopy, aby kopać.
+  [Dwie małe stopy, aby kopać.]{03}
 
-  Dwoje oczu, aby widzieć.
+  [Dwoje oczu, aby widzieć.]{04}
 
-  Dwoje uszu, aby słyszeć.
+  [Dwoje uszu, aby słyszeć.]{05}
 
-  Dwa kochające ramiona, aby tulić.
+  [Dwa kochające ramiona, aby tulić.]{06}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by-nc
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0271/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0271/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0271/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0271/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0271/mp3/06.mp3

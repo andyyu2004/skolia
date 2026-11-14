@@ -2,22 +2,51 @@ kind: inline
 title: "Moje ciało"
 author: "Clare Verbeek, Thembani Dladla, Zanele Buthelezi; translated by Aleksandra Migorska"
 licence: cc-by-nc
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0112/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0112/
 tags:
   level: A1
 text: |
-  Dzięki niemu mogę biegać.
+  [Dzięki niemu mogę biegać.]{02}
 
-  Dzięki niemu mogę skakać.
+  [Dzięki niemu mogę skakać.]{03}
 
-  Dzięki niemu mogę tańczyć.
+  [Dzięki niemu mogę tańczyć.]{04}
 
-  Dzięki niemu mogę pływać.
+  [Dzięki niemu mogę pływać.]{05}
 
-  Dzięki niemu mogę przeskakiwać.
+  [Dzięki niemu mogę przeskakiwać.]{06}
 
-  Dzięki niemu mogę kopać.
+  [Dzięki niemu mogę kopać.]{07}
 
-  Dzięki niemu mogę uciekać.
+  [Dzięki niemu mogę uciekać.]{08}
 
-  Ale nigdy nie będę mógł latać.
+  [Ale nigdy nie będę mógł latać.]{09}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by-nc
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0112/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0112/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0112/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0112/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0112/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0112/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0112/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0112/mp3/09.mp3

@@ -2,22 +2,51 @@ kind: inline
 title: "Koza, Pies i Krowa"
 author: "Fabian Wakholi; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0004/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0004/
 tags:
   level: A2
 text: |
-  Koza, Pies i Krowa byli dobrymi przyjaciółmi. Pewnego dnia wybrali się na wycieczkę taksówką.
+  [Koza, Pies i Krowa byli dobrymi przyjaciółmi. Pewnego dnia wybrali się na wycieczkę taksówką.]{02}
 
-  Gdy dotarli na miejsce, kierowca poprosił o zapłatę. Krowa zapłaciła swoją część.
+  [Gdy dotarli na miejsce, kierowca poprosił o zapłatę. Krowa zapłaciła swoją część.]{03}
 
-  Pies zapłacił trochę więcej, bo nie miał drobnych.
+  [Pies zapłacił trochę więcej, bo nie miał drobnych.]{04}
 
-  Kierowca właśnie zamierzał wydać psu resztę, gdy Koza wyskoczyła z taksówki nie płacąc za przejazd.
+  [Kierowca właśnie zamierzał wydać psu resztę, gdy Koza wyskoczyła z taksówki nie płacąc za przejazd.]{05}
 
-  Kierowca bardzo się zdenerwował i odjechał, nie wydając Psu reszty.
+  [Kierowca bardzo się zdenerwował i odjechał, nie wydając Psu reszty.]{06}
 
-  Dlatego właśnie Pies do dziś biega za samochodami i zagląda do środka w poszukiwaniu kierowcy, który jest mu winien resztę pieniędzy.
+  [Dlatego właśnie Pies do dziś biega za samochodami i zagląda do środka w poszukiwaniu kierowcy, który jest mu winien resztę pieniędzy.]{07}
 
-  Koza ucieka gdy słyszy samochód, bo boi się aresztowania za to, że nie zapłaciła za przejazd.
+  [Koza ucieka gdy słyszy samochód, bo boi się aresztowania za to, że nie zapłaciła za przejazd.]{08}
 
-  Za to Krowie nie przeszkadzają nadjeżdżające samochody. Krowa nie spieszy się, gdy przechodzi przez jezdnię bo wie, że zapłaciła za przejazd co do grosza.
+  [Za to Krowie nie przeszkadzają nadjeżdżające samochody. Krowa nie spieszy się, gdy przechodzi przez jezdnię bo wie, że zapłaciła za przejazd co do grosza.]{09}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0004/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0004/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0004/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0004/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0004/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0004/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0004/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0004/mp3/09.mp3

@@ -2,42 +2,101 @@ kind: inline
 title: "Piosenka Sakimy"
 author: "Ursula Nafula; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0315/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0315/
 tags:
   level: A2
 text: |
-  Sakima mieszkał z rodzicami i czteroletnią siostrą na lądzie bogacza. Mieszkali w pokrytej trawą chacie, która stała blisko drzew.
+  [Sakima mieszkał z rodzicami i czteroletnią siostrą na lądzie bogacza. Mieszkali w pokrytej trawą chacie, która stała blisko drzew.]{02}
 
-  Gdy Sakima miał trzy lata, zachorował i stracił wzrok. Ale mimo to, był utalentowanym chłopcem.
+  [Gdy Sakima miał trzy lata, zachorował i stracił wzrok. Ale mimo to, był utalentowanym chłopcem.]{03}
 
-  Sakima robił wiele rzeczy, których nie potrafili robić jego rówieśnicy. Zasiadał na przykład ze starszymi w wiosce i omawiał z nimi ważne sprawy.
+  [Sakima robił wiele rzeczy, których nie potrafili robić jego rówieśnicy. Zasiadał na przykład ze starszymi w wiosce i omawiał z nimi ważne sprawy.]{04}
 
-  Rodzice Sakima pracowali na lądzie bogacza. Wychodzili z domu wcześnie rano i wracali późnym wieczorem. Sakima zostawał wtedy w domu, aby opiekować się siostrą.
+  [Rodzice Sakima pracowali na lądzie bogacza. Wychodzili z domu wcześnie rano i wracali późnym wieczorem. Sakima zostawał wtedy w domu, aby opiekować się siostrą.]{05}
 
-  Sakima uwielbiał śpiewać. Pewnego dnia matka zapytała go: „Skąd znasz te wszystkie piosenki?”
+  [Sakima uwielbiał śpiewać. Pewnego dnia matka zapytała go: „Skąd znasz te wszystkie piosenki?”]{06}
 
-  „Słyszę je w mojej głowie i śpiewam, po prostu przychodzą do mnie” – odpowiedział chłopiec.
+  [„Słyszę je w mojej głowie i śpiewam, po prostu przychodzą do mnie” – odpowiedział chłopiec.]{07}
 
-  Sakima lubił śpiewać dla młodszej siostry, szczególnie, gdy była głodna. Siostra słuchała, gdy śpiewał swoją ulubioną piosenkę i kołysała się w jej rytm.
+  [Sakima lubił śpiewać dla młodszej siostry, szczególnie, gdy była głodna. Siostra słuchała, gdy śpiewał swoją ulubioną piosenkę i kołysała się w jej rytm.]{08}
 
-  „Sakima, czy możesz zaśpiewać tę piosenkę jeszcze raz?” – prosiła. Sakima zgadzał się i śpiewał piosenkę od początku.
+  [„Sakima, czy możesz zaśpiewać tę piosenkę jeszcze raz?” – prosiła. Sakima zgadzał się i śpiewał piosenkę od początku.]{09}
 
-  Pewnego dnia, gdy rodzice wrócili do domu byli bardzo małomówni. Sakima czuł, że coś się stało.
+  [Pewnego dnia, gdy rodzice wrócili do domu byli bardzo małomówni. Sakima czuł, że coś się stało.]{10}
 
-  „Mamo, tato, co się stało?” – zapytał chłopiec. Okazało się, że zaginął syn bogacza. Bogacz był załamany.
+  [„Mamo, tato, co się stało?” – zapytał chłopiec. Okazało się, że zaginął syn bogacza. Bogacz był załamany.]{11}
 
-  „Zaśpiewam dla niego. Może znowu będzie szczęśliwy” – Sakima zaproponował. Rodzicom nie podobał się ten pomysł: „To jest bardzo bogaty człowiek, a ty jesteś tylko niewidomym chłopcem. Naprawdę myślisz, że możesz pomóc bogaczowi?”
+  [„Zaśpiewam dla niego. Może znowu będzie szczęśliwy” – Sakima zaproponował. Rodzicom nie podobał się ten pomysł: „To jest bardzo bogaty człowiek, a ty jesteś tylko niewidomym chłopcem. Naprawdę myślisz, że możesz pomóc bogaczowi?”]{12}
 
-  Sakima nie poddawał się. Jego siostra postanowiła go wesprzeć: „Piosenki Sakima pomagają mi, gdy jestem głodna. Pomogą również bogaczowi!”
+  [Sakima nie poddawał się. Jego siostra postanowiła go wesprzeć: „Piosenki Sakima pomagają mi, gdy jestem głodna. Pomogą również bogaczowi!”]{13}
 
-  Następnego dnia Sakima poprosił siostrę, aby zaprowadziła go do domu bogacza.
+  [Następnego dnia Sakima poprosił siostrę, aby zaprowadziła go do domu bogacza.]{14}
 
-  Sakima stanął pod dużym oknem domu bogacza i zaczął śpiewać swoją ulubioną pieśń. Po chwili z okna wychyliła się głowa bogacza.
+  [Sakima stanął pod dużym oknem domu bogacza i zaczął śpiewać swoją ulubioną pieśń. Po chwili z okna wychyliła się głowa bogacza.]{15}
 
-  Pracownicy bogacza zaprzestali pracy, aby posłuchać głosu Sakima. Jeden z nich powiedział: „Nikt nie był w stanie pocieszyć bogacza. Czy ten niewidomy chłopiec naprawdę myśli, że może go pocieszyć?”
+  [Pracownicy bogacza zaprzestali pracy, aby posłuchać głosu Sakima. Jeden z nich powiedział: „Nikt nie był w stanie pocieszyć bogacza. Czy ten niewidomy chłopiec naprawdę myśli, że może go pocieszyć?”]{16}
 
-  Sakima skończył śpiewać i odwrócił się, aby odejść. Ku zaskoczeniu wszystkich, bogacz wybiegł z domu i powiedział: „Proszę zaśpiewaj jeszcze raz.”
+  [Sakima skończył śpiewać i odwrócił się, aby odejść. Ku zaskoczeniu wszystkich, bogacz wybiegł z domu i powiedział: „Proszę zaśpiewaj jeszcze raz.”]{17}
 
-  W tym samym momencie, dwóch mężczyzn przyniosło kogoś na noszach. Był to syn bogacza, którego znaleziono pobitego na poboczu drogi.
+  [W tym samym momencie, dwóch mężczyzn przyniosło kogoś na noszach. Był to syn bogacza, którego znaleziono pobitego na poboczu drogi.]{18}
 
-  Bogacz był bardzo szczęśliwy, że jego syn się odnalazł! Zabierając swojego syna do szpitala, zabrał tam również Sakimę, aby lekarze pomogli mu odzyskać wzrok. Chciał w ten sposób podziękować Sakimie za jego pomoc.
+  [Bogacz był bardzo szczęśliwy, że jego syn się odnalazł! Zabierając swojego syna do szpitala, zabrał tam również Sakimę, aby lekarze pomogli mu odzyskać wzrok. Chciał w ten sposób podziękować Sakimie za jego pomoc.]{19}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/09.mp3
+  "10":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/10.mp3
+  "11":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/11.mp3
+  "12":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/12.mp3
+  "13":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/13.mp3
+  "14":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/14.mp3
+  "15":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/15.mp3
+  "16":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/16.mp3
+  "17":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/17.mp3
+  "18":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/18.mp3
+  "19":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0315/mp3/19.mp3

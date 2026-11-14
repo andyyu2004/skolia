@@ -2,22 +2,51 @@ kind: inline
 title: "Mundurki szkolne"
 author: "Clare Verbeek, Thembani Dladla, Zanele Buthelezi; translated by Aleksandra Migorska"
 licence: cc-by-nc
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0003/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0003/
 tags:
   level: A1
 text: |
-  Ta sukienka jest długa.
+  [Ta sukienka jest długa.]{02}
 
-  Ta bluza jest duża.
+  [Ta bluza jest duża.]{03}
 
-  Ta torba jest duża.
+  [Ta torba jest duża.]{04}
 
-  Ten pasek jest…?
+  [Ten pasek jest…?]{05}
 
-  Ten kapelusz jest mały.
+  [Ten kapelusz jest mały.]{06}
 
-  Te skarpetki są krótkie.
+  [Te skarpetki są krótkie.]{07}
 
-  Ale te buty są nowe.
+  [Ale te buty są nowe.]{08}
 
-  … pasują idealnie.
+  [… pasują idealnie.]{09}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by-nc
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0003/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0003/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0003/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0003/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0003/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0003/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0003/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0003/mp3/09.mp3

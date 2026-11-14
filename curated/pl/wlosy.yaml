@@ -2,22 +2,51 @@ kind: inline
 title: "Włosy"
 author: "Clare Verbeek, Thembani Dladla, Zanele Buthelezi; translated by Aleksandra Migorska"
 licence: cc-by-nc
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0120/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0120/
 tags:
   level: A1
 text: |
-  Thuli ma krótkie włosy.
+  [Thuli ma krótkie włosy.]{02}
 
-  Anna ma długie włosy.
+  [Anna ma długie włosy.]{03}
 
-  Cathy ma najdłuższe włosy.
+  [Cathy ma najdłuższe włosy.]{04}
 
-  Zama ma włosy splecione w warkocze.
+  [Zama ma włosy splecione w warkocze.]{05}
 
-  Baba ma brodę.
+  [Baba ma brodę.]{06}
 
-  Zanele uczesała swoje włosy.
+  [Zanele uczesała swoje włosy.]{07}
 
-  Thabo podciął swoje włosy.
+  [Thabo podciął swoje włosy.]{08}
 
-  Themba zgolił swoje włosy.
+  [Themba zgolił swoje włosy.]{09}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by-nc
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0120/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0120/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0120/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0120/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0120/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0120/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0120/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0120/mp3/09.mp3

@@ -2,22 +2,51 @@ kind: inline
 title: "Liczymy zwierzęta"
 author: "Zanele Buthelezi, Thembani Dladla, Clare Verbeek; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0327/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0327/
 tags:
   level: A1
 text: |
-  Jeden słoń będzie pić wodę.
+  [Jeden słoń będzie pić wodę.]{02}
 
-  Dwie żyrafy będą pić wodę.
+  [Dwie żyrafy będą pić wodę.]{03}
 
-  Trzy bawoły i cztery ptaki również będą pić wodę.
+  [Trzy bawoły i cztery ptaki również będą pić wodę.]{04}
 
-  Pięć antylop i sześć guźców podchodzi do wodopoju.
+  [Pięć antylop i sześć guźców podchodzi do wodopoju.]{05}
 
-  Siedem zebr biegnie do wodopoju.
+  [Siedem zebr biegnie do wodopoju.]{06}
 
-  Osiem żab i dziewięć ryb pływa w wodzie.
+  [Osiem żab i dziewięć ryb pływa w wodzie.]{07}
 
-  Jeden lew ryczy. On również chce napić się wody. Kto się boi lwa?
+  [Jeden lew ryczy. On również chce napić się wody. Kto się boi lwa?]{08}
 
-  Jeden słoń i lew piją razem wodę.
+  [Jeden słoń i lew piją razem wodę.]{09}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0327/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0327/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0327/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0327/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0327/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0327/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0327/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0327/mp3/09.mp3

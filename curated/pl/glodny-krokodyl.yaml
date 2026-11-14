@@ -2,16 +2,36 @@ kind: inline
 title: "Głodny krokodyl"
 author: "Christian G.; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0156/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0156/
 tags:
   level: A1
 text: |
-  Był sobie bardzo głodny krokodyl.
+  [Był sobie bardzo głodny krokodyl.]{02}
 
-  Szukał jedzenia powoli i po cichu. Gdy nagle…
+  [Szukał jedzenia powoli i po cichu. Gdy nagle…]{03}
 
-  MACH!!! Krokodyl atakuje!
+  [MACH!!! Krokodyl atakuje!]{04}
 
-  Teraz nie jest już głodny. Jest szczęśliwy.
+  [Teraz nie jest już głodny. Jest szczęśliwy.]{05}
 
-  Aż do następnego razu, gdy znów zgłodnieje.
+  [Aż do następnego razu, gdy znów zgłodnieje.]{06}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0156/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0156/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0156/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0156/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0156/mp3/06.mp3

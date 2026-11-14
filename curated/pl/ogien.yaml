@@ -2,22 +2,51 @@ kind: inline
 title: "Ogień"
 author: "Deborah Namugosa, Beatrice Nabune, Alison Tukei, Rose Sabano; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0302/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0302/
 tags:
   level: A1
 text: |
-  Spójrz – ogień!
+  [Spójrz – ogień!]{02}
 
-  Ogień płonie.
+  [Ogień płonie.]{03}
 
-  Ogień gotuje.
+  [Ogień gotuje.]{04}
 
-  Ogień ogrzewa.
+  [Ogień ogrzewa.]{05}
 
-  Ogień daje światło.
+  [Ogień daje światło.]{06}
 
-  Spójrz – ogień!
+  [Spójrz – ogień!]{07}
 
-  Ogień jest wspaniały.
+  [Ogień jest wspaniały.]{08}
 
-  Ogień jest potężny.
+  [Ogień jest potężny.]{09}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0302/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0302/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0302/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0302/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0302/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0302/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0302/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0302/mp3/09.mp3

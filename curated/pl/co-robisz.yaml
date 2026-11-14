@@ -2,22 +2,51 @@ kind: inline
 title: "Co robisz?"
 author: "Nina Orange; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0008/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0008/
 tags:
   level: A1
 text: |
-  Ja śpiewam.
+  [Ja śpiewam.]{02}
 
-  Ona macha.
+  [Ona macha.]{03}
 
-  Ja klaszczę.
+  [Ja klaszczę.]{04}
 
-  Ona się rozciąga.
+  [Ona się rozciąga.]{05}
 
-  On kogoś woła.
+  [On kogoś woła.]{06}
 
-  Ja odpowiadam.
+  [Ja odpowiadam.]{07}
 
-  Ona słucha.
+  [Ona słucha.]{08}
 
-  A Ty, co robisz?
+  [A Ty, co robisz?]{09}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0008/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0008/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0008/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0008/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0008/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0008/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0008/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0008/mp3/09.mp3

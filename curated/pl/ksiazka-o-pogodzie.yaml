@@ -2,22 +2,51 @@ kind: inline
 title: "Książka o pogodzie"
 author: "Clare Verbeek, Thembani Dladla, Zanele Buthelezi; translated by Aleksandra Migorska"
 licence: cc-by-nc
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0231/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0231/
 tags:
   level: A1
 text: |
-  Jest sucho.
+  [Jest sucho.]{02}
 
-  Słońce jest gorące.
+  [Słońce jest gorące.]{03}
 
-  Jest wietrznie.
+  [Jest wietrznie.]{04}
 
-  Jest pochmurno.
+  [Jest pochmurno.]{05}
 
-  Jest zimno.
+  [Jest zimno.]{06}
 
-  Pada deszcz.
+  [Pada deszcz.]{07}
 
-  Grzmi.
+  [Grzmi.]{08}
 
-  Widzę tęczę.
+  [Widzę tęczę.]{09}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by-nc
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0231/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0231/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0231/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0231/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0231/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0231/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0231/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0231/mp3/09.mp3

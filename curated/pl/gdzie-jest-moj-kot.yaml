@@ -2,22 +2,51 @@ kind: inline
 title: "Gdzie jest mój kot?"
 author: "Clare Verbeek, Thembani Dladla, Zanele Buthelezi; translated by Aleksandra Migorska"
 licence: cc-by-nc
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0009/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0009/
 tags:
   level: A1
 text: |
-  Gdzie jest mój kot?
+  [Gdzie jest mój kot?]{02}
 
-  Czy jest pod łóżkiem?
+  [Czy jest pod łóżkiem?]{03}
 
-  Czy jest na szafie?
+  [Czy jest na szafie?]{04}
 
-  Czy jest za kanapą?
+  [Czy jest za kanapą?]{05}
 
-  Czy jest obok śmietnika?
+  [Czy jest obok śmietnika?]{06}
 
-  Czy jest w koszu na pranie?
+  [Czy jest w koszu na pranie?]{07}
 
-  Czy jest na zewnątrz?
+  [Czy jest na zewnątrz?]{08}
 
-  O! Tutaj jest!
+  [O! Tutaj jest!]{09}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by-nc
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0009/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0009/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0009/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0009/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0009/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0009/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0009/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0009/mp3/09.mp3

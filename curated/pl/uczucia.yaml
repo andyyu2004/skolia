@@ -2,16 +2,36 @@ kind: inline
 title: "Uczucia"
 author: "Clare Verbeek, Thembani Dladla, Zanele Buthelezi; translated by Aleksandra Migorska"
 licence: cc-by-nc
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0030/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0030/
 tags:
   level: A1
 text: |
-  Moje serce odczuwa bardzo wiele.
+  [Moje serce odczuwa bardzo wiele.]{02}
 
-  Czuję się szczęśliwa, gdy wieczorami babcia opowiada nam bajki.
+  [Czuję się szczęśliwa, gdy wieczorami babcia opowiada nam bajki.]{03}
 
-  Czuję się figlarnie, gdy bawię się z moją przyjaciółką.
+  [Czuję się figlarnie, gdy bawię się z moją przyjaciółką.]{04}
 
-  Czuję się źle, gdy tata mówi, że nie ma pieniędzy.
+  [Czuję się źle, gdy tata mówi, że nie ma pieniędzy.]{05}
 
-  Czuję się kochana, gdy moja mama mnie tuli.
+  [Czuję się kochana, gdy moja mama mnie tuli.]{06}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by-nc
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0030/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0030/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0030/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0030/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0030/mp3/06.mp3

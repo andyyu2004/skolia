@@ -2,30 +2,71 @@ kind: inline
 title: "Kara"
 author: "Adelheid Marie Bwire; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0342/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0342/
 tags:
   level: A2
 text: |
-  Pewnego dnia, mama przyniosła mnóstwo owoców.
+  [Pewnego dnia, mama przyniosła mnóstwo owoców.]{02}
 
-  „Kiedy możemy zjeść te owoce?” – pytamy. „Będziemy jeść owoce wieczorem” – odpowiada mama.
+  [„Kiedy możemy zjeść te owoce?” – pytamy. „Będziemy jeść owoce wieczorem” – odpowiada mama.]{03}
 
-  Mój brat Rahim jest łakomy, więc próbuje każdego owocu. Je dużo owoców.
+  [Mój brat Rahim jest łakomy, więc próbuje każdego owocu. Je dużo owoców.]{04}
 
-  „Spójrz co zrobił Rahim!” – krzyczy mój młodszy braciszek. „Rahim jest niegrzeczny i samolubny” – przyznaję.
+  [„Spójrz co zrobił Rahim!” – krzyczy mój młodszy braciszek. „Rahim jest niegrzeczny i samolubny” – przyznaję.]{05}
 
-  Mama jest zła na Rahima.
+  [Mama jest zła na Rahima.]{06}
 
-  My też jesteśmy źli na Rahima, ale Rahim nie okazuje skruchy.
+  [My też jesteśmy źli na Rahima, ale Rahim nie okazuje skruchy.]{07}
 
-  „Czy nie ukarzesz Rahima?” – pyta mój młodszy braciszek.
+  [„Czy nie ukarzesz Rahima?” – pyta mój młodszy braciszek.]{08}
 
-  „Rahim, już niedługo spotka Cię kara” – ostrzega go mama.
+  [„Rahim, już niedługo spotka Cię kara” – ostrzega go mama.]{09}
 
-  Rahim zaczyna źle się czuć.
+  [Rahim zaczyna źle się czuć.]{10}
 
-  „Bardzo boli mnie brzuch” – szepcze Rahim.
+  [„Bardzo boli mnie brzuch” – szepcze Rahim.]{11}
 
-  Mama przewidziała to wcześniej. Teraz owoce wymierzają karę Rahimowi!
+  [Mama przewidziała to wcześniej. Teraz owoce wymierzają karę Rahimowi!]{12}
 
-  Rahim postanawia nas przeprosić. „Już nigdy nie będę taki samolubny” – obiecuje. Wszyscy mu wierzymy.
+  [Rahim postanawia nas przeprosić. „Już nigdy nie będę taki samolubny” – obiecuje. Wszyscy mu wierzymy.]{13}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0342/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0342/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0342/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0342/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0342/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0342/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0342/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0342/mp3/09.mp3
+  "10":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0342/mp3/10.mp3
+  "11":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0342/mp3/11.mp3
+  "12":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0342/mp3/12.mp3
+  "13":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0342/mp3/13.mp3
