@@ -106,10 +106,26 @@ test("reader", async ({ page }) => {
   await expect(page).toHaveScreenshot("reader.png", { fullPage: true });
 });
 
+test("reader, a paragraph playing", async ({ page }) => {
+  await open(page, `#/doc/${LALKA}`);
+  const play = page.getByRole("button", { name: "Play “W renomowanej jadłodajni…”" });
+  const pause = page.getByRole("button", { name: "Pause “W renomowanej jadłodajni…”" });
+  await play.click();
+  await expect(pause).toBeVisible();
+  // Off the button, so it isn't drawn hovered
+  await page.mouse.move(0, 0);
+  await expect(page).toHaveScreenshot("reader-playing.png", { fullPage: true });
+  await pause.click();
+  await expect(play).toBeVisible();
+});
+
+// The words are one tab stop, between the play buttons of the paragraphs
 test("reader, one tab stop for the text", async ({ page }) => {
   await open(page, `#/doc/${LALKA}`);
   const text = page.locator("article");
   await page.getByRole("link", { name: "source" }).focus();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Play “W początkach roku 1878, kiedy…”" })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(text.locator(".w:focus")).toHaveText("W");
   await page.keyboard.press("ArrowRight");
@@ -120,7 +136,7 @@ test("reader, one tab stop for the text", async ({ page }) => {
   await page.keyboard.press("ArrowLeft");
   await expect(text.locator(".w:focus")).toHaveText("W");
   await page.keyboard.press("Tab");
-  expect(await text.evaluate((el) => el.contains(document.activeElement))).toBe(false);
+  await expect(page.getByRole("button", { name: "Play “W renomowanej jadłodajni…”" })).toBeFocused();
   await page.keyboard.press("Shift+Tab");
   await expect(text.locator(".w:focus")).toHaveText("W");
 });

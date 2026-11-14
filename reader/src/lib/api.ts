@@ -4,11 +4,13 @@
 import { hc } from "hono/client";
 import type { AppType } from "@skolia/api/app";
 import {
+  ANNOTATION_PAGE,
   CLOZE_PAGE,
   TAG_PAGE,
   WORD_PAGE,
   isLang,
   lemmaParam,
+  type AnnotationKey,
   type ApiError,
   type CardCounts,
   type CardGroup,
@@ -155,6 +157,19 @@ export async function updateDocument(id: DocumentId, update: DocumentUpdate): Pr
 export async function deleteDocument(id: DocumentId): Promise<void> {
   const response = await api.documents[":id"].$delete({ param: { id } });
   if (!response.ok) throw await failure(response);
+}
+
+/** Every annotation of the entry the viewer sees for the text, unparsed: what the reader
+ * doesn't know is skipped (lib/annotations.ts), not an error. */
+export function listAnnotations(id: DocumentId): Promise<readonly unknown[]> {
+  return allPages(async (after?: Cursor<AnnotationKey>) => {
+    const response = await api.documents[":id"].annotations.$get({
+      param: { id },
+      query: { after, limit: String(ANNOTATION_PAGE.max) },
+    });
+    if (!response.ok) throw await failure(response);
+    return response.json();
+  });
 }
 
 /** The reading by name, or "unsupported" when its schema is newer than this reader

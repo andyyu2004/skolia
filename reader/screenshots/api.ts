@@ -2,7 +2,8 @@
 // page by page.route. The app runs on in-memory ports typed by its Deps, so the
 // screenshots need no Worker, database or ingest, and a change to a port or a route's
 // response fails tsc -p screenshots. The text is the start of Prus's Lalka (public
-// domain), its analysis and bundle as ingest stored them.
+// domain), its analysis and bundle as ingest stored them, with a recording of each
+// paragraph: silence, served from AUDIO.
 import { readFileSync } from "node:fs";
 import { extname, join } from "node:path";
 import { brotliCompressSync, brotliDecompressSync } from "node:zlib";
@@ -11,6 +12,7 @@ import { createApp } from "@skolia/api/app";
 import {
   blankOut,
   matchesTags,
+  type Annotation,
   type Cloze,
   type DocumentId as DocumentIdType,
   type Lang,
@@ -24,7 +26,7 @@ import {
 import { LANGUAGES } from "@skolia/shared/lang";
 import { partKey, statusKey, textKey } from "@skolia/shared/keys";
 import type { Blob, Bundle, Status } from "@skolia/shared/schema";
-import { CardId, DocumentId, LemmaId, Timestamp, UserId } from "@skolia/shared/schemas";
+import { AnnotationId, CardId, DocumentId, LemmaId, Timestamp, UserId } from "@skolia/shared/schemas";
 
 type Deps = Parameters<typeof createApp>[0];
 type StoredDocument = Awaited<ReturnType<Deps["documents"]["list"]>>["items"][number];
@@ -51,6 +53,41 @@ export const user: User = {
 };
 
 const SKOLIA = UserId.parse("skolia");
+
+/** Where the recordings are. */
+export const AUDIO = "https://audio.skolia.test/";
+
+/** A recording of each paragraph of Lalka, as curated texts will have. */
+const narration: readonly Annotation[] = [...text.trimEnd().matchAll(/[^\n]+/gu)].map((paragraph, n) => ({
+  id: AnnotationId.parse(String(n + 1).repeat(64)),
+  start: paragraph.index,
+  end: paragraph.index + paragraph[0].length,
+  kind: "audio",
+  data: { url: `${AUDIO}lalka-${n + 1}.wav` },
+  licence: "public-domain",
+  author: null,
+  source: null,
+  addedAt: Timestamp.parse("2026-11-07T10:00:00.000Z"),
+}));
+
+/** Half a minute of silence, as an 8 kHz, 8-bit mono WAV. */
+function silence(): Buffer {
+  const samples = 8000 * 30;
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + samples, 4);
+  header.write("WAVEfmt ", 8);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(8000, 24);
+  header.writeUInt32LE(8000, 28);
+  header.writeUInt16LE(1, 32);
+  header.writeUInt16LE(8, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(samples, 40);
+  return Buffer.concat([header, Buffer.alloc(samples, 0x80)]);
+}
 const ANALYSIS = partKey(LALKA, "analysis", "s2-ac973bfbdb066");
 const BUNDLE = partKey(LALKA, "bundle", "b1-v2-ac973bfbdb066-l5da30b8a5747");
 
@@ -286,7 +323,8 @@ function deps(signedIn: boolean): Deps {
       add: async () => {},
       update: async () => {},
       remove: async () => {},
-      annotations: async () => ({ items: [], next: null }),
+      // One page: there are only a few
+      annotations: async (id) => ({ items: id === LALKA ? narration : [], next: null }),
       annotate: async () => ({ kind: "full" }),
       unannotate: async () => false,
     },
@@ -344,5 +382,6 @@ export async function serve(page: Page, { signedIn }: { signedIn: boolean }): Pr
     const type = CONTENT_TYPES[extname(file)] ?? "application/octet-stream";
     await route.fulfill({ status: 200, contentType: type, body: readFileSync(join(DIST, file)) });
   });
+  await page.route(`${AUDIO}**`, (route) => route.fulfill({ status: 200, contentType: "audio/wav", body: silence() }));
   return failed;
 }
