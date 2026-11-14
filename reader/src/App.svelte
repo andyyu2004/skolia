@@ -8,14 +8,16 @@
   import Button from "./components/Button.svelte";
   import Nav from "./components/Nav.svelte";
   import Reader from "./pages/reader/Reader.svelte";
+  import ReadingList from "./pages/ReadingList.svelte";
   import Review from "./pages/Review.svelte";
   import Settings from "./pages/Settings.svelte";
   import Upload from "./pages/Upload.svelte";
   import { versionUrl } from "./lib/version.ts";
 
-  type Route = { page: "explore" } | { page: "upload" } | { page: "review"; lang: Lang | null; group: CardGroup | null } | { page: "settings" } | { page: "reader"; id: DocumentId };
+  type Route = { page: "explore" } | { page: "list" } | { page: "upload" } | { page: "review"; lang: Lang | null; group: CardGroup | null } | { page: "settings" } | { page: "reader"; id: DocumentId };
 
   function parse(hash: string): Route {
+    if (hash === "#/list") return { page: "list" };
     if (hash === "#/upload") return { page: "upload" };
     if (hash === "#/review") return { page: "review", lang: null, group: null };
     const [, review, group] = /^#\/review\/([a-z]+)(?:\/(words|forms))?$/.exec(hash) ?? [];
@@ -71,6 +73,8 @@
     {#key route.id}
       <Reader id={route.id} />
     {/key}
+  {:else if route.page === "list"}
+    <ReadingList {user} />
   {:else if route.page === "upload"}
     <Upload {user} />
   {:else if route.page === "review"}
