@@ -4,7 +4,8 @@
   "type": "module",
   "exports": {
     "./checks": "./checks.ts",
-    "./sql": "./sql.ts"
+    "./sql": "./sql.ts",
+    "./query": "./query.ts"
   },
   "scripts": {
     "test": "node --test \"*.test.ts\""
