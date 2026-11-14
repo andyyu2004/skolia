@@ -207,7 +207,7 @@ export interface DocumentSummary {
   id: DocumentId;
   title: string;
   lang: Lang;
-  imported: Timestamp;
+  importedAt: Timestamp;
   words: number;
   visibility: Visibility;
   licence: Licence;

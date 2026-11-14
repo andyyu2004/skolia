@@ -12,7 +12,7 @@ function summary(state: DocumentSummary["state"], reading?: typeof OLD, error?: 
     id: DocumentId.parse("d".repeat(64)),
     title: "t",
     lang: "pl",
-    imported: timestamp(new Date(0)),
+    importedAt: timestamp(new Date(0)),
     words: 1,
     visibility: "public",
     licence: "cc-by",

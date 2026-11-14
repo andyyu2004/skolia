@@ -31,7 +31,7 @@ test("each user's Durable Object keeps its own words", async () => {
   await alice.setWord("pl:pies:NOUN", "active", schemas.Timestamp.parse("2026-11-06T00:00:00.000Z"));
   await alice.setWord("pl:pies:NOUN", "known", schemas.Timestamp.parse("2026-11-06T01:00:00.000Z"));
   const { items, next } = await alice.words(FIRST_PAGE);
-  assert.deepEqual(items, [{ lemmaId: "pl:pies:NOUN", status: "known", updated: "2026-11-06T01:00:00.000Z", mature: false }]);
+  assert.deepEqual(items, [{ lemmaId: "pl:pies:NOUN", status: "known", updatedAt: "2026-11-06T01:00:00.000Z", mature: false }]);
   assert.equal(next, null);
   assert.deepEqual((await local.env.USER.getByName("bob").words(FIRST_PAGE)).items, []);
 });
@@ -206,6 +206,8 @@ test("cloze's migration keeps the word cards and their reviews, and down takes t
       fsrs[0]!.fsrs,
     ),
   );
+  // The cards' methods are the latest migration's
+  await judy.migrate(LATEST);
   const cloze = {
     lemmaId: "pl:pies:NOUN" as const,
     documentId: schemas.DocumentId.parse("a".repeat(64)),
@@ -241,7 +243,7 @@ test("cloze's migration keeps the word cards and their reviews, and down takes t
   assert.deepEqual(await storage.exec("select count(*) as n from cloze where card_id = ?", other), [{ n: 0 }]);
   assert.deepEqual(await storage.exec("select count(*) as n from review where card_id = ?", other), [{ n: 0 }]);
   await storage.exec(
-    "insert into card (id, lemma_id, kind, created, active, fsrs) values ('c1', 'pl:pies:NOUN', ?, ?, 1, ?)",
+    "insert into card (id, lemma_id, kind, created_at, active, fsrs) values ('c1', 'pl:pies:NOUN', ?, ?, 1, ?)",
     fsrs[1]!.kind,
     at,
     fsrs[1]!.fsrs,

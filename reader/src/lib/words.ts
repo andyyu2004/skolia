@@ -35,7 +35,7 @@ const statusMutation = mutationOptions({
   onMutate: async ({ lemmaId, status }, { client }) => {
     await client.cancelQueries({ queryKey: wordsQuery.queryKey });
     const previous = client.getQueryData(wordsQuery.queryKey)?.[lemmaId];
-    const word = status === null ? undefined : { lemmaId, status, mature: previous?.mature ?? false, updated: timestamp(new Date()) };
+    const word = status === null ? undefined : { lemmaId, status, mature: previous?.mature ?? false, updatedAt: timestamp(new Date()) };
     client.setQueryData(wordsQuery.queryKey, (words) => words && withWord(words, lemmaId, word));
     return { previous };
   },

@@ -70,7 +70,7 @@ test("an entry's user adds annotations, which whoever sees the entry sees in ord
       licence: "cc-by",
       author: "Helena",
       source: "https://example.org/story",
-      added: "2026-11-04T00:00:00.000Z",
+      addedAt: "2026-11-04T00:00:00.000Z",
     },
   );
   await body("add", annotate(app, importer, id, audio(0, 4, { author: "" })), 201);

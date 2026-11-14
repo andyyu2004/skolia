@@ -49,7 +49,7 @@ export async function add(
   const annotated = await deps.documents.annotate(record.id, user.id, {
     ...body,
     id: await annotationId(body),
-    added: timestamp(deps.now()),
+    addedAt: timestamp(deps.now()),
   });
   switch (annotated.kind) {
     case "added":
