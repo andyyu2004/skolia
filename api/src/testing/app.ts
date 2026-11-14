@@ -7,7 +7,8 @@ import { partKey, statusKey, versionsKey } from "@skolia/shared/keys";
 import { allPages, encodeCursor, type Cursor } from "@skolia/shared/page";
 import { createApp, type AppType } from "../app.ts";
 import type { Auth } from "../ports.ts";
-import { CloudflareQueue, D1Documents, D1Lexicon, DurableObjectUsers, R2Blobs, lexiconsOf, type JobsOf } from "../worker/adapters.ts";
+import { sql } from "@skolia/util/sql";
+import { CloudflareQueue, D1Documents, D1Lexicon, DurableObjectUsers, R2Blobs, lexiconsOf, prepare, type JobsOf } from "../worker/adapters.ts";
 import { ORIGIN, startLocal, type Local } from "./harness.ts";
 import { body, expectStatus } from "./responses.ts";
 
@@ -86,24 +87,24 @@ export async function loadLexicon(lang: Lang, version: string, entries: TestEntr
   const db = lexiconsOf(local.env)[lang];
   await db.batch([
     ...entries.map((e) =>
-      db
-        .prepare("INSERT INTO entry (lemma_id, version, lemma, upos, senses, relations, pronunciations, paradigms) VALUES (?, ?, ?, ?, ?, '[]', ?, ?)")
-        .bind(
+      prepare(
+        db,
+        sql`INSERT INTO entry (lemma_id, version, lemma, upos, senses, relations, pronunciations, paradigms) VALUES ${sql.tuple([
           e.lemmaId,
           version,
           e.lemma,
           e.upos,
           JSON.stringify([{ gloss: e.gloss, tags: [] }]),
+          sql`'[]'`,
           JSON.stringify(e.pronunciations ?? []),
           JSON.stringify(e.paradigms ?? []),
-        ),
-    ),
-    ...featureSets.flatMap((set, id) =>
-      Object.entries(set).map(([feature, value]) =>
-        db.prepare("INSERT INTO featureset (version, id, feature, value) VALUES (?, ?, ?, ?)").bind(version, id, feature, value),
+        ])}`,
       ),
     ),
-    db.prepare("INSERT INTO loaded (id, version) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET version = excluded.version").bind(version),
+    ...featureSets.flatMap((set, id) =>
+      Object.entries(set).map(([feature, value]) => prepare(db, sql`INSERT INTO featureset (version, id, feature, value) VALUES ${sql.tuple([version, id, feature, value])}`)),
+    ),
+    prepare(db, sql`INSERT INTO loaded (id, version) VALUES (1, ${version}) ON CONFLICT (id) DO UPDATE SET version = excluded.version`),
   ]);
 }
 

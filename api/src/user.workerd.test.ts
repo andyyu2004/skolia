@@ -125,7 +125,8 @@ test("a page of the reading list seeks to its key in an index, with or without a
   await local.env.USER.getByName("ivan").words(FIRST_PAGE);
   const storage = await storageOf("ivan");
   for (const [inLang, after] of [[false, false], [false, true], [true, false], [true, true]] as const) {
-    const plan = (await storage.exec<{ detail: string }>(`EXPLAIN QUERY PLAN ${readingListQuery(inLang, after)}`, ...(inLang ? ["pl"] : []), "to-read", ...(after ? ["x", "y"] : []), 3)).map((row) => row.detail);
+    const query = readingListQuery("to-read", inLang ? "pl" : undefined, after ? schemas.ReadingKey.parse(["2026-11-07T00:00:00.000Z", "0".repeat(64)]) : undefined, 3);
+    const plan = (await storage.exec<{ detail: string }>(`EXPLAIN QUERY PLAN ${query.text}`, ...query.params)).map((row) => row.detail);
     const index = inLang ? "reading_list_lang" : "reading_list_status";
     assert.ok(plan.length === 1 && plan[0]!.startsWith(`SEARCH reading_list USING INDEX ${index} `), `${inLang} ${after}: ${plan.join("; ")}`);
   }

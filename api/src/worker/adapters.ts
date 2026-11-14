@@ -144,6 +144,8 @@ const LexiconRow = z.object({
 
 const FeatureRow = z.object({ id: z.number().int(), feature: z.string(), value: z.string() });
 
+export const prepare = (db: D1Database, { text, params }: Sql): D1PreparedStatement => db.prepare(text).bind(...params);
+
 /** Each language's lexicon database, skolia-lexicon-{lang}[-env], bound as LEXICON_{LANG}
  * (api/wrangler.jsonc). */
 export type LexiconBindings = { [L in Lang as `LEXICON_${Uppercase<L>}`]: D1Database };
@@ -180,15 +182,13 @@ export class D1Lexicon implements Lexicon {
    * entry came from: a load that switches versions in between leaves the old version's
    * rows until it cleans up. */
   async #entries(db: D1Database, ids: LemmaId[]): Promise<{ entries: LexiconEntry[]; featureSets: FeatureSets | null }> {
-    const { results } = await db
-      .prepare(
-        `SELECT entry.lemma_id AS lemmaId, entry.version, entry.lemma, entry.upos, entry.senses,
+    const { results } = await prepare(
+      db,
+      sql`SELECT entry.lemma_id AS lemmaId, entry.version, entry.lemma, entry.upos, entry.senses,
            entry.relations, entry.pronunciations, entry.paradigms
          FROM entry JOIN loaded ON loaded.version = entry.version
-         WHERE entry.lemma_id IN (${ids.map(() => "?").join(", ")})`,
-      )
-      .bind(...ids)
-      .all();
+         WHERE entry.lemma_id IN ${sql.tuple(ids)}`,
+    ).all();
     const used = new Map<string, Set<number>>();
     const entries = results.map((row): LexiconEntry => {
       const { version, senses, relations, pronunciations, paradigms, ...rest } = LexiconRow.parse(row);
@@ -206,8 +206,11 @@ export class D1Lexicon implements Lexicon {
     });
     const wanted = [...used].filter(([, sets]) => sets.size > 0);
     if (wanted.length === 0) return { entries, featureSets: null };
-    const statement = db.prepare(`SELECT id, feature, value FROM featureset WHERE version = ? AND id IN (SELECT value FROM json_each(?))`);
-    const found = await db.batch(wanted.map(([version, sets]) => statement.bind(version, JSON.stringify([...sets]))));
+    const found = await db.batch(
+      wanted.map(([version, sets]) =>
+        prepare(db, sql`SELECT id, feature, value FROM featureset WHERE version = ${version} AND id IN (SELECT value FROM json_each(${JSON.stringify([...sets])}))`),
+      ),
+    );
     // A UD feature set: its features are whatever the language's rows name
     const sets: Record<number, Record<string, string>> = {};
     for (const result of found) {
@@ -220,20 +223,20 @@ export class D1Lexicon implements Lexicon {
   }
 }
 
-const COLUMNS = `entry.title, entry.imported_at AS imported, entry.visibility, entry.licence, entry.author, entry.source,
+const COLUMNS = sql`entry.title, entry.imported_at AS imported, entry.visibility, entry.licence, entry.author, entry.source,
     document.lang, document.words, "user"."name" AS importerName,
     (SELECT json_group_object(tag.kind, tag.value) FROM user_document_tag AS tag
       WHERE tag.user_id = entry.user_id AND tag.document_id = entry.document_id) AS tags`;
-const JOINS = `JOIN document ON document.id = entry.document_id
+const JOINS = sql`JOIN document ON document.id = entry.document_id
   JOIN "user" ON "user"."id" = entry.user_id`;
 
-const SELECT_DOCUMENT = `SELECT entry.document_id AS id, entry.user_id AS "user", ${COLUMNS}
+const SELECT_DOCUMENT = sql`SELECT entry.document_id AS id, entry.user_id AS "user", ${COLUMNS}
   FROM user_document AS entry
   ${JOINS}`;
 
 /** Entries by one of their tags: its key columns are the tag row's, so the list's order is
  * user_document_tag_value_idx's within the tag. */
-const SELECT_TAGGED = `SELECT tagged.document_id AS id, tagged.user_id AS "user", ${COLUMNS}
+const SELECT_TAGGED = sql`SELECT tagged.document_id AS id, tagged.user_id AS "user", ${COLUMNS}
   FROM user_document_tag AS tagged
   JOIN user_document AS entry ON entry.user_id = tagged.user_id AND entry.document_id = tagged.document_id
   ${JOINS}`;
@@ -250,52 +253,80 @@ type KindValues = readonly [kind: string, values: readonly string[]];
 export function listQuery(viewer: UserId | null, { tags, lang, title, mine }: DocumentFilter, { after, limit }: PageRequest<DocumentKey>): Sql {
   const kinds: readonly KindValues[] = Object.entries(tags).filter(([, values]) => values.length > 0);
   const [first, ...others] = kinds;
-  const narrowed = sql.join(
-    [
-      ...(lang === undefined ? [] : [sql` AND document.lang = ${lang}`]),
-      ...(title === undefined ? [] : [sql` AND entry.title LIKE ${`%${title.replace(/[\\%_]/gu, "\\$&")}%`} ESCAPE '\\'`]),
-    ],
-    "",
-  );
-  const from = (alias: "entry" | "tagged") =>
-    after === undefined ? sql.empty : sql` AND (${sql.raw(alias)}.user_id, ${sql.raw(alias)}.document_id) > (${after[0]}, ${after[1]})`;
+  const narrowed = [
+    lang !== undefined && sql`document.lang = ${lang}`,
+    title !== undefined && sql`entry.title LIKE ${`%${title.replace(/[\\%_]/gu, "\\$&")}%`} ESCAPE '\\'`,
+  ];
+  const from = (alias: "entry" | "tagged") => after !== undefined && sql`(${sql.id(alias, "user_id")}, ${sql.id(alias, "document_id")}) > ${sql.tuple(after)}`;
   const own =
     viewer === null
       ? []
-      : [sql`${sql.raw(SELECT_DOCUMENT)} WHERE entry.user_id = ${viewer}${mine ? sql.empty : sql` AND entry.visibility = 'private'`}${from("entry")}${narrowed}${tagged(kinds)}`];
+      : [sql`${SELECT_DOCUMENT} ${sql.where([sql`entry.user_id = ${viewer}`, !mine && sql`entry.visibility = 'private'`, from("entry"), ...narrowed, ...tagged(kinds)])}`];
   const shared = mine
     ? []
     : first === undefined
-      ? [sql`${sql.raw(SELECT_DOCUMENT)} WHERE entry.visibility = 'public'${from("entry")}${narrowed}`]
+      ? [sql`${SELECT_DOCUMENT} ${sql.where([sql`entry.visibility = 'public'`, from("entry"), ...narrowed])}`]
       : first[1].map(
           (value) =>
-            sql`${sql.raw(SELECT_TAGGED)} WHERE tagged.kind = ${first[0]} AND tagged.value = ${value} AND entry.visibility = 'public'${from("tagged")}${narrowed}${tagged(others)}`,
+            sql`${SELECT_TAGGED} ${sql.where([sql`tagged.kind = ${first[0]}`, sql`tagged.value = ${value}`, sql`entry.visibility = 'public'`, from("tagged"), ...narrowed, ...tagged(others)])}`,
         );
-  return sql`${sql.join([...shared, ...own], " UNION ALL ")} ORDER BY "user", id LIMIT ${limit + 1}`;
+  return sql`${sql.unionAll([...shared, ...own])} ORDER BY "user", id LIMIT ${limit + 1}`;
 }
 
 /** The entry has one of the values of each kind, looked up by user_document_tag's primary key. */
-function tagged(kinds: readonly KindValues[]): Sql {
-  return sql.join(
-    kinds.map(
-      ([kind, values]) => sql` AND EXISTS (SELECT 1 FROM user_document_tag AS has
-        WHERE has.user_id = entry.user_id AND has.document_id = entry.document_id AND has.kind = ${kind} AND has.value IN (${sql.join(values, ", ")}))`,
-    ),
-    "",
+function tagged(kinds: readonly KindValues[]): readonly Sql[] {
+  return kinds.map(
+    ([kind, values]) => sql`EXISTS (SELECT 1 FROM user_document_tag AS has
+        WHERE has.user_id = entry.user_id AND has.document_id = entry.document_id AND has.kind = ${kind} AND has.value IN ${sql.tuple(values)})`,
   );
 }
 
 /** A page of the tags, and one more if there is one. */
 function tagsQuery({ after, limit }: PageRequest<TagKey>): Sql {
-  const from = after === undefined ? sql.empty : sql` WHERE (kind, position) > (${after[0]}, ${after[1]})`;
-  return sql`SELECT kind, value, description, position FROM tag${from} ORDER BY kind, position LIMIT ${limit + 1}`;
+  return sql`SELECT kind, value, description, position FROM tag ${sql.where([after !== undefined && sql`(kind, position) > ${sql.tuple(after)}`])}
+    ORDER BY kind, position LIMIT ${limit + 1}`;
 }
 
 function knownQuery(tags: readonly Tag[]): Sql {
   return sql`SELECT kind, value FROM tag WHERE (kind, value) IN (VALUES ${sql.join(
-    tags.map(({ kind, value }) => sql`(${kind}, ${value})`),
+    tags.map(({ kind, value }) => sql.tuple([kind, value])),
     ", ",
   )})`;
+}
+
+function visibleQuery(id: DocumentId, viewer: UserId | null): Sql {
+  return sql`${SELECT_DOCUMENT} WHERE entry.document_id = ${id} AND (entry.user_id = ${viewer} OR entry.visibility = 'public')
+    ORDER BY entry.user_id IS ${viewer} DESC, entry.imported_at LIMIT 1`;
+}
+
+function hasQuery(id: DocumentId): Sql {
+  return sql`SELECT 1 FROM document WHERE id = ${id}`;
+}
+
+function addContentQuery({ id, lang, words }: DocumentContent): Sql {
+  return sql`INSERT OR IGNORE INTO document (id, lang, words) VALUES ${sql.tuple([id, lang, words])}`;
+}
+
+function addEntryQuery(e: DocumentEntry): Sql {
+  return sql`INSERT OR IGNORE INTO user_document (user_id, document_id, title, imported_at, visibility, licence, author, source)
+    VALUES ${sql.tuple([e.user, e.id, e.title, e.imported, e.visibility, e.licence, e.author, e.source])}`;
+}
+
+function updateQuery(id: DocumentId, user: UserId, { title, visibility, licence, author, source }: EntryFields): Sql {
+  return sql`UPDATE user_document SET title = ${title}, visibility = ${visibility}, licence = ${licence}, author = ${author}, source = ${source}
+    WHERE document_id = ${id} AND user_id = ${user}`;
+}
+
+function addTagQuery(user: UserId, id: DocumentId, kind: string, value: string): Sql {
+  return sql`INSERT OR IGNORE INTO user_document_tag (user_id, document_id, kind, value) VALUES ${sql.tuple([user, id, kind, value])}`;
+}
+
+function removeTagsQuery(user: UserId, id: DocumentId): Sql {
+  return sql`DELETE FROM user_document_tag WHERE user_id = ${user} AND document_id = ${id}`;
+}
+
+function removeQuery(id: DocumentId, user: UserId): Sql {
+  return sql`DELETE FROM user_document WHERE document_id = ${id} AND user_id = ${user}`;
 }
 
 const TagRow = schemas.AvailableTag.extend({ position: z.number().int() });
@@ -305,6 +336,17 @@ const NO_FILTER: DocumentFilter = { tags: {}, lang: undefined, title: undefined,
 const SOME_KEY = schemas.DocumentKey.parse(["x", "0".repeat(64)]);
 const SOMEONE = schemas.UserId.parse("x");
 const TWO_KINDS = { level: ["A1", "B1"], form: ["poem"] };
+const SOME_ENTRY: DocumentEntry = {
+  id: SOME_KEY[1],
+  user: SOMEONE,
+  imported: schemas.Timestamp.parse("2026-11-12T00:00:00.000Z"),
+  title: "x",
+  visibility: "public",
+  licence: "cc0",
+  author: null,
+  source: null,
+  tags: {},
+};
 
 /** D1Documents' queries, exported for the test that checks each one uses an index. */
 export const DOCUMENT_QUERIES = {
@@ -319,16 +361,14 @@ export const DOCUMENT_QUERIES = {
   tags: tagsQuery({ after: undefined, limit: 100 }).text,
   tagsAfter: tagsQuery({ after: ["level", 0], limit: 100 }).text,
   known: knownQuery([{ kind: "level", value: "A1" }]).text,
-  visible: `${SELECT_DOCUMENT} WHERE entry.document_id = ?1 AND (entry.user_id = ?2 OR entry.visibility = 'public')
-    ORDER BY entry.user_id IS ?2 DESC, entry.imported_at LIMIT 1`,
-  has: "SELECT 1 FROM document WHERE id = ?1",
-  addContent: "INSERT OR IGNORE INTO document (id, lang, words) VALUES (?1, ?2, ?3)",
-  addEntry: `INSERT OR IGNORE INTO user_document (user_id, document_id, title, imported_at, visibility, licence, author, source)
-    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)`,
-  update: "UPDATE user_document SET title = ?3, visibility = ?4, licence = ?5, author = ?6, source = ?7 WHERE document_id = ?1 AND user_id = ?2",
-  addTag: "INSERT OR IGNORE INTO user_document_tag (user_id, document_id, kind, value) VALUES (?1, ?2, ?3, ?4)",
-  removeTags: "DELETE FROM user_document_tag WHERE user_id = ?1 AND document_id = ?2",
-  remove: "DELETE FROM user_document WHERE document_id = ?1 AND user_id = ?2",
+  visible: visibleQuery(SOME_ENTRY.id, SOMEONE).text,
+  has: hasQuery(SOME_ENTRY.id).text,
+  addContent: addContentQuery({ id: SOME_ENTRY.id, lang: "pl", words: 1 }).text,
+  addEntry: addEntryQuery(SOME_ENTRY).text,
+  update: updateQuery(SOME_ENTRY.id, SOMEONE, SOME_ENTRY).text,
+  addTag: addTagQuery(SOMEONE, SOME_ENTRY.id, "level", "A1").text,
+  removeTags: removeTagsQuery(SOMEONE, SOME_ENTRY.id).text,
+  remove: removeQuery(SOME_ENTRY.id, SOMEONE).text,
 } as const;
 
 export class D1Documents implements DocumentStore {
@@ -359,23 +399,19 @@ export class D1Documents implements DocumentStore {
     return (await this.all(knownQuery(tags))).map((row) => KnownTag.parse(row));
   }
 
-  private async all({ text, params }: Sql): Promise<readonly Record<string, unknown>[]> {
-    const { results } = await this.db
-      .prepare(text)
-      .bind(...params)
-      .all();
+  private async all(query: Sql): Promise<readonly Record<string, unknown>[]> {
+    const { results } = await prepare(this.db, query).all();
     return results;
   }
 
   async visible(id: DocumentId, viewer: UserId | null): Promise<StoredDocument | null> {
-    const row = await this.db.prepare(DOCUMENT_QUERIES.visible).bind(id, viewer).first();
+    const row = await prepare(this.db, visibleQuery(id, viewer)).first();
     return row ? schemas.DocumentRow.parse(row) : null;
   }
 
   async visibleAll(ids: readonly DocumentId[], viewer: UserId): Promise<ReadonlyMap<DocumentId, StoredDocument>> {
     if (ids.length === 0) return new Map();
-    const statement = this.db.prepare(DOCUMENT_QUERIES.visible);
-    const found = await this.db.batch(ids.map((id) => statement.bind(id, viewer)));
+    const found = await this.db.batch(ids.map((id) => prepare(this.db, visibleQuery(id, viewer))));
     return new Map(
       found.flatMap(({ results: [row] }) => {
         if (row === undefined) return [];
@@ -386,33 +422,31 @@ export class D1Documents implements DocumentStore {
   }
 
   async has(id: DocumentId): Promise<boolean> {
-    return (await this.db.prepare(DOCUMENT_QUERIES.has).bind(id).first()) !== null;
+    return (await prepare(this.db, hasQuery(id)).first()) !== null;
   }
 
-  async add(c: DocumentContent, e: DocumentEntry): Promise<void> {
+  async add(content: DocumentContent, entry: DocumentEntry): Promise<void> {
     await this.db.batch([
-      this.db.prepare(DOCUMENT_QUERIES.addContent).bind(c.id, c.lang, c.words),
-      this.db.prepare(DOCUMENT_QUERIES.addEntry).bind(e.user, e.id, e.title, e.imported, e.visibility, e.licence, e.author, e.source),
-      ...this.addTags(e.user, e.id, e.tags),
+      prepare(this.db, addContentQuery(content)),
+      prepare(this.db, addEntryQuery(entry)),
+      ...this.addTags(entry.user, entry.id, entry.tags),
     ]);
   }
 
-  async update(id: DocumentId, user: UserId, { title, visibility, licence, author, source, tags }: EntryFields): Promise<void> {
+  async update(id: DocumentId, user: UserId, fields: EntryFields): Promise<void> {
     await this.db.batch([
-      this.db.prepare(DOCUMENT_QUERIES.update).bind(id, user, title, visibility, licence, author, source),
-      this.db.prepare(DOCUMENT_QUERIES.removeTags).bind(user, id),
-      ...this.addTags(user, id, tags),
+      prepare(this.db, updateQuery(id, user, fields)),
+      prepare(this.db, removeTagsQuery(user, id)),
+      ...this.addTags(user, id, fields.tags),
     ]);
   }
 
   private addTags(user: UserId, id: DocumentId, tags: Tags): D1PreparedStatement[] {
-    return Object.entries(tags).flatMap(([kind, value]) =>
-      value === undefined ? [] : [this.db.prepare(DOCUMENT_QUERIES.addTag).bind(user, id, kind, value)],
-    );
+    return Object.entries(tags).flatMap(([kind, value]) => (value === undefined ? [] : [prepare(this.db, addTagQuery(user, id, kind, value))]));
   }
 
   async remove(id: DocumentId, user: UserId): Promise<void> {
-    await this.db.prepare(DOCUMENT_QUERIES.remove).bind(id, user).run();
+    await prepare(this.db, removeQuery(id, user)).run();
   }
 }
 

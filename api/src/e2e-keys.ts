@@ -6,6 +6,7 @@
 //   card journeys see the same thing every run. Earlier runs' users and their keys are
 //   deleted; their Durable Objects stay, a few rows each.
 // usage: E2E_API_KEY=<key> E2E_USER_KEY=<key> node src/e2e-keys.ts > keys.sql
+import { sql } from "@skolia/util/sql";
 import { insertKeySql, keyFromEnv, replaceKeySql } from "./api-keys.ts";
 
 export const SYSTEM_USER = "system";
@@ -23,9 +24,9 @@ export function e2eKeysSql(keys: E2eKeys, at: string): string[] {
   return [
     ...replaceKeySql("e2e", SYSTEM_USER, keys.system, at),
     // Cascades to their keys
-    `DELETE FROM "user" WHERE "id" LIKE '${E2E_USER_PREFIX}%';`,
-    `INSERT INTO "user" ("id", "name", "email", "emailVerified", "image", "createdAt", "updatedAt")
-     VALUES ('${user}', 'End-to-end test', '${user}@e2e.skolia.io', 0, NULL, '${at}', '${at}');`,
+    sql.inline(sql`DELETE FROM "user" WHERE "id" LIKE ${`${E2E_USER_PREFIX}%`};`),
+    sql.inline(sql`INSERT INTO "user" ("id", "name", "email", "emailVerified", "image", "createdAt", "updatedAt")
+     VALUES (${user}, 'End-to-end test', ${`${user}@e2e.skolia.io`}, 0, NULL, ${at}, ${at});`),
     insertKeySql(user, user, keys.user, at),
   ];
 }

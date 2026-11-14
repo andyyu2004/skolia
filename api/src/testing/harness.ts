@@ -9,7 +9,8 @@ import * as z from "zod";
 import type { IngestJob } from "@skolia/shared/schema";
 import { authOptions, toAuth, type AuthConfig } from "../auth.ts";
 import type { Auth } from "../ports.ts";
-import { lexiconBinding, lexiconsOf, type LexiconBindings } from "../worker/adapters.ts";
+import { sql } from "@skolia/util/sql";
+import { lexiconBinding, lexiconsOf, prepare, type LexiconBindings } from "../worker/adapters.ts";
 import type { User as UserObject } from "../worker/user.ts";
 import type IngestRecorder from "./ingest-recorder.ts";
 
@@ -98,12 +99,12 @@ export async function startLocal(): Promise<Local> {
     async reset() {
       const tables = ["user_document", "document", "apikey", "session", "account", "verification"];
       await env.DB.batch([
-        ...tables.map((t) => env.DB.prepare(`DELETE FROM "${t}"`)),
+        ...tables.map((t) => prepare(env.DB, sql`DELETE FROM ${sql.id(t)}`)),
         // The system users are the migrations'
-        env.DB.prepare(`DELETE FROM "user" WHERE "type" != 'system'`),
+        prepare(env.DB, sql`DELETE FROM "user" WHERE "type" != 'system'`),
       ]);
       for (const db of Object.values(lexiconsOf(env))) {
-        await db.batch(["entry", "featureset", "loaded"].map((t) => db.prepare(`DELETE FROM ${t}`)));
+        await db.batch(["entry", "featureset", "loaded"].map((t) => prepare(db, sql`DELETE FROM ${sql.id(t)}`)));
       }
       const { objects } = await env.BLOBS.list();
       if (objects.length > 0) await env.BLOBS.delete(objects.map((o) => o.key));
