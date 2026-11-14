@@ -100,8 +100,8 @@ jobs:
       # The environment's Google OAuth client (infra/README.md); the preview environment has none
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+    # The tags, for git describe (justfile deploy-web)
     steps: &deploy-web-steps
-      # The tags, for git describe (justfile deploy-web)
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
