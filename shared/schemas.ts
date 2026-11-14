@@ -1,7 +1,5 @@
 import * as z from "zod";
-import { isAnnotationKind, parseAnnotation } from "./annotations.ts";
 import {
-  ANNOTATION_KIND,
   ANNOTATION_PAGE,
   CARD_GROUPS,
   CARD_KINDS,
@@ -11,6 +9,7 @@ import {
   WORD_PAGE,
   LANGS,
   LICENCES,
+  MAX_ANNOTATION_TEXT,
   MAX_AUTHOR_LENGTH,
   MAX_CLOZE_SENTENCE,
   MAX_CLOZE_WHY,
@@ -232,41 +231,73 @@ export const AnnotationId = z
   .regex(/^[0-9a-f]{64}$/u)
   .brand<"AnnotationId">();
 
-export const AnnotationKind = z.string().regex(ANNOTATION_KIND, "an annotation's kind is lowercase letters, digits and hyphens");
+/** A kind's data: its fields, and no others. */
+function kindData<S extends z.ZodRawShape>(kind: string, shape: S) {
+  const fields = Object.keys(shape).join(", ");
+  return z.strictObject(shape, {
+    error: (issue) =>
+      issue.code === "unrecognized_keys" ? `${kind} annotation data has only ${fields}` : issue.input === undefined ? `${kind} annotation data must be {${fields}}` : undefined,
+  });
+}
 
-const AnnotationData = z.record(z.string(), z.unknown());
+/** A field's own message, or one saying it's missing. */
+function field(kind: string, name: string, message: string) {
+  return { error: (issue: { readonly input?: unknown }) => (issue.input === undefined ? `${kind} annotation data needs ${name}` : message) };
+}
 
-export const Annotation = z.object({
-  id: AnnotationId,
-  start: Index,
-  end: Index,
-  kind: AnnotationKind,
-  data: AnnotationData,
-  licence: z.enum(SHAREABLE_LICENCES),
-  author: z.string().nullable(),
-  source: z.string().nullable(),
-  added: Timestamp,
-});
+/** What an annotation holds, by kind. audio: a recording of the range, at an https URL
+ * skolia doesn't host. text: anything written about the range, a note or a translation,
+ * say. Migration 0010 holds the stored data to the same fields; a new kind is a variant here
+ * and a migration. */
+export const AnnotationContent = z.discriminatedUnion(
+  "kind",
+  [
+    z.object({
+      kind: z.literal("audio"),
+      data: kindData("audio", { url: z.url({ protocol: /^https$/u, ...field("audio", "a url", "url must be an https URL") }).max(MAX_SOURCE_LENGTH) }),
+    }),
+    z.object({
+      kind: z.literal("text"),
+      data: kindData("text", {
+        text: z
+          .string(field("text", "text", "text must be a string"))
+          .trim()
+          .min(1, "text must be non-empty")
+          .max(MAX_ANNOTATION_TEXT, `text is at most ${MAX_ANNOTATION_TEXT} characters`),
+      }),
+    }),
+  ],
+  { error: "kind must be audio or text" },
+);
+
+export const Annotation = z.intersection(
+  z.object({
+    id: AnnotationId,
+    start: Index,
+    end: Index,
+    licence: z.enum(SHAREABLE_LICENCES),
+    author: z.string().nullable(),
+    source: z.string().nullable(),
+    added: Timestamp,
+  }),
+  AnnotationContent,
+);
 
 /** An annotation to add: its data must be its kind's, and it must end after it starts. That
  * it ends within the text is checked against the text. */
 export const NewAnnotation = z
-  .object({
-    start: Index,
-    end: Index,
-    kind: AnnotationKind,
-    data: AnnotationData,
-    licence: z.enum(SHAREABLE_LICENCES, "an annotation needs a licence that allows sharing it"),
-    author: z.string().trim().max(MAX_AUTHOR_LENGTH).optional(),
-    source: Source.optional(),
-  })
+  .intersection(
+    z.object({
+      start: Index,
+      end: Index,
+      licence: z.enum(SHAREABLE_LICENCES, "an annotation needs a licence that allows sharing it"),
+      author: z.string().trim().max(MAX_AUTHOR_LENGTH).optional(),
+      source: Source.optional(),
+    }),
+    AnnotationContent,
+  )
   .refine((a) => a.start < a.end, { message: "an annotation must end after it starts", path: ["end"] })
-  .transform((a, context) => {
-    const known = parseAnnotation(a);
-    if (known !== null) return { ...known, author: known.author || null, source: known.source ?? null };
-    context.addIssue({ code: "custom", path: ["data"], message: isAnnotationKind(a.kind) ? `data doesn't fit annotation kind ${a.kind}` : `no annotation kind ${a.kind}` });
-    return z.NEVER;
-  });
+  .transform((a) => ({ ...a, author: a.author || null, source: a.source ?? null }));
 
 export const AnnotationKey = z.tuple([Index, AnnotationId]).readonly();
 const Offset = z.coerce.number().int().min(0).max(MAX_TEXT_LENGTH);
@@ -276,12 +307,10 @@ export const AnnotationsQuery = pageQuery(AnnotationKey, ANNOTATION_PAGE)
   .refine((q) => q.from === undefined || q.to === undefined || q.from < q.to, { message: "from must be before to", path: ["to"] });
 
 /** An annotation as D1 has it, its data a JSON string. */
-export const AnnotationRow = Annotation.extend({
-  data: z
-    .string()
-    .transform((json) => JSON.parse(json) as unknown)
-    .pipe(AnnotationData),
-});
+export const AnnotationRow = z
+  .looseObject({ data: z.string() })
+  .transform((row) => ({ ...row, data: JSON.parse(row.data) as unknown }))
+  .pipe(Annotation);
 
 export const State = z.enum(["queued", "analysing", "ready", "failed"]);
 

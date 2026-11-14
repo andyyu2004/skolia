@@ -97,12 +97,13 @@ test("an entry's tags are tags skolia has, one of each kind, and go with the ent
   assert.equal(await env.DB.prepare("select 1 from user_document_tag").first(), null);
 });
 
-test("an annotation is a range of an entry's text with a kind, JSON data and a shareable licence, and goes with the entry", async () => {
+test("an annotation is a range of an entry's text, with each kind's data and a shareable licence, and goes with the entry", async () => {
   const { env } = local;
   const user = await local.signUp(ALICE);
   await env.DB.prepare("insert into document (id, lang, words) values ('a', 'pl', 1)").run();
   await env.DB.prepare(`insert into user_document values (?, 'a', 't', '2026-11-07T00:00:00.000Z', 'private', 'unknown', null, null)`).bind(user.id).run();
-  const annotate = ({ document = "a", id = "x", start = 0, end = 1, kind = "audio", data = "{}", licence = "cc0", source = null as string | null, added = "2026-11-07T00:00:00.000Z" } = {}) =>
+  const audio = '{"url":"https://example.org/a.mp3"}';
+  const annotate = ({ document = "a", id = "x", start = 0, end = 1, kind = "audio", data = audio, licence = "cc0", source = null as string | null, added = "2026-11-07T00:00:00.000Z" } = {}) =>
     env.DB.prepare("insert into user_document_annotation values (?, ?, ?, ?, ?, ?, ?, ?, null, ?, ?)").bind(user.id, document, id, start, end, kind, data, licence, source, added).run();
   await annotate();
   await assert.rejects(annotate(), /UNIQUE constraint failed/);
@@ -110,13 +111,22 @@ test("an annotation is a range of an entry's text with a kind, JSON data and a s
     { start: -1 },
     { start: 2, end: 2 },
     { start: 2, end: 1 },
+    { kind: "video" },
     { kind: "Audio" },
-    { kind: "-audio" },
-    { kind: "a b" },
-    { kind: "a".repeat(33) },
     { data: "[]" },
     { data: "{" },
     { data: '"x"' },
+    { data: "{}" },
+    { data: '{"url":"http://example.org/a.mp3"}' },
+    { data: '{"url":1}' },
+    { data: '{"url":null}' },
+    { data: '{"url":"https://example.org/a.mp3","speed":2}' },
+    { data: '{"text":"Pies"}' },
+    { kind: "text", data: audio },
+    { kind: "text", data: '{"text":""}' },
+    { kind: "text", data: `{"text":"${"x".repeat(2001)}"}` },
+    { kind: "text", data: '{"text":["Pies"]}' },
+    { kind: "text", data: '{"text":"Pies","lang":"en"}' },
     { licence: "all-rights-reserved" },
     { licence: "unknown" },
     { source: "ftp://x" },
@@ -124,7 +134,8 @@ test("an annotation is a range of an entry's text with a kind, JSON data and a s
   ];
   for (const fields of bad) await assert.rejects(annotate({ id: "y", ...fields }), /CHECK constraint failed/, JSON.stringify(fields));
   await assert.rejects(annotate({ id: "y", document: "missing" }), /FOREIGN KEY constraint failed/);
-  await annotate({ id: "y", kind: "audio-2", data: '{"url":"https://example.org/a.mp3"}', licence: "cc-by-nc-nd", source: "https://example.org" });
+  await annotate({ id: "y", data: '{ "url" : "https://example.org/b.mp3" }', licence: "cc-by-nc-nd", source: "https://example.org" });
+  await annotate({ id: "z", kind: "text", data: `{"text":"${"ż".repeat(2000)}"}` });
   await env.DB.prepare("delete from user_document where document_id = 'a'").run();
   assert.equal(await env.DB.prepare("select 1 from user_document_annotation").first(), null);
 });
