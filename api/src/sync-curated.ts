@@ -2,7 +2,9 @@
 // updates the title, licence, author, source or tags of those already imported, and deletes the
 // curated user's documents that aren't there any more. A document's id is its text's hash,
 // so an edited text, in the file or at its source, is a new document and the old one is
-// deleted. With --check, only lists what it would do, and fails if that's anything.
+// deleted. Each text's annotations are added, and those not in its file any more removed;
+// an annotation's id is a hash of what it says, so an edited one is removed and added again.
+// With --check, only lists what it would do, and fails if that's anything.
 // curated/{lang}/{name}.yaml: one text, of a kind (curated-kinds.ts) that has it inline or
 // names where to fetch it.
 // usage: SYNC_CURATED_API_KEY=<key> node src/sync-curated.ts <base url> <curated dir> [--check]
@@ -12,21 +14,28 @@ import { hc } from "hono/client";
 import { parse as parseYaml } from "yaml";
 import * as z from "zod";
 import {
+  ANNOTATION_PAGE,
   DOCUMENT_PAGE,
   LANGS,
+  type Annotation,
+  type AnnotationId,
+  type AnnotationKey,
   type DocumentId,
   type DocumentKey,
   type DocumentSummary,
   type DocumentUpdate,
   type Lang,
+  type NewAnnotation,
   type Tags,
 } from "@skolia/shared/api";
+import { annotationId } from "@skolia/shared/annotations";
 import { docId } from "@skolia/shared/keys";
 import { allPages, type Cursor } from "@skolia/shared/page";
 import * as schemas from "@skolia/shared/schemas";
 import type { AppType } from "./app.ts";
 import { API_KEY_HEADER } from "./auth.ts";
 import { CuratedSpec, resolve, type Fetch, type Resolved } from "./curated-kinds.ts";
+import { trimSpans } from "./curated-spans.ts";
 
 /** A curated file, checked but not yet resolved. */
 export interface CuratedFile {
@@ -35,22 +44,31 @@ export interface CuratedFile {
   readonly spec: CuratedSpec;
 }
 
-export interface Curated {
-  path: string;
-  id: DocumentId;
-  request: z.output<typeof schemas.ImportRequest>;
-}
+/** An annotation on a curated text: the request that adds it, and the id the API gives it. */
+export type CuratedAnnotation = {
+  readonly id: AnnotationId;
+  readonly request: NewAnnotation;
+};
+
+export type Curated = {
+  readonly path: string;
+  readonly id: DocumentId;
+  readonly request: z.output<typeof schemas.ImportRequest>;
+  readonly annotations: readonly CuratedAnnotation[];
+};
 
 export type Change =
   | { kind: "import"; text: Curated }
   | { kind: "update"; text: Curated; id: DocumentId; update: DocumentUpdate }
-  | { kind: "delete"; document: DocumentSummary };
+  | { kind: "delete"; document: DocumentSummary }
+  | { kind: "annotate"; text: Curated; annotation: CuratedAnnotation }
+  | { kind: "unannotate"; text: Curated; annotation: Annotation };
 
 /** A curated file's YAML, checked against its kind. Throws, naming the file, if it isn't one. */
 export function parseCurated(path: string, lang: Lang, raw: string): CuratedFile {
   let yaml: unknown;
   try {
-    yaml = parseYaml(raw);
+    yaml = parseYaml(raw, { merge: true });
   } catch (error) {
     throw new Error(`${path}: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -62,12 +80,26 @@ export function parseCurated(path: string, lang: Lang, raw: string): CuratedFile
   return { path, lang, spec: spec.data };
 }
 
-/** A resolved text as a public import. Throws, naming the file, if it isn't one. */
+/** A resolved text as a public import, trimmed, with its annotations moved to where they
+ * are in the trimmed text. Throws, naming the file, if it isn't one or has the same
+ * annotation twice. */
 export async function toCurated(path: string, lang: Lang, resolved: Resolved): Promise<Curated> {
-  const text = resolved.text.trim();
+  const { text, spans } = trimSpans(resolved.text, resolved.annotations);
   const request = schemas.ImportRequest.safeParse({ ...resolved, text, lang, visibility: "public" });
   if (!request.success) throw new Error(`${path}: ${request.error.issues[0]?.message ?? "not a valid import"}`);
-  return { path, id: await docId(lang, text), request: request.data };
+  const annotations = await Promise.all(
+    spans.map(async (annotation) => {
+      const parsed = schemas.NewAnnotation.safeParse(annotation);
+      if (!parsed.success)
+        throw new Error(
+          `${path}: the annotation at ${annotation.start}-${annotation.end}: ${parsed.error.issues[0]?.message ?? "not valid"}`,
+        );
+      return { id: await annotationId(parsed.data), request: annotation };
+    }),
+  );
+  const twice = annotations.find((a, i) => annotations.findIndex((b) => b.id === a.id) !== i);
+  if (twice) throw new Error(`${path}: the same annotation twice at ${twice.request.start}-${twice.request.end}`);
+  return { path, id: await docId(lang, text), request: request.data, annotations };
 }
 
 /** Every file in curated/{lang}/, checked; nothing is fetched. */
@@ -113,8 +145,30 @@ export async function resolveCurated(files: readonly CuratedFile[], fetch: Fetch
   return texts;
 }
 
-/** What makes the curated user's documents match the texts. */
-export function plan(texts: readonly Curated[], mine: readonly DocumentSummary[]): Change[] {
+/** What makes the curated user's documents, and the annotations on those already imported
+ * (by document), match the texts. A text imported now gets all its annotations, after
+ * every import. */
+export function plan(
+  texts: readonly Curated[],
+  mine: readonly DocumentSummary[],
+  annotations: ReadonlyMap<DocumentId, readonly Annotation[]>,
+): Change[] {
+  return [...planDocuments(texts, mine), ...planAnnotations(texts, annotations)];
+}
+
+function planAnnotations(texts: readonly Curated[], annotations: ReadonlyMap<DocumentId, readonly Annotation[]>): Change[] {
+  return texts.flatMap((text): Change[] => {
+    const had = annotations.get(text.id) ?? [];
+    const wanted = new Set(text.annotations.map((a) => a.id));
+    const hadIds = new Set(had.map((a) => a.id));
+    return [
+      ...had.filter((a) => !wanted.has(a.id)).map((annotation) => ({ kind: "unannotate" as const, text, annotation })),
+      ...text.annotations.filter((a) => !hadIds.has(a.id)).map((annotation) => ({ kind: "annotate" as const, text, annotation })),
+    ];
+  });
+}
+
+function planDocuments(texts: readonly Curated[], mine: readonly DocumentSummary[]): Change[] {
   const byId = new Map(mine.map((d) => [d.id, d]));
   const changes: Change[] = [];
   for (const text of texts) {
@@ -152,7 +206,15 @@ function describe(change: Change): string {
       return `update ${change.text.path}: ${Object.keys(change.update).join(", ")}`;
     case "delete":
       return `delete ${change.document.id} (${change.document.lang}, "${change.document.title}")`;
+    case "annotate":
+      return `annotate ${change.text.path}: ${describeAnnotation(change.annotation.request)}`;
+    case "unannotate":
+      return `unannotate ${change.text.path}: ${describeAnnotation(change.annotation)}`;
   }
+}
+
+function describeAnnotation({ kind, start, end }: { kind: string; start: number; end: number }): string {
+  return `${kind} at ${start}-${end}`;
 }
 
 async function expectOk(response: { ok: boolean; status: number; text(): Promise<string> }, what: string): Promise<void> {
@@ -171,17 +233,48 @@ export async function sync(api: Api, texts: readonly Curated[], { check = false,
     if (!listed.ok) throw new Error(`list: ${listed.status} ${await listed.text()}`);
     return listed.json();
   });
-  const changes = plan(texts, mine);
+  const imported = new Set(mine.map((d) => d.id));
+  const annotations = new Map(
+    await Promise.all(texts.filter((t) => imported.has(t.id)).map(async (t) => [t.id, await annotationsOf(api, t.id)] as const)),
+  );
+  const changes = plan(texts, mine, annotations);
   for (const change of changes) log(describe(change));
   if (check) return changes;
-  for (const change of changes) {
-    const what = describe(change);
-    if (change.kind === "import") await expectOk(await api.documents.$post({ json: change.text.request }), what);
-    else if (change.kind === "update")
-      await expectOk(await api.documents[":id"].$patch({ param: { id: change.id }, json: change.update }), what);
-    else await expectOk(await api.documents[":id"].$delete({ param: { id: change.document.id } }), what);
-  }
+  for (const change of changes) await make(api, change);
   return changes;
+}
+
+/** Every page of the signed-in user's annotations on their document. */
+function annotationsOf(api: Api, id: DocumentId): Promise<readonly Annotation[]> {
+  return allPages(async (after?: Cursor<AnnotationKey>) => {
+    const listed = await api.documents[":id"].annotations.$get({ param: { id }, query: { after, limit: String(ANNOTATION_PAGE.max) } });
+    if (!listed.ok) throw new Error(`annotations of ${id}: ${listed.status} ${await listed.text()}`);
+    return listed.json();
+  });
+}
+
+async function make(api: Api, change: Change): Promise<void> {
+  const what = describe(change);
+  switch (change.kind) {
+    case "import":
+      return expectOk(await api.documents.$post({ json: change.text.request }), what);
+    case "update":
+      return expectOk(await api.documents[":id"].$patch({ param: { id: change.id }, json: change.update }), what);
+    case "delete":
+      return expectOk(await api.documents[":id"].$delete({ param: { id: change.document.id } }), what);
+    case "annotate":
+      return expectOk(
+        await api.documents[":id"].annotations.$post({ param: { id: change.text.id }, json: change.annotation.request }),
+        what,
+      );
+    case "unannotate":
+      return expectOk(
+        await api.documents[":id"].annotations[":annotationId"].$delete({
+          param: { id: change.text.id, annotationId: change.annotation.id },
+        }),
+        what,
+      );
+  }
 }
 
 async function main(): Promise<void> {

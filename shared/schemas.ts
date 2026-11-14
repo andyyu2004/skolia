@@ -253,8 +253,7 @@ function field(kind: string, name: string, message: string) {
 
 /** What an annotation holds, by kind. audio: a recording of the range, at an https URL
  * skolia doesn't host. text: anything written about the range, a note or a translation,
- * say. Migration 0010 holds the stored data to the same fields; a new kind is a variant here
- * and a migration. */
+ * say. The database checks only that data is an object; a new kind is a variant here. */
 export const AnnotationContent = z.discriminatedUnion(
   "kind",
   [
@@ -291,21 +290,19 @@ export const Annotation = z.intersection(
   AnnotationContent,
 );
 
+/** Whose an annotation is, and the licence it's under. */
+export const AnnotationCredit = z.object({
+  licence: z.enum(SHAREABLE_LICENCES, "an annotation needs a licence that allows sharing it"),
+  author: z.string().trim().min(1, "author must be non-empty").max(MAX_AUTHOR_LENGTH).optional(),
+  source: Source.optional(),
+});
+
 /** An annotation to add: its data must be its kind's, and it must end after it starts. That
  * it ends within the text is checked against the text. */
 export const NewAnnotation = z
-  .intersection(
-    z.object({
-      start: Index,
-      end: Index,
-      licence: z.enum(SHAREABLE_LICENCES, "an annotation needs a licence that allows sharing it"),
-      author: z.string().trim().max(MAX_AUTHOR_LENGTH).optional(),
-      source: Source.optional(),
-    }),
-    AnnotationContent,
-  )
+  .intersection(z.object({ start: Index, end: Index, ...AnnotationCredit.shape }), AnnotationContent)
   .refine((a) => a.start < a.end, { message: "an annotation must end after it starts", path: ["end"] })
-  .transform((a) => ({ ...a, author: a.author || null, source: a.source ?? null }));
+  .transform((a) => ({ ...a, author: a.author ?? null, source: a.source ?? null }));
 
 export const AnnotationKey = z.tuple([Index, AnnotationId]).readonly();
 const Offset = z.coerce.number().int().min(0).max(MAX_TEXT_LENGTH);
