@@ -4,11 +4,14 @@
 import { hc } from "hono/client";
 import type { AppType } from "@skolia/api/app";
 import {
+  ANNOTATION_PAGE,
+  type Annotation,
   CLOZE_PAGE,
   TAG_PAGE,
   WORD_PAGE,
   isLang,
   lemmaParam,
+  type AnnotationKey,
   type ApiError,
   type CardCounts,
   type CardGroup,
@@ -155,6 +158,18 @@ export async function updateDocument(id: DocumentId, update: DocumentUpdate): Pr
 export async function deleteDocument(id: DocumentId): Promise<void> {
   const response = await api.documents[":id"].$delete({ param: { id } });
   if (!response.ok) throw await failure(response);
+}
+
+/** Every annotation of the entry the viewer sees for the text. */
+export function listAnnotations(id: DocumentId): Promise<readonly Annotation[]> {
+  return allPages(async (after?: Cursor<AnnotationKey>) => {
+    const response = await api.documents[":id"].annotations.$get({
+      param: { id },
+      query: { after, limit: String(ANNOTATION_PAGE.max) },
+    });
+    if (!response.ok) throw await failure(response);
+    return response.json();
+  });
 }
 
 /** The reading by name, or "unsupported" when its schema is newer than this reader

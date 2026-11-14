@@ -1,8 +1,9 @@
 // What the reader asks the API for, as TanStack Query options. Keys under "me" are the
 // signed-in user's; signing out forgets everything but who's signed in.
 import { QueryClient, queryOptions, skipToken, type QueryKey } from "@tanstack/svelte-query";
-import type { CardGroup, Lang } from "@skolia/shared/api";
-import { cardCounts, currentUser, dueCards, getSettings, listTags } from "./api.ts";
+import type { CardGroup, DocumentId, Lang } from "@skolia/shared/api";
+import { audioAnnotations } from "./annotations.ts";
+import { cardCounts, currentUser, dueCards, getSettings, listAnnotations, listTags } from "./api.ts";
 
 /** No retries and no refetch on focus: a failure shows at once, as the page's own error. */
 export function newQueryClient(): QueryClient {
@@ -15,6 +16,11 @@ export const userQuery = queryOptions({ queryKey: ["user"], queryFn: currentUser
 export const tagsQuery = queryOptions({ queryKey: ["tags"], queryFn: listTags, staleTime: Infinity });
 
 export const settingsQuery = queryOptions({ queryKey: ["me", "settings"], queryFn: getSettings });
+
+/** The text's audio annotations, from the entry the viewer sees for it. */
+export function audioQuery(id: DocumentId) {
+  return queryOptions({ queryKey: ["annotations", id], queryFn: async () => audioAnnotations(await listAnnotations(id)) });
+}
 
 export const countsQuery = queryOptions({ queryKey: ["me", "cards", "counts"], queryFn: () => cardCounts() });
 

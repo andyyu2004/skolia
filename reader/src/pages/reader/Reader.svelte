@@ -26,6 +26,9 @@
   import { createClozes } from "../../lib/clozes.ts";
   import { createReadingEntry } from "../../lib/reading-list.ts";
   import ReadingStatusMenu from "../../components/ReadingStatusMenu.svelte";
+  import { createQuery } from "@tanstack/svelte-query";
+  import { audioQuery } from "../../lib/queries.ts";
+  import { inRange, placeAudio, type PlacedAudio } from "../../lib/annotations.ts";
 
   let { id }: { id: DocumentId } = $props();
 
@@ -72,6 +75,46 @@
   const readingEntry = createReadingEntry(() => id);
   // The cloze cards from this text, loaded with it, for the word sheet
   createClozes(() => id);
+  const audioAnnotations = createQuery(() => audioQuery(id));
+
+  /** Play buttons by the piece they go before. */
+  const places = $derived(
+    doc && reading && audioAnnotations.data
+      ? placeAudio(reading.text, doc.pieces, audioAnnotations.data)
+      : new Map<number, readonly PlacedAudio[]>(),
+  );
+
+  let audio = $state<HTMLAudioElement>();
+  /** The clip the audio element has, playing or paused. */
+  let clip = $state<PlacedAudio | null>(null);
+  let paused = $state(true);
+  const playing = $derived(paused ? null : clip);
+  const isPlaying = (placed: PlacedAudio) => playing?.annotation.id === placed.annotation.id;
+
+  /** Whether the piece is in the clip playing: a word in its range, or a gap between two. */
+  function lit(i: number): boolean {
+    const pieces = doc?.pieces ?? [];
+    const inClip = (j: number) => {
+      const piece = pieces[j];
+      return playing !== null && piece !== undefined && inRange(playing, piece);
+    };
+    return pieces[i]?.kind === "gap" ? inClip(i - 1) && inClip(i + 1) : inClip(i);
+  }
+
+  /** Plays the clip, or pauses it if it's playing; another clip stops the one playing. */
+  function playOrPause(placed: PlacedAudio): void {
+    if (!audio) return;
+    if (isPlaying(placed)) {
+      audio.pause();
+      return;
+    }
+    if (clip?.annotation.id !== placed.annotation.id) audio.src = placed.annotation.data.url;
+    clip = placed;
+    audio.play().catch(() => {
+      // It couldn't load, or was paused or replaced before it started
+      if (clip === placed && audio?.paused) clip = null;
+    });
+  }
 
   $effect(() => {
     let cancelled = false;
@@ -420,19 +463,47 @@
     {/if}
 
     {#if doc}
-      <article class="text" lang={reading?.lang} bind:this={article}>
+      <article class={["text", { narrated: places.size > 0 }]} lang={reading?.lang} bind:this={article}>
         {#each doc.pieces as p, i (i)}
           <!-- Words are spans, not buttons: a button is laid out as an inline block, so a
-               line could break between a word and the punctuation after it -->
-          {#if p.kind === "gap"}
-            {p.text}
+               line could break between a word and the punctuation after it. A play button is
+               taken out of the line, into the gutter beside it. -->
+          {#each places.get(i) ?? [] as placed (placed.annotation.id)}
+            {@const label = `${isPlaying(placed) ? "Pause" : "Play"} “${snippet(reading?.text ?? "", placed.annotation.start, 30)}”`}
+            <button
+              type="button"
+              class={["play", { on: isPlaying(placed) }]}
+              aria-label={label}
+              title={label}
+              onclick={() => playOrPause(placed)}
+            >
+              {#if isPlaying(placed)}
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5v9M10.5 3.5v9" /></svg>
+              {:else}
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5v9l7-4.5z" /></svg>
+              {/if}
+            </button>
+          {/each}{#if p.kind === "gap"}
+            {#if lit(i)}
+              <span class="playing">{p.text}</span>
+            {:else}
+              {p.text}
+            {/if}
           {:else if p.punct}
-            <span class="punct">{p.text}</span>
+            <span class={["punct", { playing: lit(i) }]}>{p.text}</span>
           {:else}
             <span
               role="button"
               tabindex={p.id === tabStop ? 0 : -1}
-              class={["w", { selected: p.id === selected, head: p.id === headPiece, trigger: p.id === triggerPiece }]}
+              class={[
+                "w",
+                {
+                  selected: p.id === selected,
+                  head: p.id === headPiece,
+                  trigger: p.id === triggerPiece,
+                  playing: lit(i),
+                },
+              ]}
               onclick={() => toggle(p.id)}
               onkeydown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
@@ -445,6 +516,7 @@
           {/if}
         {/each}
       </article>
+      <audio bind:this={audio} bind:paused onended={() => (clip = null)} preload="none"></audio>
       {#if reading}
         <footer>{reading.bundle.attribution}</footer>
       {/if}
@@ -646,6 +718,66 @@
     line-height: 1.75;
     white-space: pre-wrap;
     overflow-wrap: break-word;
+  }
+
+  /* A gutter for the play buttons, each beside the line its clip starts on */
+  .narrated {
+    position: relative;
+    padding-left: 2.25rem;
+  }
+
+  .play {
+    position: absolute;
+    left: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    margin-top: 0.25rem;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--accent);
+    cursor: pointer;
+  }
+
+  /* Big enough to tap */
+  .play::after {
+    content: "";
+    position: absolute;
+    inset: -0.5rem;
+  }
+
+  .play:hover {
+    border-color: var(--accent);
+  }
+
+  .play:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .play.on {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  .play svg {
+    width: 0.8rem;
+    height: 0.8rem;
+    fill: currentColor;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  span.playing {
+    background: var(--current);
+    border-radius: 0;
   }
 
   .w {
