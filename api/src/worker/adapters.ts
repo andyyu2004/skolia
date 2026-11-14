@@ -3,7 +3,11 @@
 import * as z from "zod";
 import {
   LANGS,
+  MAX_ANNOTATIONS,
   UPOS,
+  type Annotation,
+  type AnnotationId,
+  type AnnotationKey,
   type CardCounts,
   type CardGroup,
   type CardId,
@@ -60,6 +64,7 @@ import {
 } from "@skolia/util/query";
 import { sql, type Sql } from "@skolia/util/sql";
 import type {
+  Annotated,
   BlobStore,
   DocumentContent,
   DocumentEntry,
@@ -417,6 +422,32 @@ function removeQuery(id: DocumentId, user: UserId): Sql {
   return sql`DELETE FROM user_document WHERE document_id = ${id} AND user_id = ${user}`;
 }
 
+const ANNOTATION_COLUMNS = sql`id, start, "end", kind, data, licence, author, source, added_at AS added`;
+
+/** A page of the entry's annotations, and one more if there is one, by user_document_annotation_start_idx. */
+function annotationsQuery(id: DocumentId, user: UserId, { after, limit }: PageRequest<AnnotationKey>): Sql {
+  return sql`SELECT ${ANNOTATION_COLUMNS} FROM user_document_annotation
+    ${sql.where([sql`user_id = ${user}`, sql`document_id = ${id}`, after !== undefined && sql`(start, id) > ${sql.tuple(after)}`])}
+    ORDER BY start, id LIMIT ${limit + 1}`;
+}
+
+/** Inserts the annotation unless the entry has it or has MAX_ANNOTATIONS, counted in the
+ * same statement so two adds at once can't pass the cap. */
+function annotateQuery(id: DocumentId, user: UserId, a: Annotation): Sql {
+  return sql`INSERT OR IGNORE INTO user_document_annotation (user_id, document_id, id, start, "end", kind, data, licence, author, source, added_at)
+    SELECT ${sql.join([user, id, a.id, a.start, a.end, a.kind, JSON.stringify(a.data), a.licence, a.author, a.source, a.added], ", ")}
+    WHERE (SELECT count(*) FROM user_document_annotation WHERE user_id = ${user} AND document_id = ${id}) < ${MAX_ANNOTATIONS}`;
+}
+
+function annotationQuery(id: DocumentId, user: UserId, annotationId: AnnotationId): Sql {
+  return sql`SELECT ${ANNOTATION_COLUMNS} FROM user_document_annotation
+    WHERE user_id = ${user} AND document_id = ${id} AND id = ${annotationId}`;
+}
+
+function unannotateQuery(id: DocumentId, user: UserId, annotationId: AnnotationId): Sql {
+  return sql`DELETE FROM user_document_annotation WHERE user_id = ${user} AND document_id = ${id} AND id = ${annotationId}`;
+}
+
 const TagRow = schemas.AvailableTag.extend({ position: z.number().int() });
 const KnownTag = schemas.AvailableTag.pick({ kind: true, value: true });
 
@@ -434,6 +465,17 @@ const SOME_ENTRY: DocumentEntry = {
   author: null,
   source: null,
   tags: {},
+};
+const SOME_ANNOTATION: Annotation = {
+  id: schemas.AnnotationId.parse("0".repeat(64)),
+  start: 0,
+  end: 1,
+  kind: "audio",
+  data: { url: "https://example.org/a.mp3" },
+  licence: "cc0",
+  author: null,
+  source: null,
+  added: SOME_ENTRY.imported,
 };
 
 /** D1Documents' queries, exported for the test that checks each one uses an index. */
@@ -457,6 +499,11 @@ export const DOCUMENT_QUERIES = {
   addTag: compile(addTagQuery(SOMEONE, SOME_ENTRY.id, "level", "A1")).text,
   removeTags: compile(removeTagsQuery(SOMEONE, SOME_ENTRY.id)).text,
   remove: compile(removeQuery(SOME_ENTRY.id, SOMEONE)).text,
+  annotations: annotationsQuery(SOME_ENTRY.id, SOMEONE, { after: undefined, limit: 500 }).text,
+  annotationsAfter: annotationsQuery(SOME_ENTRY.id, SOMEONE, { after: [0, SOME_ANNOTATION.id], limit: 500 }).text,
+  annotate: annotateQuery(SOME_ENTRY.id, SOMEONE, SOME_ANNOTATION).text,
+  annotation: annotationQuery(SOME_ENTRY.id, SOMEONE, SOME_ANNOTATION.id).text,
+  unannotate: unannotateQuery(SOME_ENTRY.id, SOMEONE, SOME_ANNOTATION.id).text,
 } as const;
 
 export class D1Documents implements DocumentStore {
@@ -541,6 +588,28 @@ export class D1Documents implements DocumentStore {
 
   async remove(id: DocumentId, user: UserId): Promise<void> {
     await prepare(this.db, removeQuery(id, user)).run();
+  }
+
+  async annotations(id: DocumentId, user: UserId, page: PageRequest<AnnotationKey>): Promise<Paginated<Annotation, AnnotationKey>> {
+    const rows = (await this.all(annotationsQuery(id, user, page))).map((row) => schemas.AnnotationRow.parse(row));
+    return paginate(
+      rows.map((item) => ({ item, key: [item.start, item.id] as const })),
+      page.limit,
+    );
+  }
+
+  async annotate(id: DocumentId, user: UserId, annotation: Annotation): Promise<Annotated> {
+    const [inserted, stored] = await this.db.batch([
+      prepare(this.db, annotateQuery(id, user, annotation)),
+      prepare(this.db, annotationQuery(id, user, annotation.id)),
+    ]);
+    const row = stored?.results[0];
+    if (row === undefined) return { kind: "full" };
+    return { kind: (inserted?.meta.changes ?? 0) > 0 ? "added" : "exists", annotation: schemas.AnnotationRow.parse(row) };
+  }
+
+  async unannotate(id: DocumentId, user: UserId, annotationId: AnnotationId): Promise<boolean> {
+    return (await prepare(this.db, unannotateQuery(id, user, annotationId)).run()).meta.changes > 0;
   }
 }
 

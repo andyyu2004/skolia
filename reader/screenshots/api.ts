@@ -286,6 +286,9 @@ function deps(signedIn: boolean): Deps {
       add: async () => {},
       update: async () => {},
       remove: async () => {},
+      annotations: async () => ({ items: [], next: null }),
+      annotate: async () => ({ kind: "full" }),
+      unannotate: async () => false,
     },
     blobs: {
       get: async (key) => blobs.get(key) ?? null,

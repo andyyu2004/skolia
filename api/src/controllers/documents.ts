@@ -209,13 +209,13 @@ async function stored<S extends ContentfulStatusCode>(
   return blob ? { status: 200, etag, blob, encoding } : missing;
 }
 
-function noSuchDocument(): Failed<404> {
+export function noSuchDocument(): Failed<404> {
   return fail(404, "no such document");
 }
 
 /** The entry the viewer sees: theirs, else a public one. A text private to others is
  * unknown to them. */
-async function findDocument(deps: Deps, id: string, viewer: User | null): Promise<StoredDocument | null> {
+export async function findDocument(deps: Deps, id: string, viewer: User | null): Promise<StoredDocument | null> {
   const parsed = schemas.DocumentId.safeParse(id);
   return parsed.success ? deps.documents.visible(parsed.data, viewer?.id ?? null) : null;
 }
