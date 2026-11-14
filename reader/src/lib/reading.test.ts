@@ -8,7 +8,7 @@ const OLD = { analysis: "s2-a1", bundle: "b1-a1-l1" };
 const NEW = { analysis: "s2-a2", bundle: "b1-a2-l1" };
 
 function summary(state: DocumentSummary["state"], reading?: typeof OLD, error?: string): DocumentSummary {
-  const base: DocumentSummary = { id: DocumentId.parse("d".repeat(64)), title: "t", lang: "pl", imported: timestamp(new Date(0)), words: 1, visibility: "public", licence: "cc-by", author: null, source: null, tags: {}, importer: { id: UserId.parse("ivy"), name: "Ivy" }, mine: false, state };
+  const base: DocumentSummary = { id: DocumentId.parse("d".repeat(64)), title: "t", lang: "pl", importedAt: timestamp(new Date(0)), words: 1, visibility: "public", licence: "cc-by", author: null, source: null, tags: {}, importer: { id: UserId.parse("ivy"), name: "Ivy" }, mine: false, state };
   if (reading) base.reading = reading;
   if (error) base.error = error;
   return base;

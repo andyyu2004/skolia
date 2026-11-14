@@ -67,7 +67,7 @@ export interface EntryFields {
 export interface DocumentEntry extends EntryFields {
   readonly id: DocumentId;
   readonly user: UserId;
-  readonly imported: Timestamp;
+  readonly importedAt: Timestamp;
 }
 
 /** An entry with its text's language and word count, and its user's name. */
@@ -102,14 +102,14 @@ export interface DocumentStore {
   annotations(id: DocumentId, user: UserId, filter: AnnotationFilter, page: PageRequest<AnnotationKey>): Promise<Paginated<Annotation, AnnotationKey>>;
   /** Add the annotation to the user's entry, which must exist, unless it has one with its
    * id already or has MAX_ANNOTATIONS. */
-  annotate(id: DocumentId, user: UserId, annotation: Annotation): Promise<Annotated>;
+  annotate(id: DocumentId, user: UserId, annotation: Annotation): Promise<AnnotateResult>;
   /** False if the user's entry has no annotation with the id. */
   unannotate(id: DocumentId, user: UserId, annotationId: AnnotationId): Promise<boolean>;
 }
 
 /** added: the annotation is new. exists: the entry had it, as it's given here. full: the
  * entry has MAX_ANNOTATIONS. */
-export type Annotated = { readonly kind: "added" | "exists"; readonly annotation: Annotation } | { readonly kind: "full" };
+export type AnnotateResult = { readonly kind: "added" | "exists"; readonly annotation: Annotation } | { readonly kind: "full" };
 
 export interface StoredBlob {
   body: Uint8Array<ArrayBuffer>;

@@ -49,7 +49,7 @@ test("an entry's user adds annotations, which whoever sees the entry sees in ord
   const second = await body("add", annotate(app, importer, id, audio(5, 10, { source: "https://example.org/story" })), 201);
   assert.deepEqual(
     { ...second, id: undefined },
-    { id: undefined, start: 5, end: 10, kind: "audio", data: { url: "https://example.org/5.mp3" }, licence: "cc-by", author: "Helena", source: "https://example.org/story", added: "2026-11-04T00:00:00.000Z" },
+    { id: undefined, start: 5, end: 10, kind: "audio", data: { url: "https://example.org/5.mp3" }, licence: "cc-by", author: "Helena", source: "https://example.org/story", addedAt: "2026-11-04T00:00:00.000Z" },
   );
   await body("add", annotate(app, importer, id, audio(0, 4, { author: "" })), 201);
   const alice = await local.signIn((await local.signUp(ALICE)).id);

@@ -46,7 +46,7 @@ const lalka: StoredDocument = {
   id: LALKA,
   title: "Lalka",
   lang: "pl",
-  imported: Timestamp.parse("2026-11-07T09:58:00.000Z"),
+  importedAt: Timestamp.parse("2026-11-07T09:58:00.000Z"),
   words: 72,
   user: user.id,
   importerName: user.name,

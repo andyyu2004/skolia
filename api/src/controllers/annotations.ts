@@ -31,7 +31,7 @@ export async function add(
   if (!text) throw new Error(`document ${record.id} has no text`);
   const length = new TextDecoder().decode(text.body).length;
   if (body.end > length) return fail(400, `the annotation ends at ${body.end}, after the text's end at ${length}`);
-  const annotated = await deps.documents.annotate(record.id, user.id, { ...body, id: await annotationId(body), added: timestamp(deps.now()) });
+  const annotated = await deps.documents.annotate(record.id, user.id, { ...body, id: await annotationId(body), addedAt: timestamp(deps.now()) });
   switch (annotated.kind) {
     case "added":
       return { status: 201, body: annotated.annotation };

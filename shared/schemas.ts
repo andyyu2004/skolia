@@ -64,7 +64,7 @@ export const LemmaId = z.templateLiteral([Lang, ":", z.string().min(1).max(MAX_L
 
 export const WordStatus = z.enum(WORD_STATUSES);
 
-export const Word = z.object({ lemmaId: LemmaId, status: WordStatus, updated: Timestamp, mature: z.boolean() });
+export const Word = z.object({ lemmaId: LemmaId, status: WordStatus, updatedAt: Timestamp, mature: z.boolean() });
 
 export const SetWord = z.object({ status: WordStatus });
 
@@ -278,7 +278,7 @@ export const Annotation = z.intersection(
     licence: z.enum(SHAREABLE_LICENCES),
     author: z.string().nullable(),
     source: z.string().nullable(),
-    added: Timestamp,
+    addedAt: Timestamp,
   }),
   AnnotationContent,
 );
@@ -335,7 +335,7 @@ export const DocumentRow = z.object({
   id: DocumentId,
   title: z.string(),
   lang: Lang,
-  imported: Timestamp,
+  importedAt: Timestamp,
   words: z.number().int(),
   user: UserId,
   visibility: Visibility,

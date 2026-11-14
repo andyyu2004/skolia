@@ -92,7 +92,7 @@ export async function importText(
   const own = known ? await ownEntry(deps, id, user) : null;
   if (own === null) {
     if (!known) await deps.blobs.put(textKey(id), body.text, "text/plain; charset=utf-8");
-    await deps.documents.add({ id, lang: body.lang, words: countWords(body.text) }, { id, user: user.id, imported: timestamp(deps.now()), ...fields });
+    await deps.documents.add({ id, lang: body.lang, words: countWords(body.text) }, { id, user: user.id, importedAt: timestamp(deps.now()), ...fields });
   } else if (own.visibility === "private" && fields.visibility === "public") {
     await deps.documents.update(id, user.id, { ...fields, title: own.title, tags: own.tags });
   }

@@ -37,7 +37,7 @@ const started = (alias: "card" | "u") =>
   exists(
     select({})
       .from("card", "w")
-      .where(eq("w.lemma_id", col(`${alias}.lemma_id`)), ne("w.kind", lit("cloze")), isNotNull("w.first_reviewed")),
+      .where(eq("w.lemma_id", col(`${alias}.lemma_id`)), ne("w.kind", lit("cloze")), isNotNull("w.first_reviewed_at")),
   );
 
 /** The card under alias is a language's new card. */
@@ -55,7 +55,7 @@ function freshCards(group: CardGroup, lang: Lang, newLeft: NewLeft): { where: Sq
         .from("card", "u")
         .where(isNew("u", lang), ne("u.kind", lit("cloze")), not(started("u")))
         .groupBy("u.lemma_id")
-        .orderBy(fn.min("u.created"), "u.lemma_id")
+        .orderBy(fn.min("u.created_at"), "u.lemma_id")
         .limit(newLeft.words);
       return {
         where: and(isNew("card", lang), ne("card.kind", lit("cloze")), or(started("card"), inQuery("card.lemma_id", firstLemmas))),
@@ -116,7 +116,7 @@ export class User extends DurableObject<object> {
   /** A page of the words, by lemma id: those after the page's key, which word's primary key seeks to. */
   words({ after, limit }: PageRequest<WordKey>): Paginated<Word, WordKey> {
     const rows = this.#exec(
-      sql`SELECT word.lemma_id AS "lemmaId", word.status, word.updated,
+      sql`SELECT word.lemma_id AS "lemmaId", word.status, word.updated_at AS "updatedAt",
            coalesce(card.scheduled_days >= ${MATURE_DAYS}, 0) AS mature
          FROM word LEFT JOIN card ON card.lemma_id = word.lemma_id AND card.kind = 'recognition'
          WHERE word.lemma_id > ${after?.[0] ?? ""}
@@ -136,8 +136,8 @@ export class User extends DurableObject<object> {
     const s = await fsrs();
     this.ctx.storage.transactionSync(() => {
       this.#exec(
-        sql`INSERT INTO word (lemma_id, status, updated) VALUES (${lemmaId}, ${status}, ${now})
-         ON CONFLICT (lemma_id) DO UPDATE SET status = excluded.status, updated = excluded.updated`,
+        sql`INSERT INTO word (lemma_id, status, updated_at) VALUES (${lemmaId}, ${status}, ${now})
+         ON CONFLICT (lemma_id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at`,
       );
       const active = status === "active" ? 1 : 0;
       this.#exec(sql`UPDATE card SET active = ${active} WHERE lemma_id = ${lemmaId}`);
@@ -145,7 +145,7 @@ export class User extends DurableObject<object> {
       for (const kind of WORD_CARD_KINDS) {
         const id = CardId.parse(crypto.randomUUID());
         this.#exec(
-          sql`INSERT INTO card (id, lemma_id, kind, created, active, fsrs) VALUES (${id}, ${lemmaId}, ${kind}, ${now}, 1, ${toJson(newCard(s, id, new Date(now)))})
+          sql`INSERT INTO card (id, lemma_id, kind, created_at, active, fsrs) VALUES (${id}, ${lemmaId}, ${kind}, ${now}, 1, ${toJson(newCard(s, id, new Date(now)))})
            ON CONFLICT (lemma_id, kind) WHERE kind != 'cloze' DO NOTHING`,
         );
       }
@@ -171,7 +171,7 @@ export class User extends DurableObject<object> {
       if (had !== undefined) return { cardId: CardId.parse(had["card_id"]), made: false };
       const id = CardId.parse(crypto.randomUUID());
       this.#exec(
-        sql`INSERT INTO card (id, lemma_id, kind, created, active, fsrs)
+        sql`INSERT INTO card (id, lemma_id, kind, created_at, active, fsrs)
          VALUES (${id}, ${cloze.lemmaId}, 'cloze', ${now}, coalesce((SELECT status = 'active' FROM word WHERE lemma_id = ${cloze.lemmaId}), 1), ${toJson(newCard(s, id, new Date(now)))})`,
       );
       this.#exec(
@@ -209,10 +209,10 @@ export class User extends DurableObject<object> {
     const { newLemmasPerDay, newFormsPerDay } = this.settings();
     const lemmas = this.#exec(
       sql`SELECT count(DISTINCT lemma_id) AS n FROM card AS c
-         WHERE lang = ${lang} AND first_reviewed >= ${dayStart} AND kind != 'cloze'
-           AND NOT EXISTS (SELECT 1 FROM card AS e WHERE e.lemma_id = c.lemma_id AND e.kind != 'cloze' AND e.first_reviewed < ${dayStart})`,
+         WHERE lang = ${lang} AND first_reviewed_at >= ${dayStart} AND kind != 'cloze'
+           AND NOT EXISTS (SELECT 1 FROM card AS e WHERE e.lemma_id = c.lemma_id AND e.kind != 'cloze' AND e.first_reviewed_at < ${dayStart})`,
     ).one()["n"];
-    const forms = this.#exec(sql`SELECT count(*) AS n FROM card WHERE lang = ${lang} AND first_reviewed >= ${dayStart} AND kind = 'cloze'`).one()["n"];
+    const forms = this.#exec(sql`SELECT count(*) AS n FROM card WHERE lang = ${lang} AND first_reviewed_at >= ${dayStart} AND kind = 'cloze'`).one()["n"];
     return { words: Math.max(0, newLemmasPerDay - Number(lemmas)), forms: Math.max(0, newFormsPerDay - Number(forms)) };
   }
 
@@ -225,7 +225,7 @@ export class User extends DurableObject<object> {
     const dueNow = this.#exec(SCHEDULED.where(due(lang, now), group !== undefined && IN_GROUP[group]).orderBy("card.due_at").limit(limit)).toArray();
     const fresh = groups.flatMap((g) => {
       const { where, cap } = freshCards(g, lang, newLeft);
-      return this.#exec(SCHEDULED.where(where).orderBy("card.created", "card.lemma_id", desc("card.kind")).limit(Math.min(cap, limit))).toArray();
+      return this.#exec(SCHEDULED.where(where).orderBy("card.created_at", "card.lemma_id", desc("card.kind")).limit(Math.min(cap, limit))).toArray();
     });
     return { cards: [...dueNow, ...fresh].slice(0, limit).map(scheduled), newLeft };
   }
@@ -250,7 +250,7 @@ export class User extends DurableObject<object> {
   async review({ id, cardId, rating, at }: ReviewRequest, now: Timestamp): Promise<ReviewOutcome> {
     const s = await fsrs();
     return this.ctx.storage.transactionSync((): ReviewOutcome => {
-      const row = this.#exec(sql`SELECT fsrs, created FROM card WHERE id = ${cardId}`).toArray()[0];
+      const row = this.#exec(sql`SELECT fsrs, created_at FROM card WHERE id = ${cardId}`).toArray()[0];
       if (row === undefined) return { kind: "no-card" };
       const card = fromJson(String(row["fsrs"]));
       const seen = this.#exec(sql`SELECT card_id FROM review WHERE id = ${id}`).toArray()[0];
@@ -258,12 +258,12 @@ export class User extends DurableObject<object> {
         return seen["card_id"] === cardId ? { kind: "reviewed", cardId, dueAt: timestamp(card.dueAt) } : { kind: "id-reused" };
       }
       const when = new Date(at);
-      if (when < new Date(String(row["created"])) || (card.lastReviewAt !== null && when < card.lastReviewAt)) {
+      if (when < new Date(String(row["created_at"])) || (card.lastReviewAt !== null && when < card.lastReviewAt)) {
         return { kind: "out-of-order" };
       }
       const next = review(s, card, rating, when);
-      this.#exec(sql`INSERT INTO review (id, card_id, rating, review_time) VALUES ${sql.tuple([id, cardId, rating, when.toISOString()])}`);
-      this.#exec(sql`UPDATE card SET fsrs = ${toJson(next)}, first_reviewed = coalesce(first_reviewed, ${now}) WHERE id = ${cardId}`);
+      this.#exec(sql`INSERT INTO review (id, card_id, rating, reviewed_at) VALUES ${sql.tuple([id, cardId, rating, when.toISOString()])}`);
+      this.#exec(sql`UPDATE card SET fsrs = ${toJson(next)}, first_reviewed_at = coalesce(first_reviewed_at, ${now}) WHERE id = ${cardId}`);
       return { kind: "reviewed", cardId, dueAt: timestamp(next.dueAt) };
     });
   }
