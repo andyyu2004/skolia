@@ -7,6 +7,8 @@ export const LogEntry = z.object({
   name: z.string(),
   direction: z.enum(["up", "down"]),
   checksum: z.string(),
+  /** An up's down as it was when the up was applied; null on a down, and on an up logged before downs were kept */
+  down: z.string().nullable(),
   appliedAt: z.string(),
 });
 export type LogEntry = z.output<typeof LogEntry>;
@@ -23,6 +25,7 @@ export interface Step {
   direction: Direction;
   sql: string;
   checksum: string;
+  down: string | null;
 }
 
 export class MigrationError extends Error {
@@ -74,11 +77,22 @@ export function plan(current: number, target: number, migrations: readonly Check
   const steps: Step[] = [];
   for (let v = current + 1; v <= target; v++) {
     const m = migrations[v - 1]!;
-    steps.push({ version: v, name: m.name, direction: "up", sql: m.up, checksum: m.upChecksum });
+    steps.push({ version: v, name: m.name, direction: "up", sql: m.up, checksum: m.upChecksum, down: m.down });
   }
   for (let v = current; v > target; v--) {
     const m = migrations[v - 1]!;
-    steps.push({ version: v, name: m.name, direction: "down", sql: m.down, checksum: m.downChecksum });
+    steps.push({ version: v, name: m.name, direction: "down", sql: m.down, checksum: m.downChecksum, down: null });
   }
   return steps;
+}
+
+/** The step that reverts the latest applied migration with the down it was applied with, if
+ * it's the code's last migration and has been edited since: while a migration is being
+ * written, its edits are redone this way where MUTABLE_FINAL_USER_MIGRATION is set. */
+export async function revertEdited(stack: readonly LogEntry[], migrations: readonly Checksummed[]): Promise<Step | null> {
+  const top = stack.at(-1);
+  const last = migrations.at(-1);
+  if (top === undefined || last === undefined || top.down === null) return null;
+  if (top.version !== last.version || top.name !== last.name || top.checksum === last.upChecksum) return null;
+  return { version: top.version, name: top.name, direction: "down", sql: top.down, checksum: await checksum(top.down), down: null };
 }

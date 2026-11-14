@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MigrationError, applied, checksum, plan, problems, withChecksums, type LogEntry } from "./migrator.ts";
+import { MigrationError, applied, checksum, plan, problems, revertEdited, withChecksums, type LogEntry } from "./migrator.ts";
 
 const MIGRATIONS = await withChecksums([
   { version: 1, name: "one", up: "CREATE TABLE one (id TEXT)", down: "DROP TABLE one" },
@@ -12,7 +12,8 @@ let seq = 0;
 function entry(version: number, direction: "up" | "down", fields: Partial<LogEntry> = {}): LogEntry {
   const m = MIGRATIONS[version - 1]!;
   const sum = direction === "up" ? m.upChecksum : m.downChecksum;
-  return { seq: ++seq, version, name: m.name, direction, checksum: sum, appliedAt: "2026-11-07T00:00:00.000Z", ...fields };
+  const down = direction === "up" ? m.down : null;
+  return { seq: ++seq, version, name: m.name, direction, checksum: sum, down, appliedAt: "2026-11-07T00:00:00.000Z", ...fields };
 }
 
 test("a checksum is the SHA-256 of the exact SQL", async () => {
@@ -43,21 +44,42 @@ test("applied migrations must still be in the code, unedited and under the same 
 
 test("a plan goes up or down one version at a time, to any version in the code", () => {
   assert.deepEqual(
-    plan(0, 2, MIGRATIONS).map((s) => [s.version, s.direction, s.sql, s.checksum]),
+    plan(0, 2, MIGRATIONS).map((s) => [s.version, s.direction, s.sql, s.checksum, s.down]),
     [
-      [1, "up", ONE.up, ONE.upChecksum],
-      [2, "up", TWO.up, TWO.upChecksum],
+      [1, "up", ONE.up, ONE.upChecksum, ONE.down],
+      [2, "up", TWO.up, TWO.upChecksum, TWO.down],
     ],
   );
   assert.deepEqual(
-    plan(2, 0, MIGRATIONS).map((s) => [s.version, s.direction, s.sql, s.checksum]),
+    plan(2, 0, MIGRATIONS).map((s) => [s.version, s.direction, s.sql, s.checksum, s.down]),
     [
-      [2, "down", TWO.down, TWO.downChecksum],
-      [1, "down", ONE.down, ONE.downChecksum],
+      [2, "down", TWO.down, TWO.downChecksum, null],
+      [1, "down", ONE.down, ONE.downChecksum, null],
     ],
   );
   assert.deepEqual(plan(1, 1, MIGRATIONS), []);
   assert.throws(() => plan(0, 3, MIGRATIONS), MigrationError);
   assert.throws(() => plan(0, -1, MIGRATIONS), MigrationError);
   assert.throws(() => plan(0, 1.5, MIGRATIONS), MigrationError);
+});
+
+test("an edited last migration is reverted with the down it was applied with", async () => {
+  const edited = { checksum: "edited", down: "DROP TABLE two_as_it_was" };
+  const step = await revertEdited([entry(1, "up"), entry(2, "up", edited)], MIGRATIONS);
+  assert.deepEqual(step, {
+    version: 2,
+    name: "two",
+    direction: "down",
+    sql: "DROP TABLE two_as_it_was",
+    checksum: await checksum("DROP TABLE two_as_it_was"),
+    down: null,
+  });
+});
+
+test("only the code's last migration, edited and with a stored down, is reverted", async () => {
+  assert.equal(await revertEdited([], MIGRATIONS), null);
+  assert.equal(await revertEdited([entry(1, "up"), entry(2, "up")], MIGRATIONS), null);
+  assert.equal(await revertEdited([entry(1, "up", { checksum: "edited" })], MIGRATIONS), null);
+  assert.equal(await revertEdited([entry(1, "up"), entry(2, "up", { checksum: "edited", down: null })], MIGRATIONS), null);
+  assert.equal(await revertEdited([entry(1, "up"), entry(2, "up", { checksum: "edited", name: "deux" })], MIGRATIONS), null);
 });
