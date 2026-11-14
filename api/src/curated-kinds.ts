@@ -17,18 +17,26 @@ export type Resolved = {
   readonly annotations: readonly NewAnnotation[];
 };
 
-const ANNOTATION_FIELDS: readonly string[] = [...Object.keys(schemas.AnnotationCredit.shape), "kind", "data"];
+const CREDIT_FIELDS: readonly string[] = Object.keys(schemas.AnnotationCredit.shape);
+const Annotation = z.intersection(schemas.AnnotationCredit, schemas.AnnotationContent);
 
 /** An annotation in a curated file: what the API's NewAnnotation takes but where it is,
- * which its span gives. */
-const CuratedAnnotation = z
-  .looseObject({})
-  .superRefine((annotation, context) => {
-    const unknown = Object.keys(annotation).filter((key) => !ANNOTATION_FIELDS.includes(key));
-    if (unknown.length > 0)
-      context.addIssue({ code: "custom", message: `${unknown.join(", ")}: an annotation has only ${ANNOTATION_FIELDS.join(", ")}` });
-  })
-  .pipe(z.intersection(schemas.AnnotationCredit, schemas.AnnotationContent));
+ * which its span gives, and with its kind's data beside its kind and credit rather than
+ * under data (kind: audio, url: …). Errors name the field as the file has it. */
+const CuratedAnnotation = z.looseObject({}).transform((item, context): z.output<typeof Annotation> => {
+  const fields = Object.entries(item);
+  const nested = {
+    ...Object.fromEntries(fields.filter(([key]) => key === "kind" || CREDIT_FIELDS.includes(key))),
+    data: Object.fromEntries(fields.filter(([key]) => key !== "kind" && !CREDIT_FIELDS.includes(key))),
+  };
+  const parsed = Annotation.safeParse(nested);
+  if (parsed.success) return parsed.data;
+  for (const issue of parsed.error.issues) {
+    const path = issue.path[0] === "data" ? issue.path.slice(1) : issue.path;
+    context.addIssue({ code: "custom", message: issue.message.replace(" annotation data ", " annotation "), path: [...path] });
+  }
+  return z.NEVER;
+});
 
 /** The text without its [span]{label} markup (curated-spans.ts), and its spans. */
 const MarkedText = z.string().transform((text, context) => {

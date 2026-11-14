@@ -68,7 +68,7 @@ export type Change =
 export function parseCurated(path: string, lang: Lang, raw: string): CuratedFile {
   let yaml: unknown;
   try {
-    yaml = parseYaml(raw);
+    yaml = parseYaml(raw, { merge: true });
   } catch (error) {
     throw new Error(`${path}: ${error instanceof Error ? error.message : String(error)}`);
   }

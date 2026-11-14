@@ -253,8 +253,7 @@ function field(kind: string, name: string, message: string) {
 
 /** What an annotation holds, by kind. audio: a recording of the range, at an https URL
  * skolia doesn't host. text: anything written about the range, a note or a translation,
- * say. Migration 0010 holds the stored data to the same fields; a new kind is a variant here
- * and a migration. */
+ * say. The database checks only that data is an object; a new kind is a variant here. */
 export const AnnotationContent = z.discriminatedUnion(
   "kind",
   [

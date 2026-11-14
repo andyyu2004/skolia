@@ -82,24 +82,20 @@ text: |
 annotations:
   "2":
     kind: audio
-    data:
-      url: https://example.org/02.mp3
+    url: https://example.org/02.mp3
     licence: cc-by
     author: Helena Gabriela
     source: https://example.org/story
   3:
     kind: text
-    data:
-      text: " Anna has long hair. "
+    text: " Anna has long hair. "
     licence: cc0
   kot:
     - kind: text
-      data:
-        text: cat
+      text: cat
       licence: cc0
     - kind: audio
-      data:
-        url: https://example.org/kot.mp3
+      url: https://example.org/kot.mp3
       licence: cc0
 `;
 
@@ -141,7 +137,7 @@ test("bad annotations or markup are refused offline, naming the file and what's 
   const inline = (text: string, annotations: string) =>
     `kind: inline\ntitle: A\nlicence: cc0\ntext: |\n  ${text}\nannotations:\n${annotations}`;
   const annotation = (label: string, fields: string) => `  ${label}:\n${fields.replace(/^/gmu, "    ")}\n`;
-  const audio = (label: string) => annotation(label, "kind: audio\ndata:\n  url: https://example.org/a.mp3\nlicence: cc0");
+  const audio = (label: string) => annotation(label, "kind: audio\nurl: https://example.org/a.mp3\nlicence: cc0");
   const refused = (yaml: string, message: RegExp) => assert.throws(() => parseCurated("pl/a.yaml", "pl", yaml), message);
   refused(inline("[a]{x", audio("x")), /^Error: pl\/a\.yaml: text: line 1: \] needs a \{label\}/u);
   refused(inline("[a]{x} [b]{y}", audio("x")), /pl\/a\.yaml: text: \{y\} has no annotations/u);
@@ -149,37 +145,36 @@ test("bad annotations or markup are refused offline, naming the file and what's 
   refused(inline("[a]{x}", audio("x") + audio("Y")), /pl\/a\.yaml: annotations\.Y: a label is lowercase/u);
   refused(inline("[a]{x}", "  x: []\n"), /pl\/a\.yaml: annotations\.x: /u);
   refused(
-    inline("[a]{x}", annotation("x", "kind: video\ndata: {}\nlicence: cc0")),
+    inline("[a]{x}", annotation("x", "kind: video\nlicence: cc0")),
     /pl\/a\.yaml: annotations\.x\.0\.kind: kind must be audio or text/u,
   );
   refused(
-    inline("[a]{x}", annotation("x", "kind: audio\ndata:\n  url: http://example.org/a.mp3\nlicence: cc0")),
-    /pl\/a\.yaml: annotations\.x\.0\.data\.url: url must be an https URL/u,
+    inline("[a]{x}", annotation("x", "kind: audio\nurl: http://example.org/a.mp3\nlicence: cc0")),
+    /pl\/a\.yaml: annotations\.x\.0\.url: url must be an https URL/u,
   );
   refused(
-    inline("[a]{x}", annotation("x", "kind: text\ndata:\n  text: a\nlicence: all-rights-reserved")),
+    inline("[a]{x}", annotation("x", "kind: text\ntext: a\nlicence: all-rights-reserved")),
     /pl\/a\.yaml: annotations\.x\.0\.licence: an annotation needs a licence that allows sharing it/u,
   );
   refused(
-    inline("[a]{x}", annotation("x", 'kind: text\ndata:\n  text: a\nlicence: cc0\nauthor: ""')),
+    inline("[a]{x}", annotation("x", 'kind: text\ntext: a\nlicence: cc0\nauthor: ""')),
     /pl\/a\.yaml: annotations\.x\.0\.author: author must be non-empty/u,
   );
   refused(
-    inline("[a]{x}", annotation("x", "kind: text\ndata:\n  text: a\nlicence: cc0\nstart: 0")),
-    /pl\/a\.yaml: annotations\.x\.0: start: an annotation has only licence, author, source, kind, data/u,
+    inline("[a]{x}", annotation("x", "kind: text\ntext: a\nlicence: cc0\nstart: 0")),
+    /pl\/a\.yaml: annotations\.x\.0: text annotation has only text/u,
   );
   refused("kind: wolnelektury\nslug: tuwim-rzepka\nannotations: {}\n", /pl\/a\.yaml: .*annotations/u);
 });
 
 test("an annotation given twice on a span is refused", async () => {
   const yaml =
-    "kind: inline\ntitle: A\nlicence: cc0\ntext: '[a]{x}'\nannotations:\n  x:\n    - kind: text\n      data:\n        text: a\n      licence: cc0\n    - kind: text\n      data:\n        text: a\n      licence: cc0\n";
+    "kind: inline\ntitle: A\nlicence: cc0\ntext: '[a]{x}'\nannotations:\n  x:\n    - kind: text\n      text: a\n      licence: cc0\n    - kind: text\n      text: a\n      licence: cc0\n";
   await assert.rejects(resolveCurated([parseCurated("pl/a.yaml", "pl", yaml)], noFetch), /pl\/a\.yaml: the same annotation twice at 0-1/u);
 });
 
 test("a span only on what's trimmed is refused", async () => {
-  const yaml =
-    "kind: inline\ntitle: A\nlicence: cc0\ntext: '[ ]{x}a'\nannotations:\n  x:\n    kind: text\n    data:\n      text: a\n    licence: cc0\n";
+  const yaml = "kind: inline\ntitle: A\nlicence: cc0\ntext: '[ ]{x}a'\nannotations:\n  x:\n    kind: text\n    text: a\n    licence: cc0\n";
   await assert.rejects(
     resolveCurated([parseCurated("pl/a.yaml", "pl", yaml)], noFetch),
     /pl\/a\.yaml: the annotation at 0-0: an annotation must end after it starts/u,
@@ -271,4 +266,19 @@ test("curated/ is read by language, and holds only .yaml files", async () => {
   await assert.rejects(readCurated(dir), /b\.txt: not a \.yaml file/u);
   await mkdir(join(dir, "de"));
   await assert.rejects(readCurated(dir), /de: not a language/u);
+});
+
+test("annotations can share fields through YAML merge keys", async () => {
+  const yaml =
+    "kind: inline\ntitle: A\nlicence: cc0\nsource: &story https://example.org/story\ntext: '[a]{x} [b]{y}'\nannotations:\n" +
+    "  x:\n    <<: &narration\n      kind: audio\n      licence: cc-by\n      source: *story\n    url: https://example.org/x.mp3\n" +
+    "  y:\n    <<: *narration\n    url: https://example.org/y.mp3\n";
+  const [text] = await resolveCurated([parseCurated("pl/a.yaml", "pl", yaml)], noFetch);
+  assert.deepEqual(
+    text?.annotations.map((a) => [a.request.kind, a.request.data, a.request.licence, a.request.source]),
+    [
+      ["audio", { url: "https://example.org/x.mp3" }, "cc-by", "https://example.org/story"],
+      ["audio", { url: "https://example.org/y.mp3" }, "cc-by", "https://example.org/story"],
+    ],
+  );
 });
