@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createQuery } from "@tanstack/svelte-query";
-  import { isLang, type CardGroup, type Lang } from "@skolia/shared/api";
+  import { isLang, type CardGroup, type DocumentId, type Lang } from "@skolia/shared/api";
+  import * as schemas from "@skolia/shared/schemas";
   import Explore from "./pages/Explore.svelte";
   import { userQuery } from "./lib/queries.ts";
   import { createWords } from "./lib/words.ts";
@@ -12,7 +13,7 @@
   import Upload from "./pages/Upload.svelte";
   import { versionUrl } from "./lib/version.ts";
 
-  type Route = { page: "explore" } | { page: "upload" } | { page: "review"; lang: Lang | null; group: CardGroup | null } | { page: "settings" } | { page: "reader"; id: string };
+  type Route = { page: "explore" } | { page: "upload" } | { page: "review"; lang: Lang | null; group: CardGroup | null } | { page: "settings" } | { page: "reader"; id: DocumentId };
 
   function parse(hash: string): Route {
     if (hash === "#/upload") return { page: "upload" };
@@ -21,8 +22,9 @@
     if (review !== undefined && isLang(review)) return { page: "review", lang: review, group: group === "words" || group === "forms" ? group : null };
     if (hash === "#/settings") return { page: "settings" };
     // After the id, a word in the text (lib/link.ts), which Reader reads
-    const match = /^#\/doc\/([0-9a-f]{64})(?:\?.*)?$/.exec(hash);
-    return match?.[1] ? { page: "reader", id: match[1] } : { page: "explore" };
+    const [, doc] = /^#\/doc\/([^?]+)(?:\?.*)?$/.exec(hash) ?? [];
+    const id = schemas.DocumentId.safeParse(doc);
+    return id.success ? { page: "reader", id: id.data } : { page: "explore" };
   }
 
   let route = $state(parse(location.hash));

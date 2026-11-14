@@ -1,9 +1,11 @@
 <script lang="ts">
   import { createInfiniteQuery, createQuery, keepPreviousData } from "@tanstack/svelte-query";
-  import type { DocumentKey, Lang, User } from "@skolia/shared/api";
+  import type { DocumentKey, DocumentSummary, Lang, ReadingKey, ReadingStatus, User } from "@skolia/shared/api";
   import type { Cursor } from "@skolia/shared/page";
-  import { LANGS, LANGUAGE_INFO, LICENCE_INFO } from "@skolia/shared/api";
-  import { listDocuments, type DocumentQuery } from "../lib/api.ts";
+  import { LANGS, LANGUAGE_INFO, LICENCE_INFO, READING_STATUSES } from "@skolia/shared/api";
+  import { listDocuments, listReading, type DocumentQuery } from "../lib/api.ts";
+  import { READING_STATUS_LABELS, listKey } from "../lib/reading-list.ts";
+  import ReadingStatusMenu from "../components/ReadingStatusMenu.svelte";
   import { tagsQuery } from "../lib/queries.ts";
   import { tagLabel } from "../lib/tags.ts";
   import TagFilter from "../components/TagFilter.svelte";
@@ -18,29 +20,46 @@
   let query = $state("");
   let title = $state("");
   let lang = $state<Lang | "all">("all");
-  let importer = $state<"all" | "mine">("all");
+  /** Every text the filters keep, those the user imported, or those with a status on their reading list. */
+  let shown = $state<"all" | "mine" | ReadingStatus>("all");
+  const shelf = $derived(READING_STATUSES.find((s) => s === shown) ?? null);
   /** The tags kept, as kind:value: any of one kind, all of the kinds. */
   let tagged = $state<readonly string[]>([]);
 
-  const request = $derived<DocumentQuery>({ lang: lang === "all" ? undefined : lang, title, mine: importer === "mine", tags: [...tagged] });
+  const request = $derived<DocumentQuery>({ lang: lang === "all" ? undefined : lang, title, mine: shown === "mine", tags: [...tagged] });
   const filtered = $derived(request.lang !== undefined || request.title.trim() !== "" || request.tags.length > 0);
 
   // Without them there's no tag filter, but the list still works
   const tags = createQuery(() => tagsQuery);
 
   /** A new query's list shows the last one's until it comes. */
-  const listing = createInfiniteQuery(() => ({
+  const everything = createInfiniteQuery(() => ({
     queryKey: ["documents", request] as const,
     queryFn: ({ queryKey: [, asked], pageParam }) => listDocuments(asked, pageParam),
     initialPageParam: undefined as Cursor<DocumentKey> | undefined,
     getNextPageParam: (page) => page.next ?? undefined,
     placeholderData: keepPreviousData,
+    enabled: shelf === null,
   }));
-  /** The pages loaded so far, undefined while the first loads. */
-  const documents = $derived(listing.data?.pages.flatMap((page) => page.items));
+  const onList = createInfiniteQuery(() => ({
+    queryKey: listKey(shelf ?? "to-read", request.lang),
+    queryFn: ({ queryKey: [, , , status, inLang], pageParam }) => listReading(status, inLang, pageParam),
+    initialPageParam: undefined as Cursor<ReadingKey> | undefined,
+    getNextPageParam: (page) => page.next ?? undefined,
+    placeholderData: keepPreviousData,
+    enabled: shelf !== null && !!user,
+  }));
+  const listing = $derived(shelf === null ? everything : onList);
+  /** The pages loaded so far, each text with its status on the list when that's what's
+   * shown; undefined while the first loads. */
+  const documents = $derived<readonly { readonly doc: DocumentSummary; readonly status: ReadingStatus | null }[] | undefined>(
+    shelf === null
+      ? everything.data?.pages.flatMap((page) => page.items.map((doc) => ({ doc, status: null })))
+      : onList.data?.pages.flatMap((page) => page.items.map(({ document, status }) => ({ doc: document, status }))),
+  );
 
   $effect(() => {
-    if (!user && importer === "mine") importer = "all";
+    if (!user && shown !== "all") shown = "all";
   });
 
   $effect(() => {
@@ -53,10 +72,12 @@
 </script>
 
 <Page title="Explore" wide>
-  <label class="search">
-    <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4.5 4.5" /></svg>
-    <input type="search" bind:value={query} placeholder="Search titles" aria-label="Search titles" />
-  </label>
+  {#if shelf === null}
+    <label class="search">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4.5 4.5" /></svg>
+      <input type="search" bind:value={query} placeholder="Search titles" aria-label="Search titles" />
+    </label>
+  {/if}
 
   {#if listing.error}
     <p class="error">{listing.error.message}</p>
@@ -74,22 +95,32 @@
             <option value={code} lang={code}>{LANGUAGE_INFO[code].flag} {LANGUAGE_INFO[code].endonym}</option>
           {/each}
         </select>
-        <select class={{ active: importer !== "all" }} bind:value={importer} aria-label="Imported by">
-          <option value="all">Anyone</option>
+        <select class={{ active: shown !== "all" }} bind:value={shown} aria-label="Show">
+          <option value="all">All texts</option>
           {#if user}
-            <option value="mine">You</option>
+            <option value="mine">Imported by you</option>
+            <optgroup label="My list">
+              {#each READING_STATUSES as s (s)}
+                <option value={s}>{READING_STATUS_LABELS[s]}</option>
+              {/each}
+            </optgroup>
           {/if}
         </select>
-        <TagFilter available={tags.data ?? []} error={tags.error?.message ?? null} bind:selected={tagged} />
+        {#if shelf === null}
+          <TagFilter available={tags.data ?? []} error={tags.error?.message ?? null} bind:selected={tagged} />
+        {/if}
       </div>
 
       {#if documents === undefined}
         <p class="empty">Loading…</p>
       {:else if documents.length === 0}
         <p class="empty">
-          {#if filtered}
+          {#if shelf !== null}
+            Nothing {READING_STATUS_LABELS[shelf].toLowerCase()}{request.lang ? ` in ${LANGUAGE_INFO[request.lang].name}` : ""}. Add a text
+            from its page.
+          {:else if filtered}
             No texts match.
-          {:else if importer === "mine"}
+          {:else if shown === "mine"}
             You haven't imported anything yet. <a href="#/upload">Upload a text</a>.
           {:else}
             Nothing imported yet.
@@ -97,9 +128,9 @@
         </p>
       {:else}
         <ul class="entries">
-          {#each documents as doc (`${doc.id}/${doc.importer.id}`)}
+          {#each documents as { doc, status: onListAs } (`${doc.id}/${doc.importer.id}`)}
             {@const status = badge(doc)}
-            <li>
+            <li class={{ "with-status": onListAs !== null }}>
               <a class="entry" href={`#/doc/${doc.id}`}>
                 <span class="entry-head">
                   <span class="entry-title" lang={doc.lang}>{doc.title}</span>
@@ -124,6 +155,9 @@
                 </span>
                 <span class="licence">{LICENCE_INFO[doc.licence].short}</span>
               </a>
+              {#if onListAs !== null}
+                <ReadingStatusMenu id={doc.id} status={onListAs} />
+              {/if}
             </li>
           {/each}
         </ul>
@@ -234,6 +268,28 @@
 
   .entries li + li {
     border-top: 1px solid var(--line);
+  }
+
+  .entries li.with-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    padding-right: 1rem;
+  }
+
+  .with-status .entry {
+    flex: 1 1 20rem;
+    min-width: 0;
+  }
+
+  @media (max-width: 600px) {
+    .entries li.with-status {
+      padding: 0 1rem 0.75rem;
+    }
+
+    .with-status .entry {
+      padding: 0.75rem 0 0.4rem;
+    }
   }
 
   .entry {

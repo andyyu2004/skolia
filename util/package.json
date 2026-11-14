@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./checks": "./checks.ts",
     "./sql": "./sql.ts"
   },
   "scripts": {

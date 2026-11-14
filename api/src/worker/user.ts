@@ -1,11 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
-import { CARD_GROUPS, LANGS, WORD_CARD_KINDS, MATURE_DAYS, timestamp, type CardCounts, type CardGroup, type NewLeft, type Tally, type CardId as CardIdType, type ClozeKey, type ClozeStart, type DocumentId, type Paginated, type WordKey, type NewCloze, type Timestamp, type Lang, type LemmaId, type ReviewRequest, type ScheduledCard, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
+import { CARD_GROUPS, LANGS, WORD_CARD_KINDS, MATURE_DAYS, timestamp, type CardCounts, type CardGroup, type NewLeft, type Tally, type CardId as CardIdType, type ClozeKey, type ClozeStart, type DocumentId, type Paginated, type ReadingEntry, type ReadingKey, type ReadingStatus, type WordKey, type NewCloze, type Timestamp, type Lang, type LemmaId, type ReviewRequest, type ScheduledCard, type Settings, type Word, type WordStatus } from "@skolia/shared/api";
 import { paginate, type PageRequest } from "@skolia/shared/page";
 import * as schemas from "@skolia/shared/schemas";
 import { CardId } from "@skolia/shared/schemas";
-import type { DueCards, ReviewOutcome, StoredPosition } from "../ports.ts";
+import type { DueCards, ReviewOutcome, StoredPosition, StoredReading } from "../ports.ts";
 import { fromJson, fsrs, newCard, review, toJson } from "./scheduler.ts";
 import { MIGRATIONS } from "../user/migrations/index.ts";
+import { READING_ENTRY, readingListQuery } from "../user/queries.ts";
 import { LogEntry, MigrationError, applied, plan, problems, withChecksums, type Checksummed } from "../user/migrator.ts";
 
 export interface MigrationStatus {
@@ -314,6 +315,44 @@ export class User extends DurableObject<object> {
       sentence,
       token,
       at,
+    );
+  }
+
+  reading(documentId: DocumentId): ReadingEntry | null {
+    const row = this.sql.exec(`SELECT ${READING_ENTRY} FROM reading_list WHERE document_id = ?`, documentId).toArray()[0];
+    return row === undefined ? null : schemas.ReadingEntry.parse(row);
+  }
+
+  setReading(documentId: DocumentId, lang: Lang, status: ReadingStatus, now: Timestamp): ReadingEntry {
+    const row = this.sql
+      .exec(
+        `INSERT INTO reading_list (document_id, lang, status, added_at, updated_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (document_id) DO UPDATE SET status = excluded.status,
+           updated_at = iif(excluded.status = reading_list.status, reading_list.updated_at, excluded.updated_at)
+         RETURNING ${READING_ENTRY}`,
+        documentId,
+        lang,
+        status,
+        now,
+        now,
+      )
+      .one();
+    return schemas.ReadingEntry.parse(row);
+  }
+
+  removeReading(documentId: DocumentId): void {
+    this.sql.exec(`DELETE FROM reading_list WHERE document_id = ?`, documentId);
+  }
+
+  readingList(status: ReadingStatus, lang: Lang | undefined, { after, limit }: PageRequest<ReadingKey>): Paginated<StoredReading, ReadingKey> {
+    const params = [...(lang === undefined ? [] : [lang]), status, ...(after ?? []), limit + 1];
+    const rows = this.sql
+      .exec(readingListQuery(lang !== undefined, after !== undefined), ...params)
+      .toArray()
+      .map((row): StoredReading => ({ documentId: schemas.DocumentId.parse(row["documentId"]), ...schemas.ReadingEntry.parse(row) }));
+    return paginate(
+      rows.map((item) => ({ item, key: [item.updatedAt, item.documentId] as const })),
+      limit,
     );
   }
 

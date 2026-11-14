@@ -21,6 +21,13 @@ test("explore", async ({ page }) => {
   await expect(page).toHaveScreenshot("explore.png", { fullPage: true });
 });
 
+test("explore, my list", async ({ page }) => {
+  await open(page, "#/");
+  await page.getByLabel("Show").selectOption("in-progress");
+  await expect(page.getByText("1 text")).toBeVisible();
+  await expect(page).toHaveScreenshot("explore-my-list.png", { fullPage: true });
+});
+
 test("explore, tag filter", async ({ page }) => {
   await open(page, "#/");
   await page.getByLabel("Tags").click();

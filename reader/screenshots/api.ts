@@ -17,6 +17,7 @@ import { CardId, DocumentId, LemmaId, Timestamp, UserId } from "@skolia/shared/s
 type Deps = Parameters<typeof createApp>[0];
 type StoredDocument = Awaited<ReturnType<Deps["documents"]["list"]>>["items"][number];
 type StoredBlob = NonNullable<Awaited<ReturnType<Deps["blobs"]["get"]>>>;
+type StoredReading = Awaited<ReturnType<Deps["users"]["readingList"]>>["items"][number];
 
 const DIST = join(import.meta.dirname, "..", "dist");
 const FIXTURES = join(import.meta.dirname, "fixtures");
@@ -88,6 +89,12 @@ const statuses: readonly (readonly [DocumentIdType, Status])[] = [
   [PETER_RABBIT.id, { state: "failed", updated: "2026-11-08T10:00:00.000Z", error: "The analyser stopped" }],
 ];
 
+/** The user's reading list: Lalka in progress, Le Petit Prince to read. */
+const readingList: readonly StoredReading[] = [
+  { documentId: LALKA, status: "in-progress", addedAt: Timestamp.parse("2026-11-07T10:00:00.000Z"), updatedAt: Timestamp.parse("2026-11-08T18:00:00.000Z") },
+  { documentId: PETIT_PRINCE.id, status: "to-read", addedAt: Timestamp.parse("2026-11-08T09:00:00.000Z"), updatedAt: Timestamp.parse("2026-11-08T09:00:00.000Z") },
+];
+
 const JSON_TYPE = "application/json";
 
 /** The blobs as ingest stores them: analyses and bundles Brotli-compressed. */
@@ -154,6 +161,17 @@ function deps(signedIn: boolean): Deps {
       },
       position: async () => null,
       setPosition: async () => {},
+      reading: async (_userId, id) => {
+        const found = readingList.find((r) => r.documentId === id);
+        return found ? { status: found.status, addedAt: found.addedAt, updatedAt: found.updatedAt } : null;
+      },
+      setReading: async (_userId, _id, _lang, status) => ({ status, addedAt: Timestamp.parse(NOW.toISOString()), updatedAt: Timestamp.parse(NOW.toISOString()) }),
+      removeReading: async () => {},
+      // One page: there are only a few
+      readingList: async (_userId, status, lang) => ({
+        items: readingList.filter((r) => r.status === status && (lang === undefined || documents.find((d) => d.id === r.documentId)?.lang === lang)),
+        next: null,
+      }),
     },
     lexicon: {
       entries: async (ids) => ({ entries: ids.flatMap((id) => entry(id) ?? []), featureSets: { pl: featureSets } }),
@@ -173,6 +191,7 @@ function deps(signedIn: boolean): Deps {
       tags: async () => ({ items: LEVELS, next: null }),
       known: async (wanted) => LEVELS.filter((l) => wanted.some((w) => w.kind === l.kind && w.value === l.value)),
       visible: async (id, viewer) => visible(viewer).find((d) => d.id === id) ?? null,
+      visibleAll: async (ids, viewer) => new Map(visible(viewer).filter((d) => ids.includes(d.id)).map((d) => [d.id, d] as const)),
       has: async (id) => documents.some((d) => d.id === id),
       add: async () => {},
       update: async () => {},

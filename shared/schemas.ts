@@ -19,6 +19,8 @@ import {
   MAX_TITLE_LENGTH,
   MAX_TAGS,
   RATINGS,
+  READING_PAGE,
+  READING_STATUSES,
   TAG_KIND,
   TAG_VALUE,
   UPOS,
@@ -88,6 +90,13 @@ const Index = z.number().int().min(0).max(MAX_TEXT_LENGTH);
  * token index in its analysis, and when they were there, so an older position doesn't
  * replace a newer one. */
 export const ReadingPosition = z.object({ sentence: Index, token: Index, at: IsoTime });
+
+export const ReadingStatus = z.enum(READING_STATUSES);
+export const ReadingEntry = z.object({ status: ReadingStatus, addedAt: Timestamp, updatedAt: Timestamp });
+export const SetReading = z.object({ status: ReadingStatus });
+export const ReadingKey = z.tuple([Timestamp, DocumentId]).readonly();
+/** A page of the texts on the reading list with the status; lang, only those in the language. */
+export const ReadingQuery = pageQuery(ReadingKey, READING_PAGE).extend({ status: ReadingStatus, lang: Lang.optional() });
 
 export const CountsQuery = z.object({ dayStart: IsoTime });
 /** group: only its cards; without one, both groups'. */

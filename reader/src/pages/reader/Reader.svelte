@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { DocumentSummary, ReadingNames } from "@skolia/shared/api";
+  import type { DocumentId, DocumentSummary, ReadingNames } from "@skolia/shared/api";
   import { LICENCE_INFO } from "@skolia/shared/api";
   import type { Token } from "@skolia/shared/schema";
   import { getDocument, getText, loadReading, type Reading } from "../../lib/api.ts";
@@ -15,8 +15,10 @@
   import type { ReaderMode } from "../../lib/mode.ts";
   import { createWords } from "../../lib/words.ts";
   import { createClozes } from "../../lib/clozes.ts";
+  import { createReadingEntry } from "../../lib/reading-list.ts";
+  import ReadingStatusMenu from "../../components/ReadingStatusMenu.svelte";
 
-  let { id }: { id: string } = $props();
+  let { id }: { id: DocumentId } = $props();
 
   let summary = $state<DocumentSummary | null>(null);
   let reading = $state<Reading | null>(null);
@@ -58,6 +60,7 @@
   }
 
   const known = createWords();
+  const readingEntry = createReadingEntry(() => id);
   // The cloze cards from this text, loaded with it, for the word sheet
   createClozes(() => id);
 
@@ -314,6 +317,9 @@
       <div class="title-row">
         <h1>{summary.title}</h1>
         <div class="title-actions">
+          {#if readingEntry.data !== undefined}
+            <ReadingStatusMenu {id} status={readingEntry.data?.status ?? null} />
+          {/if}
           {#if known.data}
             <div class="mode">
               <Button

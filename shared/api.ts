@@ -14,6 +14,8 @@ export const TAG_PAGE: PageSize = { fallback: 100, max: 500 };
 /** The reader follows these lists to the end, so their pages are big. */
 export const WORD_PAGE: PageSize = { fallback: 500, max: 1000 };
 export const CLOZE_PAGE: PageSize = { fallback: 500, max: 1000 };
+/** Like a page of documents, a page of the reading list reads each text's status from R2. */
+export const READING_PAGE: PageSize = { fallback: 24, max: 50 };
 
 export const LANGS = ["en", "fr", "pl"] as const;
 export type Lang = (typeof LANGS)[number];
@@ -406,6 +408,21 @@ export type ClozeStart = {
   readonly cardId: CardId;
   readonly start: number;
 };
+
+/** Where a text is on the user's reading list. A text that isn't on it has none. */
+export const READING_STATUSES = ["to-read", "in-progress", "done"] as const;
+export type ReadingStatus = (typeof READING_STATUSES)[number];
+
+/** A text on the user's reading list: its status, when it went on the list, and when its
+ * status last changed. */
+export type ReadingEntry = z.output<typeof schemas.ReadingEntry>;
+
+/** Where a text is in the list of one status: by when its status last changed, latest
+ * first, then by id. */
+export type ReadingKey = z.output<typeof schemas.ReadingKey>;
+
+/** A text on the reading list, with the entry the user sees for it. */
+export type ListedReading = ReadingEntry & { readonly document: DocumentSummary };
 
 /** What's left of today's allowances: words in lemmas, forms in cards. */
 export type NewLeft = Readonly<Record<CardGroup, number>>;

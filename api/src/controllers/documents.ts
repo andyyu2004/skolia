@@ -42,7 +42,12 @@ export async function list(
 ): Promise<Ok<Paginated<DocumentSummary, DocumentKey>> | Failed<401>> {
   if (filter.mine && viewer === null) return fail(401, "sign in to see your own texts");
   const { items, next } = await deps.documents.list(viewer?.id ?? null, filter, page);
-  return ok({ items: await Promise.all(items.map(async (r) => summarize(r, await readStatus(deps.blobs, r.id), viewer))), next });
+  return ok({ items: await Promise.all(items.map((r) => listed(deps, r, viewer))), next });
+}
+
+/** An entry as a list shows it, with only its status read. */
+export async function listed(deps: Deps, record: StoredDocument, viewer: User | null): Promise<DocumentSummary> {
+  return summarize(record, await readStatus(deps.blobs, record.id), viewer);
 }
 
 /** A page of the documents the user imported, public or private. */

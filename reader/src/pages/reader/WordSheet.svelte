@@ -1,6 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import type { Lang } from "@skolia/shared/api";
+  import type { DocumentId, Lang } from "@skolia/shared/api";
   import type { Bundle, Token } from "@skolia/shared/schema";
   import { LANGUAGES } from "@skolia/shared/lang";
   import type { Piece } from "@skolia/shared/doc";
@@ -51,7 +51,7 @@
     sentenceTokens: (sentence: number) => Token[];
     /** A sentence's text and where it starts in the document. */
     sentenceText: (sentence: number) => { start: number; text: string } | null;
-    documentId: string;
+    documentId: DocumentId;
     onselectToken: (sentence: number, index: number) => void;
     onclose: () => void;
   } = $props();
