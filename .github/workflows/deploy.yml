@@ -1,12 +1,15 @@
 name: Deploy
 
-# One environment: Terraform and migrations; then the ingest Worker with the images
-# ci.yml's build-ingest-image pushed; then the skolia Worker (reader and API), the
-# end-to-end tests and the curated texts in curated/ (just sync-curated). The ingest Worker consumes
-# the queue the skolia Worker feeds, so it goes
-# first. Called by ci.yml, after the images are built. wrangler leaves an unchanged image
-# as it is. The lexicon loads beside them, after the migrations; it's skipped when D1
-# already has its version. Previews (pr-<N>) share one GitHub environment, preview.
+# One environment: Terraform and migrations; then the ingest Worker with the images ci.yml's
+# build-ingest-image pushed and the skolia Worker (reader and API); then, with both deployed,
+# the end-to-end tests and the curated texts in curated/ (just sync-curated). In staging and
+# production the ingest Worker goes first: it consumes the queue the skolia Worker feeds, and
+# drops a job it can't handle, so an API that sends a new kind of job never goes live before
+# the ingest that handles it. A preview deploys them side by side (deploy-web-preview), as
+# a job lost there doesn't matter. Called by ci.yml, after the images are built. wrangler
+# leaves an unchanged image as it is. The lexicon loads after the migrations; it's
+# skipped when D1 already has its version. Previews (pr-<N>) share one GitHub environment,
+# preview.
 
 on:
   workflow_call:
@@ -17,7 +20,7 @@ on:
     outputs:
       url:
         description: The environment's URL, set once the skolia Worker's deployed, even if a later step fails
-        value: ${{ jobs.deploy-web.outputs.url }}
+        value: ${{ jobs.deploy-web.outputs.url || jobs.deploy-web-preview.outputs.url }}
 
 permissions:
   contents: read
@@ -79,9 +82,9 @@ jobs:
       - uses: ./.github/actions/setup
       - run: infra/deploy-ingest.sh ${{ inputs.env }} deploy
 
-  # After the lexicon is loaded: the end-to-end tests' card and lexicon journeys read it
   deploy-web:
-    needs: [deploy-ingest, load-lexicon]
+    if: ${{ !startsWith(inputs.env, 'pr-') }}
+    needs: [deploy-infra, deploy-ingest]
     runs-on: ubuntu-24.04
     environment: ${{ startsWith(inputs.env, 'pr-') && 'preview' || inputs.env }}
     concurrency:
@@ -90,15 +93,15 @@ jobs:
     outputs:
       url: ${{ steps.url.outputs.url }}
     # A preview's wrangler config is made in each job that needs it (infra/wrangler.sh)
-    env:
+    env: &deploy-web-env
       AWS_ACCESS_KEY_ID: ${{ secrets.TFSTATE_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.TFSTATE_SECRET_ACCESS_KEY }}
       TF_IN_AUTOMATION: "1"
       # The environment's Google OAuth client (infra/README.md); the preview environment has none
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-    steps:
-      # The tags, for git describe (justfile deploy-web and e2e)
+    steps: &deploy-web-steps
+      # The tags, for git describe (justfile deploy-web)
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -106,6 +109,39 @@ jobs:
       - run: just deploy-web ${{ inputs.env }}
       - id: url
         run: echo "url=$(just url ${{ inputs.env }})" >> "$GITHUB_OUTPUT"
+
+  # deploy-web for a preview, beside deploy-ingest rather than after it
+  deploy-web-preview:
+    if: ${{ startsWith(inputs.env, 'pr-') }}
+    needs: deploy-infra
+    runs-on: ubuntu-24.04
+    environment: preview
+    concurrency:
+      group: deploy-web-${{ inputs.env }}
+      cancel-in-progress: false
+    outputs:
+      url: ${{ steps.url.outputs.url }}
+    env: *deploy-web-env
+    steps: *deploy-web-steps
+
+  # Against both Workers, after the lexicon is loaded: the card and lexicon journeys read it,
+  # and the curated texts go through ingest. One of deploy-web and deploy-web-preview is skipped.
+  e2e:
+    needs: [deploy-web, deploy-web-preview, deploy-ingest, load-lexicon]
+    if: >-
+      ${{ !cancelled() && needs.deploy-ingest.result == 'success' && needs.load-lexicon.result == 'success'
+      && (needs.deploy-web.result == 'success' || needs.deploy-web-preview.result == 'success') }}
+    runs-on: ubuntu-24.04
+    environment: ${{ startsWith(inputs.env, 'pr-') && 'preview' || inputs.env }}
+    concurrency:
+      group: e2e-${{ inputs.env }}
+      cancel-in-progress: false
+    steps:
+      # The tags, for git describe: the tests check the Worker serves this commit
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
       - name: End-to-end tests
         run: just e2e ${{ inputs.env }}
       - name: Sync the curated texts

@@ -1,8 +1,8 @@
 name: Sync curated
 
 # Only the curated texts in curated/ (just sync-curated), for a run that changes nothing else
-# (.github/changes.py), so it doesn't need a deploy. Shares deploy-web's concurrency group,
-# so it waits for a deploy in progress, which syncs too. With if-deployed, an environment
+# (.github/changes.py), so it doesn't need a deploy. Shares deploy.yml's e2e job's
+# concurrency group, so it waits for a deploy's sync in progress. With if-deployed, an environment
 # whose Worker isn't there (a pull request that never had a preview) is skipped.
 
 on:
@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-24.04
     environment: ${{ startsWith(inputs.env, 'pr-') && 'preview' || inputs.env }}
     concurrency:
-      group: deploy-web-${{ inputs.env }}
+      group: e2e-${{ inputs.env }}
       cancel-in-progress: false
     steps:
       # The skolia Worker of a preview is skolia-pr-<N> (infra/preview.py)
