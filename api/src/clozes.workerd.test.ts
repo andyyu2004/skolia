@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CLOZE_PAGE, lemmaParam, type CardGroup, type ClozeKey, type Due, type LemmaId, type NewClozeInput, type Rating, type WordStatus } from "@skolia/shared/api";
+import {
+  CLOZE_PAGE,
+  lemmaParam,
+  type CardGroup,
+  type ClozeKey,
+  type Due,
+  type LemmaId,
+  type NewClozeInput,
+  type Rating,
+  type WordStatus,
+} from "@skolia/shared/api";
 import type { Cursor } from "@skolia/shared/page";
 import { ALICE, NOW, client, loadLexicon, local, raw, refusesBadPages, setup, useLocal, walk, type App } from "./testing/app.ts";
 import { body, expectStatus } from "./testing/responses.ts";
@@ -40,7 +50,11 @@ function listed(app: App, headers: Headers, documentId = DOC) {
 }
 
 function mark(app: App, headers: Headers, lemmaId: LemmaId, status: WordStatus) {
-  return expectStatus("mark", client(app, headers).me.words[":lemmaId"].$put({ param: { lemmaId: lemmaParam(lemmaId) }, json: { status } }), 204);
+  return expectStatus(
+    "mark",
+    client(app, headers).me.words[":lemmaId"].$put({ param: { lemmaId: lemmaParam(lemmaId) }, json: { status } }),
+    204,
+  );
 }
 
 function review(app: App, headers: Headers, cardId: string, rating: Rating) {
@@ -62,7 +76,9 @@ test("a cloze card keeps its sentence and blank, is due with its lemma's entry, 
   const { cardId } = await body("made", make(app, headers, PRACY), 201);
   assert.deepEqual(await body("made again", make(app, headers, { ...PRACY, why: null }), 200), { cardId });
   // The same word in the text, with its sentence split elsewhere, as a redone analysis might
-  assert.deepEqual(await body("split elsewhere", make(app, headers, { ...PRACY, sentence: "pracy od roku.", sentenceStart: 47 }), 200), { cardId });
+  assert.deepEqual(await body("split elsewhere", make(app, headers, { ...PRACY, sentence: "pracy od roku.", sentenceStart: 47 }), 200), {
+    cardId,
+  });
   assert.deepEqual((await due(app, headers)).cards, []);
   await start(app, headers, "pl:praca:NOUN");
   const { cards } = await due(app, headers, "forms");
@@ -99,9 +115,17 @@ test("a cloze card is reviewed if its word has no status or is active, not if it
   const headers = await signedIn();
   const noStatus = await body("no status", make(app, headers, PRACY), 201);
   await mark(app, headers, "pl:dom:NOUN", "known");
-  const known = await body("known", make(app, headers, { ...PRACY, lemmaId: "pl:dom:NOUN", sentence: "Idę do domu.", sentenceStart: 100, blankStart: 107, blankEnd: 111 }), 201);
+  const known = await body(
+    "known",
+    make(app, headers, { ...PRACY, lemmaId: "pl:dom:NOUN", sentence: "Idę do domu.", sentenceStart: 100, blankStart: 107, blankEnd: 111 }),
+    201,
+  );
   await mark(app, headers, "pl:Ola:NOUN", "ignored");
-  const ignored = await body("ignored", make(app, headers, { ...PRACY, lemmaId: "pl:Ola:NOUN", sentence: "Widzę Olę.", sentenceStart: 200, blankStart: 206, blankEnd: 209 }), 201);
+  const ignored = await body(
+    "ignored",
+    make(app, headers, { ...PRACY, lemmaId: "pl:Ola:NOUN", sentence: "Widzę Olę.", sentenceStart: 200, blankStart: 206, blankEnd: 209 }),
+    201,
+  );
   // New, they wait for their words to be started
   assert.deepEqual((await due(app, headers)).cards, []);
   // Again makes them due within minutes
@@ -112,15 +136,12 @@ test("a cloze card is reviewed if its word has no status or is active, not if it
     ["pl:praca:NOUN"],
   );
   await mark(app, headers, "pl:dom:NOUN", "active");
-  assert.deepEqual(
-    (await due(later, headers)).cards.map((c) => [c.lemmaId, c.kind]).sort(),
-    [
-      ["pl:dom:NOUN", "cloze"],
-      ["pl:dom:NOUN", "production"],
-      ["pl:dom:NOUN", "recognition"],
-      ["pl:praca:NOUN", "cloze"],
-    ],
-  );
+  assert.deepEqual((await due(later, headers)).cards.map((c) => [c.lemmaId, c.kind]).sort(), [
+    ["pl:dom:NOUN", "cloze"],
+    ["pl:dom:NOUN", "production"],
+    ["pl:dom:NOUN", "recognition"],
+    ["pl:praca:NOUN", "cloze"],
+  ]);
 });
 
 test("a new cloze card comes up once one of its word's cards has been reviewed, and not for another word's", async () => {
@@ -188,13 +209,22 @@ test("a text's cloze cards come a page at a time, by where their blanks start", 
   const headers = await signedIn();
   const made = await Promise.all(
     [3, 1, 4, 0, 2].map(async (n) => {
-      const json: NewClozeInput = { ...PRACY, sentence: "Widzę psa.", sentenceStart: n * 100, blankStart: n * 100 + 6, blankEnd: n * 100 + 9 };
+      const json: NewClozeInput = {
+        ...PRACY,
+        sentence: "Widzę psa.",
+        sentenceStart: n * 100,
+        blankStart: n * 100 + 6,
+        blankEnd: n * 100 + 9,
+      };
       return { cardId: (await body("made", make(app, headers, json), 201)).cardId, start: json.blankStart };
     }),
   );
   await body("another text's", make(app, headers, { ...PRACY, documentId: "b".repeat(64) }), 201);
   const clozes = client(app, headers).me.clozes;
   const all = await walk(2, (after?: Cursor<ClozeKey>) => body("clozes", clozes.$get({ query: { documentId: DOC, after, limit: "2" } })));
-  assert.deepEqual(all, [...made].sort((a, b) => a.start - b.start));
+  assert.deepEqual(
+    all,
+    [...made].sort((a, b) => a.start - b.start),
+  );
   await refusesBadPages(CLOZE_PAGE.max, (query) => clozes.$get({ query: { documentId: DOC, ...query } }));
 });

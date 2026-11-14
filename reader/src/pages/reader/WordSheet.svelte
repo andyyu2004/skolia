@@ -5,14 +5,7 @@
   import { LANGUAGES } from "@skolia/shared/lang";
   import type { Piece } from "@skolia/shared/doc";
   import type { LemmaId } from "@skolia/shared/api";
-  import {
-    entryFor,
-    entryIdFor,
-    mainPronunciations,
-    pronunciationsOf,
-    rankSenses,
-    recordingsOf,
-  } from "@skolia/shared/lexicon";
+  import { entryFor, entryIdFor, mainPronunciations, pronunciationsOf, rankSenses, recordingsOf } from "@skolia/shared/lexicon";
   import type { Recording } from "@skolia/shared/schema";
   import { LemmaId as LemmaIdSchema } from "@skolia/shared/schemas";
   import { createSetStatus, createWords } from "../../lib/words.ts";
@@ -109,7 +102,6 @@
   /** On a phone the sheet starts at half height; tapping the handle gives it the screen. */
   let expanded = $state(sheet.view === "sentence");
 
-
   const VIEWS = [
     ["word", "Word"],
     ["sentence", "Sentence"],
@@ -175,10 +167,7 @@
           senses: entry ? rankSenses(entry, w.token.feats) : [],
           uses: uses.filter((u) => !u.idiom),
           idioms: uses.filter((u) => u.idiom),
-          tables:
-            entry && partOfWord === null
-              ? paradigmTables(bundle, entry, w.token, language.paradigm, language.mergeLabels)
-              : [],
+          tables: entry && partOfWord === null ? paradigmTables(bundle, entry, w.token, language.paradigm, language.mergeLabels) : [],
         };
       }),
   );
@@ -361,27 +350,27 @@
       onkeydown={onedgekey}
       ondblclick={() => (sheet.width[sheet.view] = null)}
     ></div>
-    <button type="button" class="handle" aria-label={expanded ? "Shrink" : "Expand"} onclick={() => (expanded = !expanded)}
-    ></button>
+    <button type="button" class="handle" aria-label={expanded ? "Shrink" : "Expand"} onclick={() => (expanded = !expanded)}></button>
     <div class="sheet-head">
       <div class="sheet-tabs" role="tablist" aria-label="Show">
-      {#each VIEWS as [view, label] (view)}
-        <button
-          type="button"
-          role="tab"
-          id="sheet-tab-{view}"
-          aria-selected={sheet.view === view}
-          tabindex={sheet.view === view ? 0 : -1}
-          onclick={() => show(view)}
-          onkeydown={(event) => {
-            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-            event.preventDefault();
-            const other = sheet.view === "word" ? "sentence" : "word";
-            show(other);
-            document.getElementById(`sheet-tab-${other}`)?.focus();
-          }}>{label}</button
-        >
-      {/each}
+        {#each VIEWS as [view, label] (view)}
+          <button
+            type="button"
+            role="tab"
+            id="sheet-tab-{view}"
+            aria-selected={sheet.view === view}
+            tabindex={sheet.view === view ? 0 : -1}
+            onclick={() => show(view)}
+            onkeydown={(event) => {
+              if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+              event.preventDefault();
+              const other = sheet.view === "word" ? "sentence" : "word";
+              show(other);
+              document.getElementById(`sheet-tab-${other}`)?.focus();
+            }}
+            >{label}</button
+          >
+        {/each}
       </div>
       <div class="sheet-actions">
         <span class="share-note" role="status">{shared}</span>
@@ -416,12 +405,8 @@
         </p>
       {/if}
       <div class="layout-switch" role="group" aria-label="Draw the sentence as">
-        <button type="button" aria-pressed={sheet.layout === "arcs"} onclick={() => (sheet.layout = "arcs")}
-          >Arcs</button
-        >
-        <button type="button" aria-pressed={sheet.layout === "tree"} onclick={() => (sheet.layout = "tree")}
-          >Tree</button
-        >
+        <button type="button" aria-pressed={sheet.layout === "arcs"} onclick={() => (sheet.layout = "arcs")}>Arcs</button>
+        <button type="button" aria-pressed={sheet.layout === "tree"} onclick={() => (sheet.layout = "tree")}>Tree</button>
       </div>
     </div>
     <SentenceDiagram
@@ -491,20 +476,16 @@
             class="speaker"
             aria-label={`Play ${word}${r.tags ? ` (${r.tags.join(", ")})` : ""}`}
             title={r.tags?.join(", ")}
-            onclick={() => play(r)}>🔊</button
+            onclick={() => play(r)}
+            >🔊</button
           >
         {/each}
       {/snippet}
       {#if word.said.length > 0 || (word.lemmaSaid.length > 0 && word.entry)}
-        <Pronunciations
-          said={word.said}
-          lemma={word.entry ? { text: word.entry.lemma, lang, said: word.lemmaSaid } : undefined}
-        />
+        <Pronunciations said={word.said} lemma={word.entry ? { text: word.entry.lemma, lang, said: word.lemmaSaid } : undefined} />
       {/if}
       <p class="grammar">
-        {[word.partOfWord ?? UPOS_LABEL[token.upos], ...featureWords(token.feats)].join(
-          " · ",
-        )}
+        {[word.partOfWord ?? UPOS_LABEL[token.upos], ...featureWords(token.feats)].join(" · ")}
       </p>
       {#if word.role && token.head !== null}
         {@const head = token.head}
@@ -515,7 +496,8 @@
             {lang}
             class="word-link mark-head"
             title="Show {word.role.head}"
-            onclick={() => onselectToken(word.ref.sentence, head)}>{word.role.head}</button
+            onclick={() => onselectToken(word.ref.sentence, head)}
+            >{word.role.head}</button
           >
         </p>
       {/if}
@@ -524,12 +506,19 @@
         <p class="why">
           <span class="why-label">Why {CASE_NAME[token.feats.Case]}?</span>
           <span {lang}
-            >{#each word.caseWhy.parts as part, j (j)}{#if part.trigger && trigger !== null}<button
+            >{#each word.caseWhy.parts as part, j (j)}
+              {#if part.trigger && trigger !== null}
+                <button
                   type="button"
                   class="word-link mark-trigger"
                   title="Show {part.text}"
-                  onclick={() => onselectToken(word.ref.sentence, trigger)}>{part.text}</button
-                >{:else}{part.text}{/if}{/each}</span
+                  onclick={() => onselectToken(word.ref.sentence, trigger)}
+                  >{part.text}</button
+                >
+              {:else}
+                {part.text}
+              {/if}
+            {/each}</span
           >
         </p>
       {/if}
@@ -546,7 +535,9 @@
                 {#each sense.examples ?? [] as example, j (j)}
                   <div class="example">
                     <span {lang}>{example.text}</span>
-                    {#if example.translation}<span class="muted"> — {example.translation}</span>{/if}
+                    {#if example.translation}
+                      <span class="muted"> — {example.translation}</span>
+                    {/if}
                   </div>
                 {/each}
               </li>
@@ -578,12 +569,20 @@
             <ul {lang}>
               {#each allUses ? word.uses : word.uses.slice(0, SHOWN_USES) as frame, i (i)}
                 <li class={{ here: frame.here }}>
-                  {#if frame.here}<span class="here-label" lang="en">in this sentence</span>{/if}
+                  {#if frame.here}
+                    <span class="here-label" lang="en">in this sentence</span>
+                  {/if}
                   <span class="frame-head">{frame.head}</span>
                   {#each patternParts(frame.pattern) as part, j (j)}
-                    {#if part.label}<span class="case-label">{part.text}</span>{:else}{part.text}{/if}
+                    {#if part.label}
+                      <span class="case-label">{part.text}</span>
+                    {:else}
+                      {part.text}
+                    {/if}
                   {/each}
-                  {#if frame.tags.length > 0}<span class="tags">{frame.tags.join(", ")}</span>{/if}
+                  {#if frame.tags.length > 0}
+                    <span class="tags">{frame.tags.join(", ")}</span>
+                  {/if}
                 </li>
               {/each}
             </ul>
@@ -601,12 +600,20 @@
             <ul {lang}>
               {#each word.idioms as frame, i (i)}
                 <li class={{ here: frame.here }}>
-                  {#if frame.here}<span class="here-label" lang="en">in this sentence</span>{/if}
+                  {#if frame.here}
+                    <span class="here-label" lang="en">in this sentence</span>
+                  {/if}
                   <span class="frame-head">{frame.head}</span>
                   {#each patternParts(frame.pattern) as part, j (j)}
-                    {#if part.label}<span class="case-label">{part.text}</span>{:else}{part.text}{/if}
+                    {#if part.label}
+                      <span class="case-label">{part.text}</span>
+                    {:else}
+                      {part.text}
+                    {/if}
                   {/each}
-                  {#if frame.tags.length > 0}<span class="tags">{frame.tags.join(", ")}</span>{/if}
+                  {#if frame.tags.length > 0}
+                    <span class="tags">{frame.tags.join(", ")}</span>
+                  {/if}
                 </li>
               {/each}
             </ul>

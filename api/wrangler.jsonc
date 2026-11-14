@@ -65,10 +65,7 @@
   // INGESTER: the ingest Worker's (wrangler.ingest.jsonc), asked where a document is in
   // its queue
   "durable_objects": {
-    "bindings": [
-      { "name": "USER", "class_name": "User" },
-      { "name": "INGESTER", "class_name": "Ingester", "script_name": "skolia-ingest" }
-    ]
+    "bindings": [{ "name": "USER", "class_name": "User" }, { "name": "INGESTER", "class_name": "Ingester", "script_name": "skolia-ingest" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["User"] }],
   // Bindings and routes aren't inherited, so each environment lists its own (Terraform's

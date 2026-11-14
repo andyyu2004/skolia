@@ -49,8 +49,10 @@
 
 <Page title="Explore" wide>
   <label class="search">
-    <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4.5 4.5" /></svg>
-    <input type="search" bind:value={query} placeholder="Search titles" aria-label="Search titles" />
+    <svg viewBox="0 0 20 20" aria-hidden="true"
+      ><circle cx="8.5" cy="8.5" r="5.5" /><path d="m13 13 4.5 4.5" /></svg
+    >
+    <input type="search" bind:value={query} placeholder="Search titles" aria-label="Search titles">
   </label>
 
   {#if listing.error}

@@ -289,10 +289,7 @@ export function describePhrase(phrase: Phrase): string {
 }
 
 function isPlainSubject(position: Position): boolean {
-  return (
-    position.labels.includes("subj") &&
-    position.phrases.every((p) => p.kind === "np" && p.case === "str")
-  );
+  return position.labels.includes("subj") && position.phrases.every((p) => p.kind === "np" && p.case === "str");
 }
 
 /** A slot's alternatives, with clauses grouped: "na kogoś/coś [acc.] / że/żeby … / na to,
@@ -398,11 +395,7 @@ function phraseFits(phrase: Phrase, argument: Argument): boolean {
       return phrase.realisations.some((r) => phraseFits(r, argument));
     case "lex":
       // a fixed word: the complement must be that word, in that phrase type
-      return (
-        argument.lemma !== null &&
-        lemmaList(phrase.lemmas).includes(argument.lemma) &&
-        phraseFits(phrase.phrase, argument)
-      );
+      return argument.lemma !== null && lemmaList(phrase.lemmas).includes(argument.lemma) && phraseFits(phrase.phrase, argument);
     default:
       return false;
   }
@@ -414,9 +407,7 @@ function lemmaList(choice: LemmaChoice): string[] {
 
 /** A slot only an idiom's fixed words fill: the sentence must contain them. */
 function isFixed(position: Position): boolean {
-  return position.phrases.every(
-    (p) => p.kind === "lex" || p.kind === "lexcompar" || p.kind === "fixed",
-  );
+  return position.phrases.every((p) => p.kind === "lex" || p.kind === "lexcompar" || p.kind === "fixed");
 }
 
 const COMPLEMENT_RELATIONS: ReadonlySet<Deprel> = new Set<Deprel>(["obj", "iobj", "obl:arg", "obl"]);
@@ -430,9 +421,7 @@ export function argumentsOf(tokens: Token[], index: number): Argument[] {
     const caseValue = token.feats.Case;
     if (token.head !== index || !token.deprel || !COMPLEMENT_RELATIONS.has(token.deprel)) return;
     if (!caseValue) return;
-    const preposition = tokens.find(
-      (t) => t.head === i && t.deprel === PREPOSITION_RELATION && t.upos === "ADP",
-    );
+    const preposition = tokens.find((t) => t.head === i && t.deprel === PREPOSITION_RELATION && t.upos === "ADP");
     args.push({
       prep: preposition?.lemma?.toLowerCase() ?? null,
       case: caseValue,
@@ -448,9 +437,7 @@ function schemaFits(schema: Schema, args: Argument[]): boolean {
   const slots = schema.positions.filter((p) => !p.labels.includes("subj"));
   const used = new Set<number>();
   const placed = args.every((argument) => {
-    const slot = slots.findIndex(
-      (position, i) => !used.has(i) && position.phrases.some((p) => phraseFits(p, argument)),
-    );
+    const slot = slots.findIndex((position, i) => !used.has(i) && position.phrases.some((p) => phraseFits(p, argument)));
     if (slot === -1) return false;
     used.add(slot);
     return true;
@@ -465,9 +452,7 @@ export function describe(schema: Schema): Frame {
   if (certainty) tags.push(certainty);
   if (schema.negation === "neg") tags.push("with nie");
   if (schema.negation === "aff") tags.push("without nie");
-  const idiom = schema.positions.some((p) =>
-    p.phrases.some((ph) => ph.kind === "lex" || ph.kind === "lexcompar" || ph.kind === "fixed"),
-  );
+  const idiom = schema.positions.some((p) => p.phrases.some((ph) => ph.kind === "lex" || ph.kind === "lexcompar" || ph.kind === "fixed"));
   return {
     pattern: positions.map(describePosition).join(" + "),
     tags,
@@ -483,8 +468,7 @@ export function describe(schema: Schema): Frame {
 export function frames(schemata: Schema[], args: Argument[] = []): Frame[] {
   // Of the schemata the sentence fits, mark only the tightest: fewest slots it leaves
   // empty (czeka na autobus fits "na + acc." and "na + acc. + how long"; the first)
-  const unfilled = (schema: Schema) =>
-    schema.positions.filter((p) => !p.labels.includes("subj")).length - args.length;
+  const unfilled = (schema: Schema) => schema.positions.filter((p) => !p.labels.includes("subj")).length - args.length;
   const fitting = args.length > 0 ? schemata.filter((s) => schemaFits(s, args)) : [];
   const tightest = Math.min(...fitting.map(unfilled));
   const byPattern = new Map<string, Frame>();

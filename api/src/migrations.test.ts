@@ -5,7 +5,9 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 
 const DIR = join(import.meta.dirname, "..", "migrations");
-const MIGRATIONS = readdirSync(DIR).filter((f) => f.endsWith(".sql")).sort();
+const MIGRATIONS = readdirSync(DIR)
+  .filter((f) => f.endsWith(".sql"))
+  .sort();
 
 /** A database with the migrations before this one applied, as D1 applies them. */
 function migratedUpTo(name: string): DatabaseSync {
@@ -23,13 +25,43 @@ test("0007 makes each document its text's content and its importer's entry", () 
     ('a', 'Lalka', 'pl', '2026-11-02T00:00:00.000Z', 72, 'curated', 'public', 'public-domain', 'Bolesław Prus', 'https://example.org/lalka', 'curated'),
     ('b', 'Notatki', 'pl', '2026-11-03T00:00:00.000Z', 3, 'ivy', 'private', 'unknown', NULL, NULL, 'ivy')`);
   db.exec(readFileSync(join(DIR, "0007_user_document.sql"), "utf8"));
-  assert.deepEqual(db.prepare("SELECT * FROM document ORDER BY id").all().map((r) => ({ ...r })), [
-    { id: "a", lang: "pl", words: 72 },
-    { id: "b", lang: "pl", words: 3 },
-  ]);
-  assert.deepEqual(db.prepare("SELECT * FROM user_document ORDER BY document_id").all().map((r) => ({ ...r })), [
-    { user_id: "curated", document_id: "a", title: "Lalka", imported_at: "2026-11-02T00:00:00.000Z", visibility: "public", licence: "public-domain", author: "Bolesław Prus", source: "https://example.org/lalka" },
-    { user_id: "ivy", document_id: "b", title: "Notatki", imported_at: "2026-11-03T00:00:00.000Z", visibility: "private", licence: "unknown", author: null, source: null },
-  ]);
+  assert.deepEqual(
+    db
+      .prepare("SELECT * FROM document ORDER BY id")
+      .all()
+      .map((r) => ({ ...r })),
+    [
+      { id: "a", lang: "pl", words: 72 },
+      { id: "b", lang: "pl", words: 3 },
+    ],
+  );
+  assert.deepEqual(
+    db
+      .prepare("SELECT * FROM user_document ORDER BY document_id")
+      .all()
+      .map((r) => ({ ...r })),
+    [
+      {
+        user_id: "curated",
+        document_id: "a",
+        title: "Lalka",
+        imported_at: "2026-11-02T00:00:00.000Z",
+        visibility: "public",
+        licence: "public-domain",
+        author: "Bolesław Prus",
+        source: "https://example.org/lalka",
+      },
+      {
+        user_id: "ivy",
+        document_id: "b",
+        title: "Notatki",
+        imported_at: "2026-11-03T00:00:00.000Z",
+        visibility: "private",
+        licence: "unknown",
+        author: null,
+        source: null,
+      },
+    ],
+  );
   assert.equal(db.prepare("SELECT name FROM sqlite_master WHERE name = 'document_0006'").get(), undefined);
 });

@@ -44,7 +44,9 @@ export function encodeCursor<K extends readonly KeyPart[]>(key: K): Cursor<K> {
 function decodeCursor(cursor: string): unknown {
   try {
     const binary = atob(cursor.replaceAll("-", "+").replaceAll("_", "/"));
-    return JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)))) as unknown;
+    return JSON.parse(
+      new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(Uint8Array.from(binary, (c) => c.charCodeAt(0))),
+    ) as unknown;
   } catch {
     return undefined;
   }
@@ -53,12 +55,14 @@ function decodeCursor(cursor: string): unknown {
 /** A cursor, decoded to the sort key it holds. Typed as the list's Cursor, so the typed
  * client takes only those; any other string is refused when it's parsed. */
 export function cursor<K extends readonly KeyPart[]>(key: z.ZodType<K>) {
-  return z.custom<Cursor<K>>((value) => typeof value === "string").transform((text, context): K => {
-    const parsed = key.safeParse(decodeCursor(text));
-    if (parsed.success) return parsed.data;
-    context.addIssue({ code: "custom", message: "after isn't a cursor this list gave" });
-    return z.NEVER;
-  });
+  return z
+    .custom<Cursor<K>>((value) => typeof value === "string")
+    .transform((text, context): K => {
+      const parsed = key.safeParse(decodeCursor(text));
+      if (parsed.success) return parsed.data;
+      context.addIssue({ code: "custom", message: "after isn't a cursor this list gave" });
+      return z.NEVER;
+    });
 }
 
 /** How many rows a page of a list has, unless ?limit= asks for fewer, and the most it may ask for. */
@@ -71,12 +75,7 @@ export type PageSize = {
 export function pageQuery<K extends readonly KeyPart[]>(key: z.ZodType<K>, { fallback, max }: PageSize) {
   return z.object({
     after: cursor(key).optional(),
-    limit: z.coerce
-      .number()
-      .int()
-      .min(1, `limit must be 1 to ${max}`)
-      .max(max, `limit must be 1 to ${max}`)
-      .default(fallback),
+    limit: z.coerce.number().int().min(1, `limit must be 1 to ${max}`).max(max, `limit must be 1 to ${max}`).default(fallback),
   });
 }
 
@@ -89,7 +88,10 @@ export function paginate<T, K extends readonly KeyPart[]>(rows: readonly Keyed<T
 }
 
 /** Every item of a list, following its pages until the last. For lists a client needs whole. */
-export async function allPages<T, K>(fetchPage: (after: Cursor<K> | undefined) => Promise<Paginated<T, K>>, after?: Cursor<K>): Promise<readonly T[]> {
+export async function allPages<T, K>(
+  fetchPage: (after: Cursor<K> | undefined) => Promise<Paginated<T, K>>,
+  after?: Cursor<K>,
+): Promise<readonly T[]> {
   const page = await fetchPage(after);
   return page.next === null ? page.items : [...page.items, ...(await allPages(fetchPage, page.next))];
 }

@@ -40,9 +40,7 @@ export function explainCase(tokens: Token[], index: number, depth = 0): CaseExpl
         return "Someone is being addressed.";
       case "preposition": {
         const meaning = TWO_CASE[governor]?.[caseValue];
-        return meaning
-          ? `${governor} + ${name} means ${meaning}.`
-          : `${governor} takes the ${name}.`;
+        return meaning ? `${governor} + ${name} means ${meaning}.` : `${governor} takes the ${name}.`;
       }
       case "agreement":
         return `It agrees with ${word}.${chained()}`;

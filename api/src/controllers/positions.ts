@@ -10,7 +10,12 @@ export async function get(deps: Deps, user: User, id: DocumentId): Promise<Ok<{ 
 
 /** A position older than the stored one is ignored, so a late write from another tab
  * can't move the reader back. */
-export async function set(deps: Deps, user: User, id: DocumentId, { sentence, token, at }: ReadingPosition): Promise<NoContent | Failed<400 | 404>> {
+export async function set(
+  deps: Deps,
+  user: User,
+  id: DocumentId,
+  { sentence, token, at }: ReadingPosition,
+): Promise<NoContent | Failed<400 | 404>> {
   if (Date.parse(at) > deps.now().getTime() + MAX_CLOCK_SKEW_MS) return fail(400, "position is in the future");
   if (!(await deps.documents.visible(id, user.id))) return fail(404, "no such document");
   await deps.users.setPosition(user.id, id, { sentence, token, at: timestamp(new Date(at)) });

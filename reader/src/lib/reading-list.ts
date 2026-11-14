@@ -43,7 +43,8 @@ export function createReadingEntry(id: () => DocumentId) {
 export type ReadingChange = { readonly id: DocumentId; readonly status: ReadingStatus | null };
 
 const changeMutation = mutationOptions({
-  mutationFn: async ({ id, status }: ReadingChange) => (status === null ? (await removeFromReadingList(id), null) : setReadingStatus(id, status)),
+  mutationFn: async ({ id, status }: ReadingChange) =>
+    status === null ? (await removeFromReadingList(id), null) : setReadingStatus(id, status),
   onSuccess: (entry, { id }, _held, { client }) => {
     client.setQueryData(entryQuery(id).queryKey, entry);
     return client.invalidateQueries({ queryKey: LISTS_KEY });

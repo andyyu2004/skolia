@@ -28,7 +28,8 @@ const keyOf = (documentId: DocumentId) => clozesQuery(documentId).queryKey;
 /** The card's id comes from the API, so it's added once made. */
 const addMutation = mutationOptions({
   mutationFn: makeCloze,
-  onMutate: (cloze: NewClozeInput & { readonly documentId: DocumentId }, { client }) => client.cancelQueries({ queryKey: keyOf(cloze.documentId) }),
+  onMutate: (cloze: NewClozeInput & { readonly documentId: DocumentId }, { client }) =>
+    client.cancelQueries({ queryKey: keyOf(cloze.documentId) }),
   onSuccess: ({ cardId }, cloze, _held, { client }) =>
     client.setQueryData(keyOf(cloze.documentId), (byStart) => byStart && new Map([...byStart, [cloze.blankStart, cardId]])),
   onSettled: (_made, _error, cloze, _held, { client }) => resume(client, keyOf(cloze.documentId)),

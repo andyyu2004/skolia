@@ -362,10 +362,7 @@ export function layout(sentence: Sentence, options: LayoutOptions): Diagram {
 const ACROSS_ALLOWANCE = 1.5;
 
 /** The sentence laid out across if that roughly fits `width`, or else down. */
-export function fitted(
-  sentence: Sentence,
-  options: Omit<LayoutOptions, "direction"> & { readonly width: number },
-): Diagram {
+export function fitted(sentence: Sentence, options: Omit<LayoutOptions, "direction"> & { readonly width: number }): Diagram {
   const across = layout(sentence, { ...options, direction: "across" });
   return across.width <= options.width * ACROSS_ALLOWANCE ? across : layout(sentence, { ...options, direction: "down" });
 }
@@ -389,10 +386,7 @@ export function labels(word: Word, shape: Shape, direction: Direction): Lines {
  * and arcs to the right on its right, and the shorter an arc the nearer its side it
  * leaves, so the longer, higher arcs pass outside it and no two cross at the word. */
 export function stack(links: readonly Link[]): readonly Stacked[] {
-  const span = (l: Link): readonly [number, number] => [
-    Math.min(l.from.order, l.to.order),
-    Math.max(l.from.order, l.to.order),
-  ];
+  const span = (l: Link): readonly [number, number] => [Math.min(l.from.order, l.to.order), Math.max(l.from.order, l.to.order)];
   const length = (l: Link): number => span(l)[1] - span(l)[0];
   const sorted = [...links].sort((a, b) => length(a) - length(b) || span(a)[0] - span(b)[0]);
   const levelled = sorted.reduce<readonly { readonly link: Link; readonly level: number }[]>((done, link) => {

@@ -43,9 +43,7 @@ export function recordingsOf(bundle: Bundle, word: string, upos: Upos): Recordin
 
 /** Every feature the token has (bar contextual ones) has the same value in feats. */
 export function featsMatch(feats: Feats, token: Feats): boolean {
-  return Object.entries(token).every(
-    ([key, value]) => CONTEXTUAL.has(key) || (feats as Record<string, string>)[key] === value,
-  );
+  return Object.entries(token).every(([key, value]) => CONTEXTUAL.has(key) || (feats as Record<string, string>)[key] === value);
 }
 
 function selects(sense: Sense, token: Feats): boolean {

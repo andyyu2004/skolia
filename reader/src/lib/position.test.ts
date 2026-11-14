@@ -34,7 +34,15 @@ test("what isn't a word reads as none, and storage that throws or is missing is 
     storage.setItem(`skolia:position:${ID}`, stored);
     assert.equal(readLocal(storage, ID), null, stored);
   }
-  const throwing = { ...memoryStorage(), getItem: () => { throw new Error("blocked"); }, setItem: () => { throw new Error("full"); } };
+  const throwing = {
+    ...memoryStorage(),
+    getItem: () => {
+      throw new Error("blocked");
+    },
+    setItem: () => {
+      throw new Error("full");
+    },
+  };
   assert.equal(readLocal(throwing, ID), null);
   assert.doesNotThrow(() => writeLocal(throwing, ID, [1, 0]));
   assert.equal(readLocal(undefined, ID), null);

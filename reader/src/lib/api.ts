@@ -107,8 +107,13 @@ export type DocumentQuery = {
 };
 
 /** A page of the documents the query keeps, from the start or after a page's next. */
-export async function listDocuments({ lang, title, mine, tags }: DocumentQuery, after?: Cursor<DocumentKey>): Promise<Paginated<DocumentSummary, DocumentKey>> {
-  const response = await api.documents.$get({ query: { after, lang, q: title.trim() || undefined, mine: mine ? "true" : undefined, tag: [...tags] } });
+export async function listDocuments(
+  { lang, title, mine, tags }: DocumentQuery,
+  after?: Cursor<DocumentKey>,
+): Promise<Paginated<DocumentSummary, DocumentKey>> {
+  const response = await api.documents.$get({
+    query: { after, lang, q: title.trim() || undefined, mine: mine ? "true" : undefined, tag: [...tags] },
+  });
   if (!response.ok) throw await failure(response);
   return response.json();
 }
@@ -282,7 +287,11 @@ export async function removeFromReadingList(id: DocumentId): Promise<void> {
 }
 
 /** A page of the texts on the reading list with the status, in the language if one is given. */
-export async function listReading(status: ReadingStatus, lang: Lang | undefined, after?: Cursor<ReadingKey>): Promise<Paginated<ListedReading, ReadingKey>> {
+export async function listReading(
+  status: ReadingStatus,
+  lang: Lang | undefined,
+  after?: Cursor<ReadingKey>,
+): Promise<Paginated<ListedReading, ReadingKey>> {
   const response = await api.me["reading-list"].$get({ query: { status, after, ...(lang ? { lang } : {}) } });
   if (!response.ok) throw await failure(response);
   return response.json();

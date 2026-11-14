@@ -7,10 +7,15 @@ import { docId } from "@skolia/shared/keys";
 import { wolneLekturyLicence, wolneLekturyText, type Fetch } from "./curated-kinds.ts";
 import { parseCurated, readCurated, resolveCurated } from "./sync-curated.ts";
 
-const FOOTER_PD = "\n-----\nTa lektura, podobnie jak tysiące innych, dostępna jest na stronie wolnelektury.pl.\nTen utwór jest w domenie publicznej.\nWszystkie materiały dodatkowe (przypisy, motywy literackie) są udostępnione na Licencji Wolnej Sztuki 1.3: https://artlibre.org/licence/lal/pl/\n";
+const FOOTER_PD =
+  "\n-----\nTa lektura, podobnie jak tysiące innych, dostępna jest na stronie wolnelektury.pl.\nTen utwór jest w domenie publicznej.\nWszystkie materiały dodatkowe (przypisy, motywy literackie) są udostępnione na Licencji Wolnej Sztuki 1.3: https://artlibre.org/licence/lal/pl/\n";
 
 /** A .txt as Wolne Lektury serves it: CRLF, the title wrapped, an indent and *emphasis*. */
-const TXT = `Aleksander Fredro\n\nOsiołkowi\nw żłoby dano\n\n\n\nOsiołkowi w żłoby dano\nNagle — *gwizd*!\n\n    Z głodu padła.\n\n\n\n${FOOTER_PD}`.replace(/\n/gu, "\r\n");
+const TXT =
+  `Aleksander Fredro\n\nOsiołkowi\nw żłoby dano\n\n\n\nOsiołkowi w żłoby dano\nNagle — *gwizd*!\n\n    Z głodu padła.\n\n\n\n${FOOTER_PD}`.replace(
+    /\n/gu,
+    "\r\n",
+  );
 
 const BOOK = {
   title: "Osiołkowi w żłoby dano",
@@ -37,7 +42,8 @@ const noFetch: Fetch = async (url) => {
 };
 
 test("an inline file is its credits and text, and isn't fetched", async () => {
-  const yaml = "kind: inline\ntitle: Inwokacja\nauthor: Adam Mickiewicz\nlicence: public-domain\nsource: https://wolnelektury.pl/katalog/lektura/pan-tadeusz/\ntags:\n  level: C2\ntext: |\n  Litwo! Ojczyzno moja!\n";
+  const yaml =
+    "kind: inline\ntitle: Inwokacja\nauthor: Adam Mickiewicz\nlicence: public-domain\nsource: https://wolnelektury.pl/katalog/lektura/pan-tadeusz/\ntags:\n  level: C2\ntext: |\n  Litwo! Ojczyzno moja!\n";
   const [text] = await resolveCurated([parseCurated("pl/a.yaml", "pl", yaml)], noFetch);
   assert.equal(text?.id, await docId("pl", "Litwo! Ojczyzno moja!"));
   assert.deepEqual(text?.request, {
@@ -83,7 +89,8 @@ test("a Wolne Lektury header with an ISBN ends at it, however many blank lines f
 
 test("a Wolne Lektury licence is read from its footer", () => {
   assert.equal(wolneLekturyLicence(`a\n\n\n\nb${FOOTER_PD}`), "public-domain");
-  const cc = (version: string) => `a\n\n\n\nb\n-----\nTen utwór jest udostępniony na licencji Creative Commons: https://creativecommons.org/licenses/${version}/3.0/\n`;
+  const cc = (version: string) =>
+    `a\n\n\n\nb\n-----\nTen utwór jest udostępniony na licencji Creative Commons: https://creativecommons.org/licenses/${version}/3.0/\n`;
   assert.equal(wolneLekturyLicence(cc("by-sa")), "cc-by-sa");
   assert.equal(wolneLekturyLicence(cc("by")), "cc-by");
   assert.throws(() => wolneLekturyLicence(cc("by-nc-nd")), /names no licence/u);
@@ -92,7 +99,10 @@ test("a Wolne Lektury licence is read from its footer", () => {
 
 test("a wolnelektury file is fetched: its title, author, licence and catalogue page come from Wolne Lektury, its tags from the file", async () => {
   const { fetch, asked } = wolneLektury();
-  const [text] = await resolveCurated([parseCurated("pl/o.yaml", "pl", "kind: wolnelektury\nslug: fredro-osiolkowi-w-zloby-dano\ntags:\n  level: A2\n")], fetch);
+  const [text] = await resolveCurated(
+    [parseCurated("pl/o.yaml", "pl", "kind: wolnelektury\nslug: fredro-osiolkowi-w-zloby-dano\ntags:\n  level: A2\n")],
+    fetch,
+  );
   assert.deepEqual(asked, ["https://wolnelektury.pl/api/books/fredro-osiolkowi-w-zloby-dano/", BOOK.txt]);
   assert.deepEqual(text?.request, {
     title: "Osiołkowi w żłoby dano",
@@ -104,16 +114,28 @@ test("a wolnelektury file is fetched: its title, author, licence and catalogue p
     source: BOOK.url,
     tags: { level: "A2" },
   });
-  const [retitled] = await resolveCurated([parseCurated("pl/o.yaml", "pl", "kind: wolnelektury\nslug: fredro-osiolkowi-w-zloby-dano\ntitle: Osiołek\n")], fetch);
+  const [retitled] = await resolveCurated(
+    [parseCurated("pl/o.yaml", "pl", "kind: wolnelektury\nslug: fredro-osiolkowi-w-zloby-dano\ntitle: Osiołek\n")],
+    fetch,
+  );
   assert.equal(retitled?.request.title, "Osiołek");
   assert.equal(retitled?.id, text?.id);
 });
 
 test("a wolnelektury file that can't be had, or is in another language, is refused, naming the file", async () => {
   const file = (slug: string, lang: "pl" | "en" = "pl") => parseCurated(`${lang}/o.yaml`, lang, `kind: wolnelektury\nslug: ${slug}\n`);
-  await assert.rejects(resolveCurated([file("nie-ma-takiej")], wolneLektury().fetch), /pl\/o\.yaml: https:\/\/wolnelektury\.pl\/api\/books\/nie-ma-takiej\/: 404/u);
-  await assert.rejects(resolveCurated([file("fredro-osiolkowi-w-zloby-dano", "en")], wolneLektury().fetch), /en\/o\.yaml: fredro-osiolkowi-w-zloby-dano is in pol, not en/u);
-  await assert.rejects(resolveCurated([file("fredro-osiolkowi-w-zloby-dano")], wolneLektury({ ...BOOK, txt: "https://wolnelektury.pl/gone.txt" }).fetch), /pl\/o\.yaml: .*gone\.txt: 404/u);
+  await assert.rejects(
+    resolveCurated([file("nie-ma-takiej")], wolneLektury().fetch),
+    /pl\/o\.yaml: https:\/\/wolnelektury\.pl\/api\/books\/nie-ma-takiej\/: 404/u,
+  );
+  await assert.rejects(
+    resolveCurated([file("fredro-osiolkowi-w-zloby-dano", "en")], wolneLektury().fetch),
+    /en\/o\.yaml: fredro-osiolkowi-w-zloby-dano is in pol, not en/u,
+  );
+  await assert.rejects(
+    resolveCurated([file("fredro-osiolkowi-w-zloby-dano")], wolneLektury({ ...BOOK, txt: "https://wolnelektury.pl/gone.txt" }).fetch),
+    /pl\/o\.yaml: .*gone\.txt: 404/u,
+  );
 });
 
 test("two files with the same text are refused", async () => {

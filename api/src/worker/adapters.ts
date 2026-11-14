@@ -28,11 +28,36 @@ import {
   type ReadingEntry,
   type ReadingKey,
   type ReadingStatus,
-  type ReviewRequest, type Settings, type AvailableTag, type Tags, type Word, type WordStatus } from "@skolia/shared/api";
+  type ReviewRequest,
+  type Settings,
+  type AvailableTag,
+  type Tags,
+  type Word,
+  type WordStatus,
+} from "@skolia/shared/api";
 import { paginate, type PageRequest } from "@skolia/shared/page";
 import type { BundleParadigm, IngestJob, Pronunciation, Relation, Sense } from "@skolia/shared/schema";
 import * as schemas from "@skolia/shared/schemas";
-import { and, col, compile, contains, desc, eq, exists, fn, gt, inList, is, lit, or, row, select, unionAll, type Query, type Select } from "@skolia/util/query";
+import {
+  and,
+  col,
+  compile,
+  contains,
+  desc,
+  eq,
+  exists,
+  fn,
+  gt,
+  inList,
+  is,
+  lit,
+  or,
+  row,
+  select,
+  unionAll,
+  type Query,
+  type Select,
+} from "@skolia/util/query";
 import { sql, type Sql } from "@skolia/util/sql";
 import type {
   BlobStore,
@@ -75,7 +100,14 @@ export class DurableObjectUsers implements UserData {
     await this.users.getByName(userId).clearWordStatus(lemmaId);
   }
 
-  async due(userId: UserId, lang: Lang, now: Timestamp, dayStart: Timestamp, limit: number, group: CardGroup | undefined): Promise<DueCards> {
+  async due(
+    userId: UserId,
+    lang: Lang,
+    now: Timestamp,
+    dayStart: Timestamp,
+    limit: number,
+    group: CardGroup | undefined,
+  ): Promise<DueCards> {
     return this.users.getByName(userId).due(lang, now, dayStart, limit, group);
   }
 
@@ -127,7 +159,12 @@ export class DurableObjectUsers implements UserData {
     await this.users.getByName(userId).removeReading(documentId);
   }
 
-  async readingList(userId: UserId, status: ReadingStatus, lang: Lang | undefined, page: PageRequest<ReadingKey>): Promise<Paginated<StoredReading, ReadingKey>> {
+  async readingList(
+    userId: UserId,
+    status: ReadingStatus,
+    lang: Lang | undefined,
+    page: PageRequest<ReadingKey>,
+  ): Promise<Paginated<StoredReading, ReadingKey>> {
     return this.users.getByName(userId).readingList(status, lang, page);
   }
 }
@@ -175,7 +212,9 @@ export class D1Lexicon implements Lexicon {
   async entries(ids: readonly LemmaId[]): Promise<Lookup> {
     const byLang = new Map<Lang, LemmaId[]>();
     for (const id of ids) byLang.set(langOf(id), [...(byLang.get(langOf(id)) ?? []), id]);
-    const found = await Promise.all([...byLang].map(async ([lang, wanted]) => ({ lang, ...(await this.#entries(this.dbs[lang], wanted)) })));
+    const found = await Promise.all(
+      [...byLang].map(async ([lang, wanted]) => ({ lang, ...(await this.#entries(this.dbs[lang], wanted)) })),
+    );
     return {
       entries: found.flatMap((f) => f.entries),
       featureSets: Object.fromEntries(found.filter((f) => f.featureSets !== null).map((f) => [f.lang, f.featureSets])),
@@ -212,7 +251,10 @@ export class D1Lexicon implements Lexicon {
     if (wanted.length === 0) return { entries, featureSets: null };
     const found = await db.batch(
       wanted.map(([version, sets]) =>
-        prepare(db, sql`SELECT id, feature, value FROM featureset WHERE version = ${version} AND id IN (SELECT value FROM json_each(${JSON.stringify([...sets])}))`),
+        prepare(
+          db,
+          sql`SELECT id, feature, value FROM featureset WHERE version = ${version} AND id IN (SELECT value FROM json_each(${JSON.stringify([...sets])}))`,
+        ),
       ),
     );
     // A UD feature set: its features are whatever the language's rows name
@@ -264,19 +306,40 @@ type KindValues = readonly [kind: string, values: readonly string[]];
  * - the public entries, by primary key, or with tags, one part for each value of the
  *   first kind, by user_document_tag_value_idx, the other kinds looked up for each entry;
  * - the viewer's own, by primary key, their tags looked up for each entry. */
-export function listQuery(viewer: UserId | null, { tags, lang, title, mine }: DocumentFilter, { after, limit }: PageRequest<DocumentKey>): Query {
+export function listQuery(
+  viewer: UserId | null,
+  { tags, lang, title, mine }: DocumentFilter,
+  { after, limit }: PageRequest<DocumentKey>,
+): Query {
   const kinds: readonly KindValues[] = Object.entries(tags).filter(([, values]) => values.length > 0);
   const [first, ...others] = kinds;
   const narrowed = [lang !== undefined && eq("document.lang", lang), title !== undefined && contains("entry.title", title)];
   const from = (key: "entry" | "tagged") => after !== undefined && gt(row(`${key}.user_id`, `${key}.document_id`), after);
   const own =
-    viewer === null ? [] : [SELECT_DOCUMENT.where(eq("entry.user_id", viewer), !mine && eq("entry.visibility", lit("private")), from("entry"), ...narrowed, ...tagged(kinds))];
+    viewer === null
+      ? []
+      : [
+          SELECT_DOCUMENT.where(
+            eq("entry.user_id", viewer),
+            !mine && eq("entry.visibility", lit("private")),
+            from("entry"),
+            ...narrowed,
+            ...tagged(kinds),
+          ),
+        ];
   const shared = mine
     ? []
     : first === undefined
       ? [SELECT_DOCUMENT.where(eq("entry.visibility", lit("public")), from("entry"), ...narrowed)]
       : first[1].map((value) =>
-          SELECT_TAGGED.where(eq("tagged.kind", first[0]), eq("tagged.value", value), eq("entry.visibility", lit("public")), from("tagged"), ...narrowed, ...tagged(others)),
+          SELECT_TAGGED.where(
+            eq("tagged.kind", first[0]),
+            eq("tagged.value", value),
+            eq("entry.visibility", lit("public")),
+            from("tagged"),
+            ...narrowed,
+            ...tagged(others),
+          ),
         );
   return unionAll([...shared, ...own])
     .orderBy("user", "id")
@@ -289,7 +352,12 @@ function tagged(kinds: readonly KindValues[]): readonly Sql[] {
     exists(
       select({})
         .from("user_document_tag", "has")
-        .where(eq("has.user_id", col("entry.user_id")), eq("has.document_id", col("entry.document_id")), eq("has.kind", kind), inList("has.value", values)),
+        .where(
+          eq("has.user_id", col("entry.user_id")),
+          eq("has.document_id", col("entry.document_id")),
+          eq("has.kind", kind),
+          inList("has.value", values),
+        ),
     ),
   );
 }
@@ -311,7 +379,10 @@ function knownQuery(tags: readonly Tag[]): Sql {
 }
 
 function visibleQuery(id: DocumentId, viewer: UserId | null): Query {
-  return SELECT_DOCUMENT.where(eq("entry.document_id", id), or(viewer !== null && eq("entry.user_id", viewer), eq("entry.visibility", lit("public"))))
+  return SELECT_DOCUMENT.where(
+    eq("entry.document_id", id),
+    or(viewer !== null && eq("entry.user_id", viewer), eq("entry.visibility", lit("public"))),
+  )
     .orderBy(desc(is("entry.user_id", viewer)), "entry.imported_at")
     .limit(1);
 }
@@ -395,7 +466,11 @@ export class D1Documents implements DocumentStore {
     this.db = db;
   }
 
-  async list(viewer: UserId | null, filter: DocumentFilter, page: PageRequest<DocumentKey>): Promise<Paginated<StoredDocument, DocumentKey>> {
+  async list(
+    viewer: UserId | null,
+    filter: DocumentFilter,
+    page: PageRequest<DocumentKey>,
+  ): Promise<Paginated<StoredDocument, DocumentKey>> {
     const rows = (await this.all(listQuery(viewer, filter, page))).map((row) => schemas.DocumentRow.parse(row));
     return paginate(
       rows.map((item) => ({ item, key: [item.user, item.id] as const })),
@@ -459,7 +534,9 @@ export class D1Documents implements DocumentStore {
   }
 
   private addTags(user: UserId, id: DocumentId, tags: Tags): D1PreparedStatement[] {
-    return Object.entries(tags).flatMap(([kind, value]) => (value === undefined ? [] : [prepare(this.db, addTagQuery(user, id, kind, value))]));
+    return Object.entries(tags).flatMap(([kind, value]) =>
+      value === undefined ? [] : [prepare(this.db, addTagQuery(user, id, kind, value))],
+    );
   }
 
   async remove(id: DocumentId, user: UserId): Promise<void> {

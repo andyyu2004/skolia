@@ -39,39 +39,30 @@
 
 <Field label="Author" for="{id}-author" optional>
   {#snippet aside()}
-    <label class="check">
-      <input type="checkbox" bind:checked={ownWork} />
-      I wrote it
-    </label>
+    <label class="check"> <input type="checkbox" bind:checked={ownWork}> I wrote it </label>
   {/snippet}
   {#if ownWork}
-    <input id="{id}-author" placeholder="You" disabled />
+    <input id="{id}-author" placeholder="You" disabled>
   {:else}
-    <input id="{id}-author" bind:value={author} maxlength={MAX_AUTHOR_LENGTH} />
+    <input id="{id}-author" bind:value={author} maxlength={MAX_AUTHOR_LENGTH}>
   {/if}
 </Field>
 
 <Field label="Source" for="{id}-source" optional>
-  <input id="{id}-source" type="url" bind:value={source} placeholder="https://" maxlength={MAX_SOURCE_LENGTH} />
+  <input id="{id}-source" type="url" bind:value={source} placeholder="https://" maxlength={MAX_SOURCE_LENGTH}>
 </Field>
 
 <Field label="Visibility" hint={licence !== "" && !shareable ? onlyFree : undefined}>
   <div class="choices">
     <label class="choice">
-      <input type="radio" name="{id}-visibility" checked={!(share && shareable)} onchange={() => (share = false)} />
+      <input type="radio" name="{id}-visibility" checked={!(share && shareable)} onchange={() => (share = false)}>
       <span>
         <strong>Private</strong>
         <span class="hint">Left out of Explore. Anyone with its link can still open it.</span>
       </span>
     </label>
     <label class={["choice", { disabled: !shareable }]}>
-      <input
-        type="radio"
-        name="{id}-visibility"
-        checked={share && shareable}
-        disabled={!shareable}
-        onchange={() => (share = true)}
-      />
+      <input type="radio" name="{id}-visibility" checked={share && shareable} disabled={!shareable} onchange={() => (share = true)}>
       <span>
         <strong>Public</strong>
         <span class="hint">Listed in Explore. You confirm the text is under the licence above.</span>

@@ -20,7 +20,14 @@ function token(text: string, lemma: string, upos: Token["upos"], feats: Feats): 
 }
 
 function current(tables: Table[]): string[] {
-  return tables.flatMap((t) => t.rows.flatMap((r) => r.cells.flat().filter((f) => f.current).map((f) => f.text)));
+  return tables.flatMap((t) =>
+    t.rows.flatMap((r) =>
+      r.cells
+        .flat()
+        .filter((f) => f.current)
+        .map((f) => f.text),
+    ),
+  );
 }
 
 const PRES_1SG: Feats = { Mood: "Ind", Number: "Sing", Person: "1", Tense: "Pres", VerbForm: "Fin" };
@@ -122,9 +129,7 @@ test("in merged rows only the token's own variant is marked", () => {
 
 test("a passive participle is marked among the past participles", () => {
   const burned = token("burned", "burn", "VERB", PART_PASS);
-  const participle = paradigmTables(BURN_BUNDLE, BURN, burned, english.paradigm).find(
-    (t) => t.title === "Past participle",
-  );
+  const participle = paradigmTables(BURN_BUNDLE, BURN, burned, english.paradigm).find((t) => t.title === "Past participle");
   assert.ok(participle);
   assert.deepEqual(current([participle]), ["burned"]);
 });

@@ -13,7 +13,18 @@
 // usage: E2E_API_KEY=<key> E2E_USER_KEY=<key> node src/e2e.ts https://staging.skolia.io $(git describe --tags --always --dirty)
 import assert from "node:assert/strict";
 import { hc } from "hono/client";
-import { LANGS, lemmaParam, type CardCounts, type Due, type ImportRequest, type Lang, type LemmaId, type Version, type WordKey, type WordStatus } from "@skolia/shared/api";
+import {
+  LANGS,
+  lemmaParam,
+  type CardCounts,
+  type Due,
+  type ImportRequest,
+  type Lang,
+  type LemmaId,
+  type Version,
+  type WordKey,
+  type WordStatus,
+} from "@skolia/shared/api";
 import { allPages, type Cursor } from "@skolia/shared/page";
 import type { AppType } from "./app.ts";
 import { API_KEY_HEADER } from "./auth.ts";
@@ -81,7 +92,10 @@ async function documents(base: string, key: string, lang: Lang): Promise<void> {
   const library = await body("library", anonymous.documents.$get({ query: { q: request.title } }));
   assert.ok(!library.items.some((d) => d.id === id), `${lang}: a private text is in the library`);
   const mine = await body("the importer's documents", api.documents.$get({ query: { q: request.title } }));
-  assert.ok(mine.items.some((d) => d.id === id), `${lang}: the importer's list hasn't their private text`);
+  assert.ok(
+    mine.items.some((d) => d.id === id),
+    `${lang}: the importer's list hasn't their private text`,
+  );
 
   const deadline = Date.now() + TIMEOUT_MS;
   for (;;) {
@@ -151,7 +165,11 @@ async function cards(base: string, key: string, lang: Lang): Promise<void> {
   const counts = async (): Promise<CardCounts | undefined> =>
     (await body("card counts", api.me.cards.counts.$get({ query: { dayStart: dayStart() } }))).find((c) => c.lang === lang);
   const mark = (status: WordStatus) =>
-    expectStatus(`marking ${word} ${status}`, api.me.words[":lemmaId"].$put({ param: { lemmaId: lemmaParam(word) }, json: { status } }), 204);
+    expectStatus(
+      `marking ${word} ${status}`,
+      api.me.words[":lemmaId"].$put({ param: { lemmaId: lemmaParam(word) }, json: { status } }),
+      204,
+    );
   const review = (cardId: string, id = crypto.randomUUID()) =>
     body(`${lang} review`, api.me.reviews.$post({ json: { id, cardId, rating: 3, at: new Date().toISOString() } }));
 
@@ -179,7 +197,11 @@ async function cards(base: string, key: string, lang: Lang): Promise<void> {
   const { dueAt } = await review(card.id, id);
   assert.ok(Date.parse(dueAt) > Date.now(), `${lang}: a reviewed card is due again at once (${dueAt})`);
   assert.equal((await review(card.id, id)).dueAt, dueAt, `${lang}: a retried review rescheduled the card`);
-  assert.deepEqual((await due()).cards.map((c) => c.id), [other.id], `${lang}: due after a review`);
+  assert.deepEqual(
+    (await due()).cards.map((c) => c.id),
+    [other.id],
+    `${lang}: due after a review`,
+  );
 
   await mark("known");
   assert.deepEqual((await due()).cards, [], `${lang}: a known word's cards are due`);

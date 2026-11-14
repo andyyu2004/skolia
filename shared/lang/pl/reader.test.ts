@@ -114,9 +114,7 @@ test("the declension marks the token's own form and case", () => {
   const [table] = paradigmTables(BUNDLE, PIES, psa, polish.paradigm, polish.mergeLabels);
   assert.ok(table);
   assert.deepEqual(table.columns, ["sg", "pl"]);
-  const current = table.rows.flatMap((row) =>
-    row.cells.flatMap((cell) => cell.filter((f) => f.current).map(() => row.label)),
-  );
+  const current = table.rows.flatMap((row) => row.cells.flatMap((cell) => cell.filter((f) => f.current).map(() => row.label)));
   // psa is also the accusative, but the token is genitive
   assert.deepEqual(current, ["gen."]);
 });
@@ -139,7 +137,12 @@ test("case explanations: governor, two-case prepositions, agreement chains", () 
     token(7, 14, "starego", { upos: "ADJ", head: 2, deprel: "amod", feats: GEN_SG, case_reason: { rule: "agreement", trigger: 2 } }),
     token(15, 18, "psa", { head: 0, deprel: "obj", feats: GEN_SG, case_reason: { rule: "verb", trigger: 0, governor: "szukać" } }),
     token(19, 20, "w", { upos: "ADP", head: 4, deprel: "case" }),
-    token(21, 25, "domu", { head: 0, deprel: "obl", feats: { Case: "Loc" }, case_reason: { rule: "preposition", trigger: 3, governor: "w" } }),
+    token(21, 25, "domu", {
+      head: 0,
+      deprel: "obl",
+      feats: { Case: "Loc" },
+      case_reason: { rule: "preposition", trigger: 3, governor: "w" },
+    }),
   ];
   assert.deepEqual(explainCase(tokens, 2), {
     text: "szukać governs the genitive for its object.",
@@ -151,7 +154,9 @@ test("case explanations: governor, two-case prepositions, agreement chains", () 
   });
   assert.equal(explainCase(tokens, 1)?.text, "It agrees with psa. psa: szukać governs the genitive for its object.");
   assert.deepEqual(
-    explainCase(tokens, 1)?.parts.filter((p) => p.trigger).map((p) => p.text),
+    explainCase(tokens, 1)
+      ?.parts.filter((p) => p.trigger)
+      .map((p) => p.text),
     ["psa"],
   );
   assert.deepEqual(explainCase(tokens, 4)?.parts[0], { text: "w", trigger: true });
@@ -181,10 +186,7 @@ test("frame phrases read like dictionary patterns", () => {
   assert.equal(describePhrase({ kind: "prepnp", prep: "na", case: "acc" }), "na kogoś/coś [acc.]");
   assert.equal(describePhrase({ kind: "prepadjp", prep: "ku", case: "dat" }), "ku jakiemuś [dat.]");
   assert.equal(describePhrase({ kind: "cp", complementizer: "że", words: [] }), "że …");
-  assert.equal(
-    describePhrase({ kind: "ncp", case: "gen", complementizer: "że", words: [] }),
-    "tego, że … [gen.]",
-  );
+  assert.equal(describePhrase({ kind: "ncp", case: "gen", complementizer: "że", words: [] }), "tego, że … [gen.]");
 });
 
 test("frames drop the plain subject, merge duplicates, and put idioms last", () => {

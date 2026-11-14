@@ -4,14 +4,7 @@ import type { CaseReason, Deprel, Feats, Token, Upos } from "@skolia/shared/sche
 let offset = 0;
 
 /** A token after the last one made, one space on. */
-export function token(
-  text: string,
-  upos: Upos,
-  head: number | null,
-  deprel: Deprel,
-  feats: Feats = {},
-  reason?: CaseReason,
-): Token {
+export function token(text: string, upos: Upos, head: number | null, deprel: Deprel, feats: Feats = {}, reason?: CaseReason): Token {
   const start = offset;
   offset += text.length + 1;
   return {

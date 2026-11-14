@@ -161,7 +161,12 @@ export interface UserData {
   setReading(userId: UserId, documentId: DocumentId, lang: Lang, status: ReadingStatus, now: Timestamp): Promise<ReadingEntry>;
   removeReading(userId: UserId, documentId: DocumentId): Promise<void>;
   /** A page of the texts on the list with the status, in the language if one is given. */
-  readingList(userId: UserId, status: ReadingStatus, lang: Lang | undefined, page: PageRequest<ReadingKey>): Promise<Paginated<StoredReading, ReadingKey>>;
+  readingList(
+    userId: UserId,
+    status: ReadingStatus,
+    lang: Lang | undefined,
+    page: PageRequest<ReadingKey>,
+  ): Promise<Paginated<StoredReading, ReadingKey>>;
 }
 
 export type StoredPosition = Omit<ReadingPosition, "at"> & { at: Timestamp };

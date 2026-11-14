@@ -26,12 +26,14 @@ test("the guard finds SQL run other than from a Sql", () => {
   assert.equal(offences("db.prepare(QUERIES.visible).bind(id)").length, 1);
   assert.equal(offences("this.sql.exec(\n  `SELECT ${columns} FROM t`, 1)").length, 1);
   assert.equal(offences("this.sql.exec(readingListQuery(true, false), ...params)").length, 1);
-  assert.equal(offences("env.DB.exec(\"DELETE FROM t\")").length, 1);
+  assert.equal(offences('env.DB.exec("DELETE FROM t")').length, 1);
   assert.equal(offences("sql.raw(name)").length, 1);
   assert.equal(offences("sql.raw(`t_${n}`)").length, 1);
   assert.equal(offences(`sql.raw("a" + b)`).length, 1);
   assert.deepEqual(
-    offences("db.prepare(text).bind(...params); storage.sql.exec(text, ...params); storage.sql.exec(step.sql); /x/u.exec(s); sql.raw(\"t\"); sql.raw('t'); sql.raw(`t`)"),
+    offences(
+      "db.prepare(text).bind(...params); storage.sql.exec(text, ...params); storage.sql.exec(step.sql); /x/u.exec(s); sql.raw(\"t\"); sql.raw('t'); sql.raw(`t`)",
+    ),
     [],
   );
 });

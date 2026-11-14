@@ -36,7 +36,11 @@ export function createApp(deps: Deps) {
   });
 
   /** The controller's result for the signed-in user, or 401. */
-  async function signedIn<R extends Result>(c: Context, run: (user: User) => Promise<R>, message = "not signed in"): Promise<Sent<R | Failed<401>>> {
+  async function signedIn<R extends Result>(
+    c: Context,
+    run: (user: User) => Promise<R>,
+    message = "not signed in",
+  ): Promise<Sent<R | Failed<401>>> {
     const user = await deps.auth.user(c.req.raw.headers);
     return send<R | Failed<401>>(c, user ? await run(user) : fail(401, message));
   }
@@ -52,7 +56,9 @@ export function createApp(deps: Deps) {
     .get("/api/version", (c) => c.json({ version: deps.version } satisfies Version, 200))
     .on(["GET", "POST"], "/api/auth/*", (c) => deps.auth.handle(c.req.raw))
     .get("/api/me", (c) => signedIn(c, async (user) => ok(user)))
-    .get("/api/me/words", zValidator("query", schemas.WordsQuery, badRequest()), (c) => signedIn(c, (user) => cards.words(deps, user, c.req.valid("query"))))
+    .get("/api/me/words", zValidator("query", schemas.WordsQuery, badRequest()), (c) =>
+      signedIn(c, (user) => cards.words(deps, user, c.req.valid("query"))),
+    )
     .put(
       "/api/me/words/:lemmaId",
       zValidator("param", z.object({ lemmaId: schemas.LemmaId }), badRequest(LEMMA_ID_MESSAGE)),
@@ -65,10 +71,14 @@ export function createApp(deps: Deps) {
     .get("/api/me/cards/counts", zValidator("query", schemas.CountsQuery, badRequest("dayStart must be an ISO time")), (c) =>
       signedIn(c, (user) => cards.counts(deps, user, c.req.valid("query").dayStart)),
     )
-    .get("/api/me/cards/due", zValidator("query", schemas.DueQuery, badRequest("lang must be a language, dayStart an ISO time and group words or forms")), (c) => {
-      const { lang, dayStart, group } = c.req.valid("query");
-      return signedIn(c, (user) => cards.due(deps, user, lang, dayStart, group));
-    })
+    .get(
+      "/api/me/cards/due",
+      zValidator("query", schemas.DueQuery, badRequest("lang must be a language, dayStart an ISO time and group words or forms")),
+      (c) => {
+        const { lang, dayStart, group } = c.req.valid("query");
+        return signedIn(c, (user) => cards.due(deps, user, lang, dayStart, group));
+      },
+    )
     .post("/api/me/reviews", zValidator("json", schemas.ReviewRequest, badRequest()), (c) =>
       signedIn(c, (user) => cards.review(deps, user, c.req.valid("json"))),
     )
@@ -79,8 +89,10 @@ export function createApp(deps: Deps) {
       const { documentId, ...page } = c.req.valid("query");
       return signedIn(c, (user) => cards.clozes(deps, user, documentId, page));
     })
-    .delete("/api/me/clozes/:cardId", zValidator("param", z.object({ cardId: schemas.CardId }), badRequest("card id must be a UUID")), (c) =>
-      signedIn(c, (user) => cards.deleteCloze(deps, user, c.req.valid("param").cardId)),
+    .delete(
+      "/api/me/clozes/:cardId",
+      zValidator("param", z.object({ cardId: schemas.CardId }), badRequest("card id must be a UUID")),
+      (c) => signedIn(c, (user) => cards.deleteCloze(deps, user, c.req.valid("param").cardId)),
     )
     .get("/api/me/positions/:id", zValidator("param", z.object({ id: schemas.DocumentId }), badRequest(DOCUMENT_ID_MESSAGE)), (c) =>
       signedIn(c, (user) => positions.get(deps, user, c.req.valid("param").id)),
@@ -123,13 +135,13 @@ export function createApp(deps: Deps) {
       const { tag, lang, q, mine, ...page } = c.req.valid("query");
       return send(c, await documents.list(deps, await deps.auth.user(c.req.raw.headers), { tags: tag ?? {}, lang, title: q, mine }, page));
     })
-    .get("/api/tags", zValidator("query", schemas.TagsQuery, badRequest()), async (c) => send(c, await documents.tags(deps, c.req.valid("query"))))
+    .get("/api/tags", zValidator("query", schemas.TagsQuery, badRequest()), async (c) =>
+      send(c, await documents.tags(deps, c.req.valid("query"))),
+    )
     .post("/api/documents", limit, zValidator("json", schemas.ImportRequest, badRequest()), (c) =>
       signedIn(c, (user) => documents.importText(deps, user, c.req.valid("json")), "sign in to import"),
     )
-    .get("/api/documents/:id", async (c) =>
-      send(c, await documents.get(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers))),
-    )
+    .get("/api/documents/:id", async (c) => send(c, await documents.get(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers))))
     .patch("/api/documents/:id", zValidator("json", schemas.DocumentUpdate, badRequest()), (c) =>
       signedIn(c, (user) => documents.update(deps, user, c.req.param("id"), c.req.valid("json"))),
     )
@@ -138,10 +150,30 @@ export function createApp(deps: Deps) {
       send(c, await documents.text(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers), c.req.header("if-none-match"))),
     )
     .get("/api/documents/:id/analysis/:name", async (c) =>
-      send(c, await documents.part(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers), "analysis", c.req.param("name"), c.req.header("if-none-match"))),
+      send(
+        c,
+        await documents.part(
+          deps,
+          c.req.param("id"),
+          await deps.auth.user(c.req.raw.headers),
+          "analysis",
+          c.req.param("name"),
+          c.req.header("if-none-match"),
+        ),
+      ),
     )
     .get("/api/documents/:id/bundle/:name", async (c) =>
-      send(c, await documents.part(deps, c.req.param("id"), await deps.auth.user(c.req.raw.headers), "bundle", c.req.param("name"), c.req.header("if-none-match"))),
+      send(
+        c,
+        await documents.part(
+          deps,
+          c.req.param("id"),
+          await deps.auth.user(c.req.raw.headers),
+          "bundle",
+          c.req.param("name"),
+          c.req.header("if-none-match"),
+        ),
+      ),
     );
 
   return app;

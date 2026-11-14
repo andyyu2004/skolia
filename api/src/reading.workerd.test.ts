@@ -29,7 +29,9 @@ test("a blob is cached, and asked for again each time: 304 while the viewer may 
   const get = (part: "text" | "bundle", headers: Headers, etag?: string) => {
     const document = client(app, headers).documents[":id"];
     const options = { headers: { "accept-encoding": "br", ...(etag === undefined ? {} : { "if-none-match": etag }) } };
-    return part === "text" ? document.text.$get({ param: { id } }, options) : document.bundle[":name"].$get({ param: { id, name: "b1-a1-l1" } }, options);
+    return part === "text"
+      ? document.text.$get({ param: { id } }, options)
+      : document.bundle[":name"].$get({ param: { id, name: "b1-a1-l1" } }, options);
   };
   for (const part of ["text", "bundle"] as const) {
     const first = await get(part, importer);
@@ -62,7 +64,10 @@ test("the summary names the reading once there is one, and it's served by name",
   assert.equal((await analysis.$get({ param: { id, name: "s2-a9" } })).status, 404);
   assert.equal((await analysis.$get({ param: { id, name: "..%2Fstatus" } })).status, 404);
   const list = await body("documents", client(app).documents.$get({ query: {} }));
-  assert.deepEqual(list.items.map((d) => d.state), ["ready"]);
+  assert.deepEqual(
+    list.items.map((d) => d.state),
+    ["ready"],
+  );
 });
 
 test("an outdated document is queued once when it's opened, not listed, and its old reading is kept meanwhile", async () => {
@@ -74,7 +79,10 @@ test("an outdated document is queued once when it's opened, not listed, and its 
   await local.takeQueued();
 
   const list = await body("documents", client(app).documents.$get({ query: {} }));
-  assert.deepEqual(list.items.map((d) => [d.state, d.reading?.analysis]), [["ready", "s2-a1"]]);
+  assert.deepEqual(
+    list.items.map((d) => [d.state, d.reading?.analysis]),
+    [["ready", "s2-a1"]],
+  );
   assert.deepEqual(await local.takeQueued(), []);
   const opened = await summaryOf(app, id);
   assert.deepEqual([opened.state, opened.reading?.analysis], ["queued", "s2-a1"]);
@@ -126,7 +134,10 @@ test("listing a stuck document doesn't queue it again; opening it does", async (
   await putJson(statusKey(id), { state: "analysing", updated: "2026-11-03T23:00:00Z" });
   await local.takeQueued();
   const list = await body("documents", client(app, importer).documents.$get({ query: {} }));
-  assert.deepEqual(list.items.map((d) => [d.id, d.state]), [[id, "analysing"]]);
+  assert.deepEqual(
+    list.items.map((d) => [d.id, d.state]),
+    [[id, "analysing"]],
+  );
   assert.deepEqual(await local.takeQueued(), []);
   assert.equal((await summaryOf(app, id)).state, "queued");
   assert.deepEqual(await local.takeQueued(), [{ doc: id, lang: "pl" }]);

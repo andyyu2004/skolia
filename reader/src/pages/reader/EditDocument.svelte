@@ -10,11 +10,8 @@
 
   /** The importer changes a text's title, licence, author, source, tags and whether it's
    * shared, or deletes it, in a modal dialog. */
-  let {
-    summary,
-    onsaved,
-    oncancel,
-  }: { summary: DocumentSummary; onsaved: (summary: DocumentSummary) => void; oncancel: () => void } = $props();
+  let { summary, onsaved, oncancel }: { summary: DocumentSummary; onsaved: (summary: DocumentSummary) => void; oncancel: () => void } =
+    $props();
 
   // The form starts from the summary as it is when opened
   const initial = untrack(() => summary);
@@ -93,7 +90,7 @@
 
     <div class="modal-body">
       <Field label="Title" for="edit-title">
-        <input id="edit-title" bind:value={title} maxlength={MAX_TITLE_LENGTH} required />
+        <input id="edit-title" bind:value={title} maxlength={MAX_TITLE_LENGTH} required>
       </Field>
       <SourceFields bind:licence bind:ownWork bind:author bind:source bind:share />
       <TagFields bind:tags id="edit" />

@@ -13,15 +13,23 @@
 </script>
 
 {#snippet ipa(p: Pronunciation)}
-  <span class="ipa">{#if p.accents}<span class="accent">{p.accents.join(", ")}</span> {/if}{p.ipa}</span>
+  <span class="ipa"
+    >{#if p.accents}
+      <span class="accent">{p.accents.join(", ")}</span>
+    {/if}{p.ipa}</span
+  >
 {/snippet}
 
 <p>
-  {#each said as p (p.ipa)}{@render ipa(p)}{/each}
+  {#each said as p (p.ipa)}
+    {@render ipa(p)}
+  {/each}
   {#if lemma && lemma.said.length > 0}
     <span class="lemma"
       ><span lang={lemma.lang}>{lemma.text}</span>
-      {#each lemma.said as p (p.ipa)}{@render ipa(p)}{/each}</span
+      {#each lemma.said as p (p.ipa)}
+        {@render ipa(p)}
+      {/each}</span
     >
   {/if}
 </p>

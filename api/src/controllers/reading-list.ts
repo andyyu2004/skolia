@@ -1,5 +1,14 @@
 // The texts on each user's reading list, with their statuses, in their own Durable Object.
-import { timestamp, type DocumentId, type Lang, type ListedReading, type ReadingEntry, type ReadingKey, type ReadingStatus, type User } from "@skolia/shared/api";
+import {
+  timestamp,
+  type DocumentId,
+  type Lang,
+  type ListedReading,
+  type ReadingEntry,
+  type ReadingKey,
+  type ReadingStatus,
+  type User,
+} from "@skolia/shared/api";
 import type { Paginated, PageRequest } from "@skolia/shared/page";
 import type { Deps } from "../ports.ts";
 import { listed } from "./documents.ts";
@@ -10,7 +19,12 @@ export async function get(deps: Deps, user: User, id: DocumentId): Promise<Ok<{ 
 }
 
 /** Only a text the user can see goes on the list. */
-export async function set(deps: Deps, user: User, id: DocumentId, status: ReadingStatus): Promise<Ok<{ entry: ReadingEntry }> | Failed<404>> {
+export async function set(
+  deps: Deps,
+  user: User,
+  id: DocumentId,
+  status: ReadingStatus,
+): Promise<Ok<{ entry: ReadingEntry }> | Failed<404>> {
   const document = await deps.documents.visible(id, user.id);
   if (!document) return fail(404, "no such document");
   return ok({ entry: await deps.users.setReading(user.id, id, document.lang, status, timestamp(deps.now())) });

@@ -22,7 +22,8 @@ export type Expr = string | Sql | Query | number | null;
 /** Where a value goes: a string is a parameter, an array a row of them. */
 export type Value = SqlValue | readonly SqlValue[] | Sql | Query;
 
-const isQuery = (value: unknown): value is Query => typeof value === "object" && value !== null && !(value instanceof Sql) && "sql" in value;
+const isQuery = (value: unknown): value is Query =>
+  typeof value === "object" && value !== null && !(value instanceof Sql) && "sql" in value;
 
 const isRow = (value: unknown): value is readonly SqlValue[] => Array.isArray(value);
 
@@ -35,7 +36,8 @@ export const lit = (value: SqlValue): Sql => sql.literal(value);
 const expr = (value: Expr): Sql =>
   typeof value === "string" ? col(value) : value instanceof Sql ? value : isQuery(value) ? sql`(${value.sql})` : sql`${value}`;
 
-const value = (value: Value): Sql => (value instanceof Sql ? value : isRow(value) ? sql.tuple(value) : isQuery(value) ? sql`(${value.sql})` : sql`${value}`);
+const value = (value: Value): Sql =>
+  value instanceof Sql ? value : isRow(value) ? sql.tuple(value) : isQuery(value) ? sql`(${value.sql})` : sql`${value}`;
 
 // Conditions
 
@@ -61,7 +63,9 @@ export const row = (...exprs: readonly Expr[]): Sql => sql.tuple(exprs.map(expr)
 
 /** One of the values, or a row's among rows of values (IN (VALUES ...)). */
 export const inList = (left: Expr, values: readonly (SqlValue | readonly SqlValue[])[]): Sql =>
-  values.some(isRow) ? sql`${expr(left)} IN (VALUES ${sql.join(values.map(value), ", ")})` : sql`${expr(left)} IN ${sql.tuple(values as readonly SqlValue[])}`;
+  values.some(isRow)
+    ? sql`${expr(left)} IN (VALUES ${sql.join(values.map(value), ", ")})`
+    : sql`${expr(left)} IN ${sql.tuple(values as readonly SqlValue[])}`;
 
 /** One of what the query selects. */
 export const inQuery = (left: Expr, query: Query): Sql => sql`${expr(left)} IN (${query.sql})`;
@@ -108,7 +112,11 @@ const columns = (selected: Columns): Sql => {
 const source = (table: string, as: string | undefined): Sql => (as === undefined ? sql.id(table) : sql`${sql.id(table)} AS ${sql.id(as)}`);
 
 /** The clauses that have text, between spaces. */
-const clauses = (parts: readonly Sql[]): Sql => sql.join(parts.filter((part) => part.text !== ""), " ");
+const clauses = (parts: readonly Sql[]): Sql =>
+  sql.join(
+    parts.filter((part) => part.text !== ""),
+    " ",
+  );
 
 const terms = (of: readonly Expr[]): Sql => sql.join(of.map(expr), ", ");
 
@@ -179,7 +187,15 @@ export class Select {
 
 /** A query for these values; select({}) selects 1, for EXISTS. */
 export const select = (selected: Columns): Select =>
-  new Select({ columns: columns(selected), from: sql.empty, joins: [], where: [], groupBy: sql.empty, orderBy: sql.empty, limit: sql.empty });
+  new Select({
+    columns: columns(selected),
+    from: sql.empty,
+    joins: [],
+    where: [],
+    groupBy: sql.empty,
+    orderBy: sql.empty,
+    limit: sql.empty,
+  });
 
 /** The queries' rows together, ordered by the names of their columns and limited as a whole. */
 export class UnionAll {
@@ -211,9 +227,14 @@ export const unionAll = (queries: readonly Select[]): UnionAll => new UnionAll(q
 /** Values by column; an undefined one is left out. */
 type Values = Readonly<Record<string, Value | undefined>>;
 
-const given = (values: Values): readonly [string, Value][] => Object.entries(values).filter((entry): entry is [string, Value] => entry[1] !== undefined);
+const given = (values: Values): readonly [string, Value][] =>
+  Object.entries(values).filter((entry): entry is [string, Value] => entry[1] !== undefined);
 
-const assignments = (values: Values): Sql => sql.join(given(values).map(([name, to]) => sql`${col(name)} = ${value(to)}`), ", ");
+const assignments = (values: Values): Sql =>
+  sql.join(
+    given(values).map(([name, to]) => sql`${col(name)} = ${value(to)}`),
+    ", ",
+  );
 
 /** What an insert does with a row that conflicts on target (a unique index's columns, with
  * where for a partial one): nothing, or with set, updates the row, where setWhere holds. */
@@ -270,7 +291,8 @@ export class Insert {
   }
 }
 
-export const insertInto = (table: string): Insert => new Insert({ table, orIgnore: false, values: {}, onConflict: sql.empty, returning: sql.empty });
+export const insertInto = (table: string): Insert =>
+  new Insert({ table, orIgnore: false, values: {}, onConflict: sql.empty, returning: sql.empty });
 
 export class Update {
   readonly #table: string;

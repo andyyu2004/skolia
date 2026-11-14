@@ -105,13 +105,21 @@ export const LICENCE_INFO: Record<Licence, LicenceInfo> = {
   cc0: { short: "CC0", label: "CC0 (no rights reserved)", url: "https://creativecommons.org/publicdomain/zero/1.0/" },
   "cc-by": { short: "CC BY", label: "CC BY (attribution)", url: "https://creativecommons.org/licenses/by/4.0/" },
   "cc-by-sa": { short: "CC BY-SA", label: "CC BY-SA (attribution, share-alike)", url: "https://creativecommons.org/licenses/by-sa/4.0/" },
-  "cc-by-nc": { short: "CC BY-NC", label: "CC BY-NC (attribution, non-commercial)", url: "https://creativecommons.org/licenses/by-nc/4.0/" },
+  "cc-by-nc": {
+    short: "CC BY-NC",
+    label: "CC BY-NC (attribution, non-commercial)",
+    url: "https://creativecommons.org/licenses/by-nc/4.0/",
+  },
   "cc-by-nc-sa": {
     short: "CC BY-NC-SA",
     label: "CC BY-NC-SA (attribution, non-commercial, share-alike)",
     url: "https://creativecommons.org/licenses/by-nc-sa/4.0/",
   },
-  "cc-by-nd": { short: "CC BY-ND", label: "CC BY-ND (attribution, no derivatives)", url: "https://creativecommons.org/licenses/by-nd/4.0/" },
+  "cc-by-nd": {
+    short: "CC BY-ND",
+    label: "CC BY-ND (attribution, no derivatives)",
+    url: "https://creativecommons.org/licenses/by-nd/4.0/",
+  },
   "cc-by-nc-nd": {
     short: "CC BY-NC-ND",
     label: "CC BY-NC-ND (attribution, non-commercial, no derivatives)",

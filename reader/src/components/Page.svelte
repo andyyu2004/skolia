@@ -2,12 +2,7 @@
   import type { Snippet } from "svelte";
 
   /** A page's column with its title; actions sit at the title's end, wrapping under it on a phone. */
-  let {
-    title,
-    wide = false,
-    actions,
-    children,
-  }: { title: string; wide?: boolean; actions?: Snippet; children: Snippet } = $props();
+  let { title, wide = false, actions, children }: { title: string; wide?: boolean; actions?: Snippet; children: Snippet } = $props();
 </script>
 
 <main class={{ wide }}>
