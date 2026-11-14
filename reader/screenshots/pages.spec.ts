@@ -1,9 +1,14 @@
 import { expect, test, type Page } from "@playwright/test";
-import { LALKA, serve } from "./api.ts";
+import type { Annotation } from "@skolia/shared/api";
+import { LALKA, serve, shortAudio } from "./api.ts";
 
 /** Opens the page at hash and checks none of the API requests it made failed. */
-async function open(page: Page, hash: string, { signedIn = true } = {}): Promise<void> {
-  const failed = await serve(page, { signedIn });
+async function open(
+  page: Page,
+  hash: string,
+  { signedIn = true, annotations }: { signedIn?: boolean; annotations?: readonly Annotation[] } = {},
+): Promise<void> {
+  const failed = await serve(page, { signedIn, ...(annotations ? { annotations } : {}) });
   await page.goto(`/${hash}`);
   await page.waitForLoadState("networkidle");
   expect(failed).toEqual([]);
@@ -104,6 +109,12 @@ test("reader", async ({ page }) => {
   await open(page, `#/doc/${LALKA}`);
   await expect(page.locator("article")).toContainText("W początkach roku 1878");
   await expect(page).toHaveScreenshot("reader.png", { fullPage: true });
+});
+
+test("reader, recordings shorter than a paragraph have no button yet", async ({ page }) => {
+  await open(page, `#/doc/${LALKA}`, { annotations: shortAudio });
+  await expect(page.locator("article")).toContainText("W początkach roku 1878");
+  await expect(page.getByRole("button", { name: /^(Play|Pause) “/u })).toHaveCount(0);
 });
 
 test("reader, a paragraph playing", async ({ page }) => {

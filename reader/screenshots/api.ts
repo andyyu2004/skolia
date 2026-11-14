@@ -70,6 +70,23 @@ const narration: readonly Annotation[] = [...text.trimEnd().matchAll(/[^\n]+/gu)
   addedAt: Timestamp.parse("2026-11-07T10:00:00.000Z"),
 }));
 
+/** Recordings shorter than a paragraph: single words, two on one line, and a phrase over a line break. */
+export const shortAudio: readonly Annotation[] = ["roku", "1878", "Stefano", "warszawscy kupcy", "jadłodajni"].map((words, n) => {
+  const start = text.indexOf(words);
+  if (start < 0) throw new Error(`no ${words} in Lalka`);
+  return {
+    id: AnnotationId.parse(String.fromCharCode(97 + n).repeat(64)),
+    start,
+    end: start + words.length,
+    kind: "audio",
+    data: { url: `${AUDIO}word-${n + 1}.wav` },
+    licence: "public-domain",
+    author: null,
+    source: null,
+    addedAt: Timestamp.parse("2026-11-07T10:00:00.000Z"),
+  };
+});
+
 /** Half a minute of silence, as an 8 kHz, 8-bit mono WAV. */
 function silence(): Buffer {
   const samples = 8000 * 30;
@@ -246,7 +263,7 @@ const cards: readonly ScheduledCard[] = [
 
 /** The API's ports, in memory, for one test. Writes the pages make are accepted and
  * forgotten, except settings. */
-function deps(signedIn: boolean): Deps {
+function deps(signedIn: boolean, annotations: readonly Annotation[]): Deps {
   const visible = (viewer: UserIdType | null) => documents.filter((d) => d.visibility === "public" || d.user === viewer);
   let settings: Settings = { newLemmasPerDay: 10, newFormsPerDay: 5, formsWithWords: true };
   return {
@@ -324,7 +341,7 @@ function deps(signedIn: boolean): Deps {
       update: async () => {},
       remove: async () => {},
       // One page: there are only a few
-      annotations: async (id) => ({ items: id === LALKA ? narration : [], next: null }),
+      annotations: async (id) => ({ items: id === LALKA ? annotations : [], next: null }),
       annotate: async () => ({ kind: "full" }),
       unannotate: async () => false,
     },
@@ -371,8 +388,11 @@ async function forward(route: Route, app: ReturnType<typeof createApp>, failed: 
 
 /** Serves the reader and the API to the page; returns the API requests that failed
  * (other than 401s), for the test to check are none. */
-export async function serve(page: Page, { signedIn }: { signedIn: boolean }): Promise<string[]> {
-  const app = createApp(deps(signedIn));
+export async function serve(
+  page: Page,
+  { signedIn, annotations = narration }: { signedIn: boolean; annotations?: readonly Annotation[] },
+): Promise<string[]> {
+  const app = createApp(deps(signedIn, annotations));
   const failed: string[] = [];
   await page.clock.setFixedTime(NOW);
   await page.route("https://skolia.test/**", async (route) => {

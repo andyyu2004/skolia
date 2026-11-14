@@ -50,22 +50,29 @@ function pieces(text: string): Piece[] {
   });
 }
 
-test("a clip's button goes before the word its range starts in", () => {
-  const text = "Ala ma kota.\n\nKot ma Alę.";
+test("a clip of whole paragraphs has its button before their first word; a shorter one has none", () => {
+  const text = "Ala ma kota.\n\nKot ma Alę.\n\nAla ma psa.";
   const second = text.indexOf("Kot");
+  const third = text.lastIndexOf("Ala");
   const laid = pieces(text);
   const places = placeAudio(
     text,
     laid,
-    audioAnnotations([annotation(0, second - 2, 1), annotation(second - 2, text.length, 2), annotation(5, 9, 3)]),
+    audioAnnotations([
+      annotation(0, second - 2, 1),
+      annotation(second, text.length, 2),
+      annotation(4, 6, 3),
+      annotation(second - 2, third - 2, 4),
+      annotation(second, text.indexOf(".", second), 5),
+    ]),
   );
   const at = (piece: number) => places.get(piece)?.map((p) => p.annotation.id[0]);
-  // Ala; from the gap before Kot, at Kot; from inside ma, at ma
-  assert.deepEqual([...places.keys()], [0, 6, 2]);
-  assert.deepEqual([at(0), at(6), at(2)], [["1"], ["2"], ["3"]]);
+  // Ala: the first paragraph; Kot: the second and third; not ma, the gap before Kot, or Kot ma Alę without its stop
+  assert.deepEqual([...places.keys()], [0, 6]);
+  assert.deepEqual([at(0), at(6)], [["1"], ["2"]]);
   assert.deepEqual(
     laid.filter((piece) => inRange(places.get(6)?.[0] ?? assert.fail(), piece)).map((p) => p.kind === "word" && p.text),
-    ["Kot", "ma", "Alę."],
+    ["Kot", "ma", "Alę.", "Ala", "ma", "psa."],
   );
 });
 
@@ -75,13 +82,13 @@ test("a clip with no word in its range has no button", () => {
 });
 
 test("a range in UTF-16 units finds its word by code points", () => {
-  const text = "😀 Ala ma kota";
-  const kota = text.indexOf("kota");
-  const places = placeAudio(text, pieces(text), audioAnnotations([annotation(kota, text.length)]));
-  // 😀, Ala, ma, kota with a gap before each but the first
-  assert.deepEqual([...places.keys()], [6]);
+  const text = "😀 Ala.\n\nKot ma.";
+  const kot = text.indexOf("Kot");
+  const places = placeAudio(text, pieces(text), audioAnnotations([annotation(kot, text.length)]));
+  // 😀, Ala., Kot, ma. with a gap before each but the first
+  assert.deepEqual([...places.keys()], [4]);
   assert.deepEqual(
-    places.get(6)?.map(({ start, end }) => [start, end]),
-    [[kota - 1, text.length - 1]],
+    places.get(4)?.map(({ start, end }) => [start, end]),
+    [[kot - 1, text.length - 1]],
   );
 });

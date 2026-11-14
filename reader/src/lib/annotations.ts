@@ -1,5 +1,5 @@
-// A text's annotations as the reader shows them: audio only, for now, each a play button
-// before the word its range starts in.
+// A text's annotations as the reader shows them: audio only, for now, and only recordings of
+// whole paragraphs, each a play button before the paragraph's first word.
 import type { Annotation } from "@skolia/shared/api";
 import type { Piece } from "@skolia/shared/doc";
 import * as schemas from "@skolia/shared/schemas";
@@ -30,8 +30,21 @@ function codePoints(text: string, astral: boolean, offset: number): number {
   return astral ? [...text.slice(0, offset)].length : offset;
 }
 
-/** Each audio annotation by the index of the piece its button goes before: the first word
- * that ends after the range starts, if it starts before the range ends. */
+/** The text's paragraphs, split on blank lines and trimmed, as [start, end) in UTF-16 units. */
+function paragraphs(text: string): readonly (readonly [number, number])[] {
+  const breaks = [...text.matchAll(/\n[^\S\n]*\n\s*/gu)];
+  const spans = [0, ...breaks.map((b) => b.index + b[0].length)].map((from, i) => [from, breaks[i]?.index ?? text.length] as const);
+  return spans.flatMap(([from, to]) => {
+    const part = text.slice(from, to);
+    const start = from + (part.length - part.trimStart().length);
+    const end = to - (part.length - part.trimEnd().length);
+    return start < end ? [[start, end] as const] : [];
+  });
+}
+
+/** Each audio annotation that covers whole paragraphs, by the index of the piece its button
+ * goes before: the first word that ends after the range starts, if it starts before the range
+ * ends. A shorter one, a word or a phrase, has no button yet. */
 export function placeAudio(
   text: string,
   pieces: readonly Piece[],
@@ -42,7 +55,11 @@ export function placeAudio(
     return token ? [{ index, start: token.start, end: token.end }] : [];
   });
   const astral = ASTRAL.test(text);
+  const bounds = paragraphs(text);
+  const starts = new Set(bounds.map(([start]) => start));
+  const ends = new Set(bounds.map(([, end]) => end));
   return annotations.reduce((places, annotation) => {
+    if (!starts.has(annotation.start) || !ends.has(annotation.end)) return places;
     const placed = { annotation, start: codePoints(text, astral, annotation.start), end: codePoints(text, astral, annotation.end) };
     const word = words[firstEndingAfter(words, placed.start)];
     if (word && word.start < placed.end) places.set(word.index, [...(places.get(word.index) ?? []), placed]);
