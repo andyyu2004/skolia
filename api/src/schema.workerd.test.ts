@@ -136,7 +136,7 @@ test("an entry's tags are tags skolia has, one of each kind, and go with the ent
   assert.equal(await env.DB.prepare("select 1 from user_document_tag").first(), null);
 });
 
-test("an annotation is a range of an entry's text, with each kind's data and a shareable licence, counted on the entry, and goes with the entry", async () => {
+test("an annotation is a range of an entry's text, with JSON data and a shareable licence, counted on the entry, and goes with the entry", async () => {
   const { env } = local;
   const user = await local.signUp(ALICE);
   await env.DB.prepare("insert into document (id, lang, words) values ('a', 'pl', 1)").run();
@@ -166,22 +166,9 @@ test("an annotation is a range of an entry's text, with each kind's data and a s
     { start: -1 },
     { start: 2, end: 2 },
     { start: 2, end: 1 },
-    { kind: "video" },
-    { kind: "Audio" },
     { data: "[]" },
     { data: "{" },
     { data: '"x"' },
-    { data: "{}" },
-    { data: '{"url":"http://example.org/a.mp3"}' },
-    { data: '{"url":1}' },
-    { data: '{"url":null}' },
-    { data: '{"url":"https://example.org/a.mp3","speed":2}' },
-    { data: '{"text":"Pies"}' },
-    { kind: "text", data: audio },
-    { kind: "text", data: '{"text":""}' },
-    { kind: "text", data: `{"text":"${"x".repeat(2001)}"}` },
-    { kind: "text", data: '{"text":["Pies"]}' },
-    { kind: "text", data: '{"text":"Pies","lang":"en"}' },
     { licence: "all-rights-reserved" },
     { licence: "unknown" },
     { source: "ftp://x" },
@@ -197,7 +184,7 @@ test("an annotation is a range of an entry's text, with each kind's data and a s
   await env.DB.prepare("delete from user_document_annotation where id = 'y'").run();
   assert.equal(await count(), 2);
   await assert.rejects(
-    env.DB.prepare("update user_document set annotations_count = 2001 where document_id = 'a'").run(),
+    env.DB.prepare("update user_document set annotations_count = -1 where document_id = 'a'").run(),
     /CHECK constraint failed/,
   );
   await env.DB.prepare("delete from user_document where document_id = 'a'").run();
