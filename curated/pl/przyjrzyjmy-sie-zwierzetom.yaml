@@ -2,22 +2,51 @@ kind: inline
 title: "Przyjrzyjmy się zwierzętom"
 author: "Jenny Katz; translated by Aleksandra Migorska"
 licence: cc-by-nc
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0002/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0002/
 tags:
   level: A1
 text: |
-  Przyjrzyjmy się zwierzętom.
+  [Przyjrzyjmy się zwierzętom.]{02}
 
-  Krowa ryczy: muuu.
+  [Krowa ryczy: muuu.]{03}
 
-  Koza meczy: meee, meee.
+  [Koza meczy: meee, meee.]{04}
 
-  Koń rży: ihaaa!
+  [Koń rży: ihaaa!]{05}
 
-  Świnia chrumka: chrum.
+  [Świnia chrumka: chrum.]{06}
 
-  Kura gdacze: ko, ko, ko.
+  [Kura gdacze: ko, ko, ko.]{07}
 
-  Pies szczeka: hau.
+  [Pies szczeka: hau.]{08}
 
-  Rolnik mówi: ciii!
+  [Rolnik mówi: ciii!]{09}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by-nc
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0002/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0002/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0002/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0002/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0002/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0002/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0002/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0002/mp3/09.mp3

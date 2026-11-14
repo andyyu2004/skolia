@@ -2,38 +2,91 @@ kind: inline
 title: "Magozwe"
 author: "Lesley Koyi; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0262/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0262/
 tags:
   level: B1
 text: |
-  W zatłoczonym mieście Nairobi, z dala od opiekuńczego domu, żyła grupa bezdomnych chłopców. Witali każdy dzień z pokorą. Pewnego poranka, po nocy przespanej na zimnym bruku, chłopcy zwijali swoje maty. Aby odpędzić zimno, rozpalili ogień podpalając śmieci. Magozwe był najmłodszym chłopcem w tej grupie.
+  [W zatłoczonym mieście Nairobi, z dala od opiekuńczego domu, żyła grupa bezdomnych chłopców. Witali każdy dzień z pokorą. Pewnego poranka, po nocy przespanej na zimnym bruku, chłopcy zwijali swoje maty. Aby odpędzić zimno, rozpalili ogień podpalając śmieci. Magozwe był najmłodszym chłopcem w tej grupie.]{02}
 
-  Magozwe miał tylko pięć lat, kiedy zmarli jego rodzice. Zamieszkał ze swoim wujkiem, ale wujek nie dbał o chłopca. Nie pozwalał chłopcu się najeść i dawał mu wiele ciężkich prac do wykonania.
+  [Magozwe miał tylko pięć lat, kiedy zmarli jego rodzice. Zamieszkał ze swoim wujkiem, ale wujek nie dbał o chłopca. Nie pozwalał chłopcu się najeść i dawał mu wiele ciężkich prac do wykonania.]{03}
 
-  Magozwe był bity przez wujka, gdy narzekał albo mu się przeciwstawiał. Pewnego razu, gdy Magozwe zapytał czy mógłby pójść do szkoły, wujek uderzył go i powiedział „Jesteś za głupi na to, żeby się czegokolwiek nauczyć”. Po trzech latach takiego traktowania, Magozwe uciekł z domu swojego wujka i zamieszkał na ulicy.
+  [Magozwe był bity przez wujka, gdy narzekał albo mu się przeciwstawiał. Pewnego razu, gdy Magozwe zapytał czy mógłby pójść do szkoły, wujek uderzył go i powiedział „Jesteś za głupi na to, żeby się czegokolwiek nauczyć”. Po trzech latach takiego traktowania, Magozwe uciekł z domu swojego wujka i zamieszkał na ulicy.]{04}
 
-  Życie na ulicy było trudne. Codziennym problemem dla większości chłopców było zdobycie jedzenia. Czasem byli aresztowani, czasem bici. Kiedy byli chorzy, nie było nikogo, kto mógłby im pomóc. Grupa chłopców żyła z tego co wyżebrała oraz ze sprzedaży opakowań plastikowych i innych odpadów. Stałe konflikty pomiędzy rywalizującymi grupami chłopców, które walczyły o wpływy w danej części miasta, nie ułatwiały życia.
+  [Życie na ulicy było trudne. Codziennym problemem dla większości chłopców było zdobycie jedzenia. Czasem byli aresztowani, czasem bici. Kiedy byli chorzy, nie było nikogo, kto mógłby im pomóc. Grupa chłopców żyła z tego co wyżebrała oraz ze sprzedaży opakowań plastikowych i innych odpadów. Stałe konflikty pomiędzy rywalizującymi grupami chłopców, które walczyły o wpływy w danej części miasta, nie ułatwiały życia.]{05}
 
-  Pewnego dnia, gdy Magozwe przeszukiwał śmietniki znalazł starą, zniszczoną książkę z opowiadaniami. Oczyścił ją z brudu i włożył do swojego worka. Każdego dnia wyjmował książkę i oglądał obrazki. Nie potrafił przeczytać słów.
+  [Pewnego dnia, gdy Magozwe przeszukiwał śmietniki znalazł starą, zniszczoną książkę z opowiadaniami. Oczyścił ją z brudu i włożył do swojego worka. Każdego dnia wyjmował książkę i oglądał obrazki. Nie potrafił przeczytać słów.]{06}
 
-  Obrazki przedstawiały historię chłopca, który wyrósł na pilota. Magozwe marzył o tym, aby kiedyś zostać pilotem. Czasem wyobrażał sobie, że jest chłopcem z opowiadania.
+  [Obrazki przedstawiały historię chłopca, który wyrósł na pilota. Magozwe marzył o tym, aby kiedyś zostać pilotem. Czasem wyobrażał sobie, że jest chłopcem z opowiadania.]{07}
 
-  Pewnego zimnego dnia Magozwe stał przy drodze i żebrał. Podszedł do niego mężczyzna i powiedział: „Witaj, jestem Thomas. Pracuję niedaleko, w miejscu, gdzie możesz dostać coś do jedzenia”. Wskazał na żółty dom z niebieskim dachem: „Mam nadzieję, że wpadniesz aby coś zjeść?”. Magozwe popatrzył na mężczyznę a potem na dom. „Może” – odparł i odszedł.
+  [Pewnego zimnego dnia Magozwe stał przy drodze i żebrał. Podszedł do niego mężczyzna i powiedział: „Witaj, jestem Thomas. Pracuję niedaleko, w miejscu, gdzie możesz dostać coś do jedzenia”. Wskazał na żółty dom z niebieskim dachem: „Mam nadzieję, że wpadniesz aby coś zjeść?”. Magozwe popatrzył na mężczyznę a potem na dom. „Może” – odparł i odszedł.]{08}
 
-  W ciągu następnych kilku miesięcy bezdomni chłopcy przyzwyczaili się do spotkań z Thomasem. Thomas lubił rozmawiać z ludźmi, zwłaszcza z tymi, którzy mieszkali na ulicy. Słuchał historii ich życia. Był poważny i cierpliwy, nigdy nie był nieuprzejmy albo lekceważący. Niektórzy chłopcy zaczęli odwiedzać niebiesko-żółty dom, aby zjeść posiłek w południe.
+  [W ciągu następnych kilku miesięcy bezdomni chłopcy przyzwyczaili się do spotkań z Thomasem. Thomas lubił rozmawiać z ludźmi, zwłaszcza z tymi, którzy mieszkali na ulicy. Słuchał historii ich życia. Był poważny i cierpliwy, nigdy nie był nieuprzejmy albo lekceważący. Niektórzy chłopcy zaczęli odwiedzać niebiesko-żółty dom, aby zjeść posiłek w południe.]{09}
 
-  Magozwe siedział na krawężniku i oglądał obrazki w swojej książce, kiedy Thomas się do niego przysiadł. „O czym jest ta historia?” – zapytał. „Jest o chłopcu, który zostaje pilotem”, odpowiedział Magozwe. „Jak ten chłopiec ma na imię?” – dopytywał Thomas. „Nie wiem, nie umiem czytać” – cicho odpowiedział Magozwe.
+  [Magozwe siedział na krawężniku i oglądał obrazki w swojej książce, kiedy Thomas się do niego przysiadł. „O czym jest ta historia?” – zapytał. „Jest o chłopcu, który zostaje pilotem”, odpowiedział Magozwe. „Jak ten chłopiec ma na imię?” – dopytywał Thomas. „Nie wiem, nie umiem czytać” – cicho odpowiedział Magozwe.]{10}
 
-  Kiedy się spotykali, Magozwe zaczął opowiadać swoją własną historię. Była to opowieść o jego wujku i ucieczce z domu. Thomas zawsze słuchał uważnie, nie mówił wiele i nie mówił Magozwe co ma robić. Czasem rozmawiali podczas posiłków w domu z niebieskim dachem.
+  [Kiedy się spotykali, Magozwe zaczął opowiadać swoją własną historię. Była to opowieść o jego wujku i ucieczce z domu. Thomas zawsze słuchał uważnie, nie mówił wiele i nie mówił Magozwe co ma robić. Czasem rozmawiali podczas posiłków w domu z niebieskim dachem.]{11}
 
-  Gdy zbliżały się dziesiąte urodziny Magozwe, Thomas podarował mu nową książkę z opowiadaniami. Była to historia o chłopcu ze wsi, który został znanym piłkarzem. Thomas czytał chłopcu tę opowieść wiele razy. Pewnego dnia powiedział: „Myślę, że nadszedł czas, abyś poszedł do szkoły i nauczył się czytać. Co o tym sądzisz?” Thomas wytłumaczył, że zna miejsce, w którym dzieci mogą zamieszkać i chodzić do szkoły.
+  [Gdy zbliżały się dziesiąte urodziny Magozwe, Thomas podarował mu nową książkę z opowiadaniami. Była to historia o chłopcu ze wsi, który został znanym piłkarzem. Thomas czytał chłopcu tę opowieść wiele razy. Pewnego dnia powiedział: „Myślę, że nadszedł czas, abyś poszedł do szkoły i nauczył się czytać. Co o tym sądzisz?” Thomas wytłumaczył, że zna miejsce, w którym dzieci mogą zamieszkać i chodzić do szkoły.]{12}
 
-  Magozwe rozmyślał o nowym miejscu i o szkole. A może wujek miał rację i Magozwe jest zbyt głupi by czegokolwiek się nauczyć? A co, jeśli będą go bili w nowym miejscu? Miał wiele obaw. „Może lepiej jeśli zostanę na ulicy” – pomyślał.
+  [Magozwe rozmyślał o nowym miejscu i o szkole. A może wujek miał rację i Magozwe jest zbyt głupi by czegokolwiek się nauczyć? A co, jeśli będą go bili w nowym miejscu? Miał wiele obaw. „Może lepiej jeśli zostanę na ulicy” – pomyślał.]{13}
 
-  Podzielił się swoimi obawami z Thomasem. Z czasem mężczyzna przekonał chłopca, że życie w nowym miejscu może być lepsze.
+  [Podzielił się swoimi obawami z Thomasem. Z czasem mężczyzna przekonał chłopca, że życie w nowym miejscu może być lepsze.]{14}
 
-  I tak Magozwe wprowadził się do pokoju w domu z zielonym dachem. Dzielił pokój z dwoma innymi chłopcami. W domu mieszkało dziesięcioro dzieci wraz z ciocią Cissy, jej mężem, trzema psami, kotem i starą kozą.
+  [I tak Magozwe wprowadził się do pokoju w domu z zielonym dachem. Dzielił pokój z dwoma innymi chłopcami. W domu mieszkało dziesięcioro dzieci wraz z ciocią Cissy, jej mężem, trzema psami, kotem i starą kozą.]{15}
 
-  Magozwe zaczął naukę w szkole. Nie było łatwo, bo miał wiele do nadrobienia. Czasami chciał się poddać, ale myślał o pilocie i o piłkarzu z opowieści, i tak jak oni nie poddawał się.
+  [Magozwe zaczął naukę w szkole. Nie było łatwo, bo miał wiele do nadrobienia. Czasami chciał się poddać, ale myślał o pilocie i o piłkarzu z opowieści, i tak jak oni nie poddawał się.]{16}
 
-  Pewnego dnia Magozwe siedział w ogródku domu z zielonym dachem i czytał opowiadanie do szkoły. Thomas podszedł i usiadł obok niego. „O czym jest ta historia?” – zapytał. „Jest o chłopcu, który został nauczycielem” – odpowiedział Magozwe. „Jak on ma na imię?” – zapytał Thomas. „Ma na imię Magozwe” – z uśmiechem odparł Magozwe.
+  [Pewnego dnia Magozwe siedział w ogródku domu z zielonym dachem i czytał opowiadanie do szkoły. Thomas podszedł i usiadł obok niego. „O czym jest ta historia?” – zapytał. „Jest o chłopcu, który został nauczycielem” – odpowiedział Magozwe. „Jak on ma na imię?” – zapytał Thomas. „Ma na imię Magozwe” – z uśmiechem odparł Magozwe.]{17}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/09.mp3
+  "10":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/10.mp3
+  "11":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/11.mp3
+  "12":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/12.mp3
+  "13":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/13.mp3
+  "14":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/14.mp3
+  "15":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/15.mp3
+  "16":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/16.mp3
+  "17":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0262/mp3/17.mp3

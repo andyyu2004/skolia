@@ -2,30 +2,71 @@ kind: inline
 title: "Tom – sprzedawca bananów"
 author: "Humphreys Odunga; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0296/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0296/
 tags:
   level: A2
 text: |
-  Tom niesie pojemnik z dojrzałymi bananami.
+  [Tom niesie pojemnik z dojrzałymi bananami.]{02}
 
-  Tom idzie na rynek sprzedawać banany.
+  [Tom idzie na rynek sprzedawać banany.]{03}
 
-  Ludzie kupują różne owoce na rynku.
+  [Ludzie kupują różne owoce na rynku.]{04}
 
-  Ale nikt nie kupuje bananów Toma. Ludzie wolą kupować owoce od kobiet.
+  [Ale nikt nie kupuje bananów Toma. Ludzie wolą kupować owoce od kobiet.]{05}
 
-  Ludzie mówią: „U nas tylko kobiety sprzedają owoce. Od kiedy to owoce sprzedaje mężczyzna?”
+  [Ludzie mówią: „U nas tylko kobiety sprzedają owoce. Od kiedy to owoce sprzedaje mężczyzna?”]{06}
 
-  Tom nie poddaje się i nawołuje: „Kupujcie moje banany! Pyszne, dojrzałe banany tylko u mnie!”
+  [Tom nie poddaje się i nawołuje: „Kupujcie moje banany! Pyszne, dojrzałe banany tylko u mnie!”]{07}
 
-  Jedna z kobiet podchodzi bliżej, bierze kiść bananów i zaczyna ją dokładnie oglądać.
+  [Jedna z kobiet podchodzi bliżej, bierze kiść bananów i zaczyna ją dokładnie oglądać.]{08}
 
-  Kobieta postanawia kupić banany.
+  [Kobieta postanawia kupić banany.]{09}
 
-  Więcej osób zaczyna podchodzić do stoiska aby kupić banany Toma.
+  [Więcej osób zaczyna podchodzić do stoiska aby kupić banany Toma.]{10}
 
-  Wkrótce okazuje się, że pojemnik na banany jest pusty. Tom liczy pieniądze, które zarobił.
+  [Wkrótce okazuje się, że pojemnik na banany jest pusty. Tom liczy pieniądze, które zarobił.]{11}
 
-  Później Tom kupuje mydło, cukier i chleb i wkłada je do swojego pojemnika.
+  [Później Tom kupuje mydło, cukier i chleb i wkłada je do swojego pojemnika.]{12}
 
-  Tom próbuje utrzymać równowagę, gdy niesie pojemnik na głowie i wraca do domu.
+  [Tom próbuje utrzymać równowagę, gdy niesie pojemnik na głowie i wraca do domu.]{13}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0296/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0296/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0296/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0296/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0296/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0296/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0296/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0296/mp3/09.mp3
+  "10":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0296/mp3/10.mp3
+  "11":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0296/mp3/11.mp3
+  "12":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0296/mp3/12.mp3
+  "13":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0296/mp3/13.mp3

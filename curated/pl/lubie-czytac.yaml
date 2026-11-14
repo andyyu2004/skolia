@@ -2,22 +2,51 @@ kind: inline
 title: "Lubię czytać!"
 author: "Letta Machoga; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0087/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0087/
 tags:
   level: A1
 text: |
-  Lubię czytać!
+  [Lubię czytać!]{02}
 
-  Komu mogę poczytać?
+  [Komu mogę poczytać?]{03}
 
-  Moja siostra już śpi.
+  [Moja siostra już śpi.]{04}
 
-  Komu mogę poczytać?
+  [Komu mogę poczytać?]{05}
 
-  Mama i babcia są zajęte.
+  [Mama i babcia są zajęte.]{06}
 
-  Komu mogę poczytać?
+  [Komu mogę poczytać?]{07}
 
-  Tata i dziadek są zajęci.
+  [Tata i dziadek są zajęci.]{08}
 
-  Komu mogę poczytać? Mogę poczytać sobie sam!
+  [Komu mogę poczytać? Mogę poczytać sobie sam!]{09}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0087/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0087/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0087/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0087/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0087/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0087/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0087/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0087/mp3/09.mp3

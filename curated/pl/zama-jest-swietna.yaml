@@ -2,30 +2,71 @@ kind: inline
 title: "Zama jest świetna!"
 author: "Michael Oguttu; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0095/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0095/
 tags:
   level: A2
 text: |
-  Mój młodszy braciszek długo rano śpi. Ja budzę się wcześnie rano, bo jestem świetna!
+  [Mój młodszy braciszek długo rano śpi. Ja budzę się wcześnie rano, bo jestem świetna!]{02}
 
-  To ja wpuszczam słoneczne światło.
+  [To ja wpuszczam słoneczne światło.]{03}
 
-  „Jesteś moją poranną gwiazdką” – mówi mama.
+  [„Jesteś moją poranną gwiazdką” – mówi mama.]{04}
 
-  Sama się myję, nie potrzebuję niczyjej pomocy.
+  [Sama się myję, nie potrzebuję niczyjej pomocy.]{05}
 
-  Radzę sobie z zimną wodą i niebieskim mydłem.
+  [Radzę sobie z zimną wodą i niebieskim mydłem.]{06}
 
-  „Nie zapomnij o zębach” – przypomina mi mama. „Ja? Nigdy” – odpowiadam.
+  [„Nie zapomnij o zębach” – przypomina mi mama. „Ja? Nigdy” – odpowiadam.]{07}
 
-  Po umyciu, witam się z dziadkiem i ciocią, życzę im miłego dnia.
+  [Po umyciu, witam się z dziadkiem i ciocią, życzę im miłego dnia.]{08}
 
-  Potem się ubieram. „Jestem już duża” – mówię do mamy.
+  [Potem się ubieram. „Jestem już duża” – mówię do mamy.]{09}
 
-  Potrafię zapiąć swoje guziki i zapiąć swoje buty.
+  [Potrafię zapiąć swoje guziki i zapiąć swoje buty.]{10}
 
-  Upewniam się, że mój młodszy braciszek jest gotowy do szkoły.
+  [Upewniam się, że mój młodszy braciszek jest gotowy do szkoły.]{11}
 
-  Każdego dnia w szkole staram się jak najlepiej potrafię.
+  [Każdego dnia w szkole staram się jak najlepiej potrafię.]{12}
 
-  Wykonuję wszystkie te zadania każdego dnia. Ale mimo to, i tak najbardziej cieszą mnie zabawa, psoty i figle!
+  [Wykonuję wszystkie te zadania każdego dnia. Ale mimo to, i tak najbardziej cieszą mnie zabawa, psoty i figle!]{13}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0095/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0095/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0095/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0095/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0095/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0095/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0095/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0095/mp3/09.mp3
+  "10":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0095/mp3/10.mp3
+  "11":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0095/mp3/11.mp3
+  "12":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0095/mp3/12.mp3
+  "13":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0095/mp3/13.mp3

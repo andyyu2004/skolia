@@ -2,22 +2,51 @@ kind: inline
 title: "Gotowanie"
 author: "Clare Verbeek, Thembani Dladla, Zanele Buthelezi; translated by Aleksandra Migorska"
 licence: cc-by-nc
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0067/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0067/
 tags:
   level: A1
 text: |
-  Obieram ziemniaki.
+  [Obieram ziemniaki.]{02}
 
-  Kroję kapustę.
+  [Kroję kapustę.]{03}
 
-  Trę marchew.
+  [Trę marchew.]{04}
 
-  Myję fasolę.
+  [Myję fasolę.]{05}
 
-  Kroję dynię.
+  [Kroję dynię.]{06}
 
-  Siekam szpinak.
+  [Siekam szpinak.]{07}
 
-  Mama kroi cebulę.
+  [Mama kroi cebulę.]{08}
 
-  Gdy kroję cebulę, zawsze płaczę.
+  [Gdy kroję cebulę, zawsze płaczę.]{09}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by-nc
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0067/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0067/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0067/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0067/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0067/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0067/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0067/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0067/mp3/09.mp3

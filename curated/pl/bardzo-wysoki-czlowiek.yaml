@@ -2,28 +2,66 @@ kind: inline
 title: "Bardzo wysoki człowiek"
 author: "Cornelius Gulere; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0001/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0001/
 tags:
   level: A2
 text: |
-  Jego motyka była za krótka.
+  [Jego motyka była za krótka.]{02}
 
-  Jego wejście do domu było za niskie.
+  [Jego wejście do domu było za niskie.]{03}
 
-  Jego łóżko było za krótkie.
+  [Jego łóżko było za krótkie.]{04}
 
-  Jego rower był za niski.
+  [Jego rower był za niski.]{05}
 
-  Ten człowiek był po prostu za wysoki!
+  [Ten człowiek był po prostu za wysoki!]{06}
 
-  Zrobił więc bardzo długą motykę.
+  [Zrobił więc bardzo długą motykę.]{07}
 
-  Zbudował bardzo wysokie wejście do domu.
+  [Zbudował bardzo wysokie wejście do domu.]{08}
 
-  Zbudował bardzo długie łóżko.
+  [Zbudował bardzo długie łóżko.]{09}
 
-  Kupił bardzo wysoki rower.
+  [Kupił bardzo wysoki rower.]{10}
 
-  Siedział na bardzo wysokim krześle. Jadł bardzo długim widelcem.
+  [Siedział na bardzo wysokim krześle. Jadł bardzo długim widelcem.]{11}
 
-  Pewnego dnia opuścił swój dom i zamieszkał w ogromnym lesie. Żył bardzo długo.
+  [Pewnego dnia opuścił swój dom i zamieszkał w ogromnym lesie. Żył bardzo długo.]{12}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0001/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0001/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0001/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0001/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0001/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0001/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0001/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0001/mp3/09.mp3
+  "10":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0001/mp3/10.mp3
+  "11":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0001/mp3/11.mp3
+  "12":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0001/mp3/12.mp3

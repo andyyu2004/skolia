@@ -2,38 +2,91 @@ kind: inline
 title: "Decyzja"
 author: "Ursula Nafula; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0027/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0027/
 tags:
   level: A2
 text: |
-  Moja wioska miała wiele problemów. Staliśmy w długiej kolejce, żeby nabrać wody ze źródła.
+  [Moja wioska miała wiele problemów. Staliśmy w długiej kolejce, żeby nabrać wody ze źródła.]{02}
 
-  Czekaliśmy na jedzenie, które przekazywali nam inni ludzie.
+  [Czekaliśmy na jedzenie, które przekazywali nam inni ludzie.]{03}
 
-  Musieliśmy zamykać drzwi na klucz ze względu na złodziei.
+  [Musieliśmy zamykać drzwi na klucz ze względu na złodziei.]{04}
 
-  Wiele dzieci rzuciło szkołę.
+  [Wiele dzieci rzuciło szkołę.]{05}
 
-  Dziewczynki pracowały jako sprzątaczki w innych wioskach.
+  [Dziewczynki pracowały jako sprzątaczki w innych wioskach.]{06}
 
-  Chłopcy włóczyli się po wiosce, podczas gdy inni musieli pracować w polu.
+  [Chłopcy włóczyli się po wiosce, podczas gdy inni musieli pracować w polu.]{07}
 
-  Gdy wiał wiatr, papierowe śmieci zatrzymywały się na drzewach i płotach.
+  [Gdy wiał wiatr, papierowe śmieci zatrzymywały się na drzewach i płotach.]{08}
 
-  Ludzie kaleczyli się kawałkami potłuczonego szkła, które leżało na ziemi.
+  [Ludzie kaleczyli się kawałkami potłuczonego szkła, które leżało na ziemi.]{09}
 
-  Pewnego dnia źródło wody wyschło i nasze pojemniki na wodę były puste.
+  [Pewnego dnia źródło wody wyschło i nasze pojemniki na wodę były puste.]{10}
 
-  Mój ojciec chodził od domu do domu, żeby zaprosić mieszkańców wioski na spotkanie.
+  [Mój ojciec chodził od domu do domu, żeby zaprosić mieszkańców wioski na spotkanie.]{11}
 
-  Ludzie zebrali się pod wielkim drzewem i słuchali.
+  [Ludzie zebrali się pod wielkim drzewem i słuchali.]{12}
 
-  Mój ojciec wstał i powiedział: „Jeżeli chcemy rozwiązać nasze problemy, musimy współpracować”.
+  [Mój ojciec wstał i powiedział: „Jeżeli chcemy rozwiązać nasze problemy, musimy współpracować”.]{13}
 
-  Ośmioletnia Juma, która siedziała na pniu drzewa, krzyknęła: „Ja pomogę w sprzątaniu!”
+  [Ośmioletnia Juma, która siedziała na pniu drzewa, krzyknęła: „Ja pomogę w sprzątaniu!”]{14}
 
-  Jedna z kobiet powiedziała: „Kobiety mogą do mnie dołączyć i razem będziemy uprawiać żywność”.
+  [Jedna z kobiet powiedziała: „Kobiety mogą do mnie dołączyć i razem będziemy uprawiać żywność”.]{15}
 
-  Jeden z mężczyzn wstał i oświadczył: „Mężczyźni wykopią i wybudują studnię”.
+  [Jeden z mężczyzn wstał i oświadczył: „Mężczyźni wykopią i wybudują studnię”.]{16}
 
-  Krzyknęliśmy jednym głosem: „Musimy zmienić nasze życie!” Od tej pory zawsze współpracujemy, aby rozwiązać nasze wspólne problemy.
+  [Krzyknęliśmy jednym głosem: „Musimy zmienić nasze życie!” Od tej pory zawsze współpracujemy, aby rozwiązać nasze wspólne problemy.]{17}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/09.mp3
+  "10":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/10.mp3
+  "11":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/11.mp3
+  "12":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/12.mp3
+  "13":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/13.mp3
+  "14":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/14.mp3
+  "15":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/15.mp3
+  "16":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/16.mp3
+  "17":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0027/mp3/17.mp3

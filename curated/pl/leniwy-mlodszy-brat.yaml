@@ -2,20 +2,46 @@ kind: inline
 title: "Leniwy młodszy brat"
 author: "Clare Verbeek, Thembani Dladla, Zanele Buthelezi; translated by Aleksandra Migorska"
 licence: cc-by-nc
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0129/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0129/
 tags:
   level: A1
 text: |
-  Budzę się i rozpalam ognisko.
+  [Budzę się i rozpalam ognisko.]{02}
 
-  Gotuję wodę.
+  [Gotuję wodę.]{03}
 
-  Rąbię drewno.
+  [Rąbię drewno.]{04}
 
-  Mieszam w kociołku.
+  [Mieszam w kociołku.]{05}
 
-  Zamiatam podłogę.
+  [Zamiatam podłogę.]{06}
 
-  Zmywam naczynia.
+  [Zmywam naczynia.]{07}
 
-  Dlaczego ja tak ciężko pracuję… gdy mój brat jest zajęty zabawą?
+  [Dlaczego ja tak ciężko pracuję… gdy mój brat jest zajęty zabawą?]{08}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by-nc
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0129/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0129/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0129/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0129/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0129/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0129/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0129/mp3/08.mp3

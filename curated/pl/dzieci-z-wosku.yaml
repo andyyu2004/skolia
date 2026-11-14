@@ -2,28 +2,66 @@ kind: inline
 title: "Dzieci z wosku"
 author: "Southern African Folktale; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0337/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0337/
 tags:
   level: A2
 text: |
-  Dawno, dawno temu, żyła sobie szczęśliwa rodzina.
+  [Dawno, dawno temu, żyła sobie szczęśliwa rodzina.]{02}
 
-  Nigdy się nie kłócili. Pomagali swoim rodzicom w domu i w polu.
+  [Nigdy się nie kłócili. Pomagali swoim rodzicom w domu i w polu.]{03}
 
-  Nie wolno im było jednak zbliżać się do ognia.
+  [Nie wolno im było jednak zbliżać się do ognia.]{04}
 
-  Byli zrobieni z wosku, więc musieli wykonywać wszystkie prace w nocy.
+  [Byli zrobieni z wosku, więc musieli wykonywać wszystkie prace w nocy.]{05}
 
-  Mimo to, jeden z chłopców bardzo pragnął wyjść na zewnątrz w ciągu dnia.
+  [Mimo to, jeden z chłopców bardzo pragnął wyjść na zewnątrz w ciągu dnia.]{06}
 
-  Pewnego dnia, pragnienie było zbyt silne. Jego bracia ostrzegali go…
+  [Pewnego dnia, pragnienie było zbyt silne. Jego bracia ostrzegali go…]{07}
 
-  Niestety było już za późno! Chłopiec stopił się w gorącym słońcu.
+  [Niestety było już za późno! Chłopiec stopił się w gorącym słońcu.]{08}
 
-  Dzieci z wosku były bardzo poruszone tym, co stało się z ich bratem.
+  [Dzieci z wosku były bardzo poruszone tym, co stało się z ich bratem.]{09}
 
-  Postanowili, że ze stopionego wosku ulepią ptaka.
+  [Postanowili, że ze stopionego wosku ulepią ptaka.]{10}
 
-  Zabrali brata-ptaka, wysoko, na sam szczyt góry.
+  [Zabrali brata-ptaka, wysoko, na sam szczyt góry.]{11}
 
-  Gdy wzeszło słońce, ptak odleciał ćwierkając w porannym świetle.
+  [Gdy wzeszło słońce, ptak odleciał ćwierkając w porannym świetle.]{12}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0337/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0337/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0337/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0337/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0337/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0337/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0337/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0337/mp3/09.mp3
+  "10":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0337/mp3/10.mp3
+  "11":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0337/mp3/11.mp3
+  "12":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0337/mp3/12.mp3

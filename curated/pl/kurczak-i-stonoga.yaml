@@ -2,30 +2,71 @@ kind: inline
 title: "Kurczak i Stonoga"
 author: "Winny Asara; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0141/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0141/
 tags:
   level: A2
 text: |
-  Kurczak i Stonoga byli przyjaciółmi. Pomimo tego, zawsze ze sobą rywalizowali. Pewnego dnia postanowili zagrać w piłkę nożną, aby sprawdzić który z nich jest lepszym graczem.
+  [Kurczak i Stonoga byli przyjaciółmi. Pomimo tego, zawsze ze sobą rywalizowali. Pewnego dnia postanowili zagrać w piłkę nożną, aby sprawdzić który z nich jest lepszym graczem.]{02}
 
-  Spotkali się na boisku i zaczęli grać. Kurczak był szybki, ale nie tak szybki jak Stonoga. Kurczak kopał daleko, ale Stonoga kopała jeszcze dalej. Kurczak był w złym humorze.
+  [Spotkali się na boisku i zaczęli grać. Kurczak był szybki, ale nie tak szybki jak Stonoga. Kurczak kopał daleko, ale Stonoga kopała jeszcze dalej. Kurczak był w złym humorze.]{03}
 
-  Zaczęli wykonywać rzuty karne. Najpierw Stonoga stanęła na bramce. Kurczak strzelił tylko jedną bramkę. Nadeszła kolej Kurczaka, aby stanąć na bramce.
+  [Zaczęli wykonywać rzuty karne. Najpierw Stonoga stanęła na bramce. Kurczak strzelił tylko jedną bramkę. Nadeszła kolej Kurczaka, aby stanąć na bramce.]{04}
 
-  Stonoga kopnęła piłkę i strzeliła bramkę! Potem dryblowała i też trafiła. Strzeliła też gola z główki! W sumie Stonoga strzeliła aż pięć bramek!
+  [Stonoga kopnęła piłkę i strzeliła bramkę! Potem dryblowała i też trafiła. Strzeliła też gola z główki! W sumie Stonoga strzeliła aż pięć bramek!]{05}
 
-  Kurczak był wściekły, że przegrał. Nie potrafił przegrywać. Stonoga zaczęła się śmiać, bo jej przyjaciel tak bardzo przejmował się swoją przegraną.
+  [Kurczak był wściekły, że przegrał. Nie potrafił przegrywać. Stonoga zaczęła się śmiać, bo jej przyjaciel tak bardzo przejmował się swoją przegraną.]{06}
 
-  Kurczak był tak zły, że otworzył szeroko dziób i połknął Stonogę!
+  [Kurczak był tak zły, że otworzył szeroko dziób i połknął Stonogę!]{07}
 
-  Gdy Kurczak wracał do domu, spotkał Mamę Stonogi. Mama Stonogi zapytała: „Czy widziałeś moje dziecko?” Kurczak nie odpowiedział. Mama Stonogi bardzo się martwiła.
+  [Gdy Kurczak wracał do domu, spotkał Mamę Stonogi. Mama Stonogi zapytała: „Czy widziałeś moje dziecko?” Kurczak nie odpowiedział. Mama Stonogi bardzo się martwiła.]{08}
 
-  Nagle Mama Stonogi usłyszała głos swojego dziecka: „Mamo! Pomóż!” Mama Stonogi rozejrzała się dookoła i nasłuchiwała. Głos dobiegał ze środka kurczaka.
+  [Nagle Mama Stonogi usłyszała głos swojego dziecka: „Mamo! Pomóż!” Mama Stonogi rozejrzała się dookoła i nasłuchiwała. Głos dobiegał ze środka kurczaka.]{09}
 
-  Mama Stonogi krzyknęła: „Użyj swoich mocy, moje dziecko!” Stonogi potrafią sprawić, że pojawia się bardzo brzydki zapach i nieprzyjemny smak. Kurczak zaczął bardzo źle się czuć.
+  [Mama Stonogi krzyknęła: „Użyj swoich mocy, moje dziecko!” Stonogi potrafią sprawić, że pojawia się bardzo brzydki zapach i nieprzyjemny smak. Kurczak zaczął bardzo źle się czuć.]{10}
 
-  Kurczakowi odbiło się. Potem pluł, kichał i kaszlał. Stonoga była obrzydliwa!
+  [Kurczakowi odbiło się. Potem pluł, kichał i kaszlał. Stonoga była obrzydliwa!]{11}
 
-  Kurczak kaszlał i kaszlał, aż wykaszlał Stonogę z żołądka. Stonoga i jej mama wpełzły na drzewo, aby się ukryć.
+  [Kurczak kaszlał i kaszlał, aż wykaszlał Stonogę z żołądka. Stonoga i jej mama wpełzły na drzewo, aby się ukryć.]{12}
 
-  Od tej pory, kurczaki i stonogi to wrogowie.
+  [Od tej pory, kurczaki i stonogi to wrogowie.]{13}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0141/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0141/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0141/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0141/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0141/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0141/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0141/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0141/mp3/09.mp3
+  "10":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0141/mp3/10.mp3
+  "11":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0141/mp3/11.mp3
+  "12":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0141/mp3/12.mp3
+  "13":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0141/mp3/13.mp3

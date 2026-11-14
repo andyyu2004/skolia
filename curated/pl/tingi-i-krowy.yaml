@@ -2,28 +2,66 @@ kind: inline
 title: "Tingi i krowy"
 author: "Ingrid Schechter; translated by Aleksandra Migorska"
 licence: cc-by
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0210/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0210/
 tags:
   level: A2
 text: |
-  Tingi mieszkał z babcią.
+  [Tingi mieszkał z babcią.]{02}
 
-  Razem z babcią, chłopiec opiekował się krowami.
+  [Razem z babcią, chłopiec opiekował się krowami.]{03}
 
-  Pewnego dnia zjawili się żołnierze.
+  [Pewnego dnia zjawili się żołnierze.]{04}
 
-  Zabrali wszystkie krowy.
+  [Zabrali wszystkie krowy.]{05}
 
-  Tingi razem z babcią uciekli, aby się ukryć.
+  [Tingi razem z babcią uciekli, aby się ukryć.]{06}
 
-  Ukrywali się w buszu aż do zmroku.
+  [Ukrywali się w buszu aż do zmroku.]{07}
 
-  Wtedy wrócili żołnierze.
+  [Wtedy wrócili żołnierze.]{08}
 
-  Babcia ukryła wnuczka pod liśćmi.
+  [Babcia ukryła wnuczka pod liśćmi.]{09}
 
-  Jeden z żołnierzy postawił na chłopcu stopę, ale Tingi nie wydał z siebie żadnego dźwięku.
+  [Jeden z żołnierzy postawił na chłopcu stopę, ale Tingi nie wydał z siebie żadnego dźwięku.]{10}
 
-  Kiedy było wystarczająco bezpiecznie, Tingi wraz z babcią opuścili kryjówkę.
+  [Kiedy było wystarczająco bezpiecznie, Tingi wraz z babcią opuścili kryjówkę.]{11}
 
-  Ostrożnie i po cichu wrócili do domu.
+  [Ostrożnie i po cichu wrócili do domu.]{12}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0210/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0210/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0210/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0210/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0210/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0210/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0210/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0210/mp3/09.mp3
+  "10":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0210/mp3/10.mp3
+  "11":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0210/mp3/11.mp3
+  "12":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0210/mp3/12.mp3

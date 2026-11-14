@@ -2,22 +2,51 @@ kind: inline
 title: "Andiswa, Gwiazda Piłki Nożnej"
 author: "Eden Daniels; translated by Aleksandra Migorska"
 licence: cc-by-nc
-source: https://global-asp.github.io/storybooks-poland/stories/pl/0234/
+source: &story https://global-asp.github.io/storybooks-poland/stories/pl/0234/
 tags:
   level: A2
 text: |
-  Andiswa przyglądała się chłopcom, którzy grali w piłkę nożną. Zawsze chciała do nich dołączyć. Zapytała trenera czy może z nimi trenować.
+  [Andiswa przyglądała się chłopcom, którzy grali w piłkę nożną. Zawsze chciała do nich dołączyć. Zapytała trenera czy może z nimi trenować.]{02}
 
-  Trener położył ręce na biodrach i powiedział: „W tej szkole tylko chłopcy mogą grać w piłkę nożną”.
+  [Trener położył ręce na biodrach i powiedział: „W tej szkole tylko chłopcy mogą grać w piłkę nożną”.]{03}
 
-  Chłopcy powiedzieli jej żeby poszła zagrać w siatkówkę. Mówili, że siatkówka jest dla dziewczyn, a piłka nożna jest dla chłopców. Andiswa była bardzo niezadowolona.
+  [Chłopcy powiedzieli jej żeby poszła zagrać w siatkówkę. Mówili, że siatkówka jest dla dziewczyn, a piłka nożna jest dla chłopców. Andiswa była bardzo niezadowolona.]{04}
 
-  Następnego dnia, w szkole odbywał się ważny mecz piłkarski. Trener martwił się, ponieważ jego najlepszy piłkarz rozchorował się i nie mógł grać.
+  [Następnego dnia, w szkole odbywał się ważny mecz piłkarski. Trener martwił się, ponieważ jego najlepszy piłkarz rozchorował się i nie mógł grać.]{05}
 
-  Andiswa pobiegła do trenera i błagała go, aby pozwolił jej zagrać. Trener nie był pewny co zrobić, ale w końcu pozwolił dziewczynce dołączyć do drużyny.
+  [Andiswa pobiegła do trenera i błagała go, aby pozwolił jej zagrać. Trener nie był pewny co zrobić, ale w końcu pozwolił dziewczynce dołączyć do drużyny.]{06}
 
-  Mecz nie był łatwy. W pierwszej połowie nie padły żadne bramki.
+  [Mecz nie był łatwy. W pierwszej połowie nie padły żadne bramki.]{07}
 
-  W drugiej połowie meczu, jeden z chłopców podał piłkę do Andiswy. Biegła wyjątkowo szybko, kopnęła piłkę i strzeliła bramkę!
+  [W drugiej połowie meczu, jeden z chłopców podał piłkę do Andiswy. Biegła wyjątkowo szybko, kopnęła piłkę i strzeliła bramkę!]{08}
 
-  Tłum oszalał z radości! Od tej pory dziewczynki mogły grać w piłkę nożną w szkole.
+  [Tłum oszalał z radości! Od tej pory dziewczynki mogły grać w piłkę nożną w szkole.]{09}
+annotations:
+  "02":
+    <<: &narration
+      kind: audio
+      licence: cc-by-nc
+      author: Helena Gabriela
+      source: *story
+    url: https://globalstorybooks.net/media/audio/pl/0234/mp3/02.mp3
+  "03":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0234/mp3/03.mp3
+  "04":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0234/mp3/04.mp3
+  "05":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0234/mp3/05.mp3
+  "06":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0234/mp3/06.mp3
+  "07":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0234/mp3/07.mp3
+  "08":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0234/mp3/08.mp3
+  "09":
+    <<: *narration
+    url: https://globalstorybooks.net/media/audio/pl/0234/mp3/09.mp3
