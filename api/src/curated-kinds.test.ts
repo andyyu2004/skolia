@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { annotationId } from "@skolia/shared/annotations";
 import { docId } from "@skolia/shared/keys";
 import { wolneLekturyLicence, wolneLekturyText, type Fetch } from "./curated-kinds.ts";
 import { parseCurated, readCurated, resolveCurated } from "./sync-curated.ts";
@@ -68,6 +69,118 @@ test("a file that isn't YAML of a kind is refused, naming the file and what's wr
   refused("kind: wolnelektury\nslug: tuwim-rzepka\ntags:\n  level: B 1\n", /pl\/a\.yaml: tags\.level: /u);
   refused("kind: wolnelektury\nslug: tuwim-rzepka\ntags:\n  Level: B1\n", /pl\/a\.yaml: tags\.Level: /u);
   refused("kind: wolnelektury\nslug: tuwim-rzepka\nlicence: cc0\n", /pl\/a\.yaml: .*licence/u);
+});
+
+const WLOSY = `kind: inline
+title: Włosy
+licence: cc-by-nc
+text: |
+
+  [Thuli ma krótkie włosy.]{2}
+
+  [Anna ma długie włosy.]{3} Bez adnotacji, i [jedno słowo]{kot}.
+annotations:
+  "2":
+    kind: audio
+    data:
+      url: https://example.org/02.mp3
+    licence: cc-by
+    author: Helena Gabriela
+    source: https://example.org/story
+  3:
+    kind: text
+    data:
+      text: " Anna has long hair. "
+    licence: cc0
+    author: ""
+  kot:
+    - kind: text
+      data:
+        text: cat
+      licence: cc0
+    - kind: audio
+      data:
+        url: https://example.org/kot.mp3
+      licence: cc0
+`;
+
+test("an inline text's annotations are on its spans, in the text without markup, trimmed", async () => {
+  const [text] = await resolveCurated([parseCurated("pl/w.yaml", "pl", WLOSY)], noFetch);
+  const plain = "Thuli ma krótkie włosy.\n\nAnna ma długie włosy. Bez adnotacji, i jedno słowo.";
+  assert.equal(text?.request.text, plain);
+  assert.equal(text?.id, await docId("pl", plain));
+  assert.deepEqual(
+    text?.annotations.map((a) => [plain.slice(a.request.start, a.request.end), a.request.kind]),
+    [
+      ["Thuli ma krótkie włosy.", "audio"],
+      ["Anna ma długie włosy.", "text"],
+      ["jedno słowo", "text"],
+      ["jedno słowo", "audio"],
+    ],
+  );
+  const kot = { start: 64, end: 75, licence: "cc0", author: null, source: null } as const;
+  assert.deepEqual(
+    text?.annotations.map((a) => a.id),
+    [
+      await annotationId({
+        kind: "audio",
+        data: { url: "https://example.org/02.mp3" },
+        licence: "cc-by",
+        author: "Helena Gabriela",
+        source: "https://example.org/story",
+        start: 0,
+        end: 23,
+      }),
+      await annotationId({ kind: "text", data: { text: "Anna has long hair." }, ...kot, start: 25, end: 46 }),
+      await annotationId({ kind: "text", data: { text: "cat" }, ...kot }),
+      await annotationId({ kind: "audio", data: { url: "https://example.org/kot.mp3" }, ...kot }),
+    ],
+  );
+});
+
+test("bad annotations or markup are refused offline, naming the file and what's wrong", () => {
+  const inline = (text: string, annotations: string) =>
+    `kind: inline\ntitle: A\nlicence: cc0\ntext: |\n  ${text}\nannotations:\n${annotations}`;
+  const annotation = (label: string, fields: string) => `  ${label}:\n${fields.replace(/^/gmu, "    ")}\n`;
+  const audio = (label: string) => annotation(label, "kind: audio\ndata:\n  url: https://example.org/a.mp3\nlicence: cc0");
+  const refused = (yaml: string, message: RegExp) => assert.throws(() => parseCurated("pl/a.yaml", "pl", yaml), message);
+  refused(inline("[a]{x", audio("x")), /^Error: pl\/a\.yaml: text: line 1: \] needs a \{label\}/u);
+  refused(inline("[a]{x} [b]{y}", audio("x")), /pl\/a\.yaml: text: \{y\} has no annotations/u);
+  refused(inline("[a]{x}", audio("x") + audio("y")), /pl\/a\.yaml: annotations\.y: no span in the text has this label/u);
+  refused(inline("[a]{x}", audio("x") + audio("Y")), /pl\/a\.yaml: annotations\.Y: a label is lowercase/u);
+  refused(inline("[a]{x}", "  x: []\n"), /pl\/a\.yaml: annotations\.x: /u);
+  refused(
+    inline("[a]{x}", annotation("x", "kind: video\ndata: {}\nlicence: cc0")),
+    /pl\/a\.yaml: annotations\.x\.0\.kind: kind must be audio or text/u,
+  );
+  refused(
+    inline("[a]{x}", annotation("x", "kind: audio\ndata:\n  url: http://example.org/a.mp3\nlicence: cc0")),
+    /pl\/a\.yaml: annotations\.x\.0\.data\.url: url must be an https URL/u,
+  );
+  refused(
+    inline("[a]{x}", annotation("x", "kind: text\ndata:\n  text: a\nlicence: all-rights-reserved")),
+    /pl\/a\.yaml: annotations\.x\.0\.licence: an annotation needs a licence that allows sharing it/u,
+  );
+  refused(
+    inline("[a]{x}", annotation("x", "kind: text\ndata:\n  text: a\nlicence: cc0\nstart: 0")),
+    /pl\/a\.yaml: annotations\.x\.0: start: an annotation has only licence, author, source, kind, data/u,
+  );
+  refused("kind: wolnelektury\nslug: tuwim-rzepka\nannotations: {}\n", /pl\/a\.yaml: .*annotations/u);
+});
+
+test("an annotation given twice on a span is refused", async () => {
+  const yaml =
+    "kind: inline\ntitle: A\nlicence: cc0\ntext: '[a]{x}'\nannotations:\n  x:\n    - kind: text\n      data:\n        text: a\n      licence: cc0\n    - kind: text\n      data:\n        text: a\n      licence: cc0\n";
+  await assert.rejects(resolveCurated([parseCurated("pl/a.yaml", "pl", yaml)], noFetch), /pl\/a\.yaml: the same annotation twice at 0-1/u);
+});
+
+test("a span only on what's trimmed is refused", async () => {
+  const yaml =
+    "kind: inline\ntitle: A\nlicence: cc0\ntext: '[ ]{x}a'\nannotations:\n  x:\n    kind: text\n    data:\n      text: a\n    licence: cc0\n";
+  await assert.rejects(
+    resolveCurated([parseCurated("pl/a.yaml", "pl", yaml)], noFetch),
+    /pl\/a\.yaml: the annotation at 0-0: an annotation must end after it starts/u,
+  );
 });
 
 test("a public inline text needs a licence that allows sharing it", async () => {

@@ -2,29 +2,72 @@
 // network (CuratedSpec), then resolved to a text and its credits, fetching it if its
 // kind names a source.
 import * as z from "zod";
-import { LICENCES, type Lang, type Licence, type Tags } from "@skolia/shared/api";
-import { Tags as TagsSchema } from "@skolia/shared/schemas";
+import { LICENCES, type Lang, type Licence, type NewAnnotation, type Tags } from "@skolia/shared/api";
+import * as schemas from "@skolia/shared/schemas";
+import { LABEL, parseSpans } from "./curated-spans.ts";
 
-/** A curated text and its credits, as sync-curated imports it. */
-export interface Resolved {
+/** A curated text, its credits and its annotations, as sync-curated imports them. */
+export type Resolved = {
   readonly title: string;
   readonly licence: Licence;
   readonly author?: string | undefined;
   readonly source?: string | undefined;
   readonly tags: Tags;
   readonly text: string;
-}
+  readonly annotations: readonly NewAnnotation[];
+};
 
-/** The text is in the file. */
-const Inline = z.strictObject({
-  kind: z.literal("inline"),
-  title: z.string().min(1),
-  licence: z.enum(LICENCES),
-  author: z.string().min(1).optional(),
-  source: z.string().optional(),
-  tags: TagsSchema.default({}),
-  text: z.string(),
+const ANNOTATION_FIELDS: readonly string[] = [...Object.keys(schemas.AnnotationCredit.shape), "kind", "data"];
+
+/** An annotation in a curated file: what the API's NewAnnotation takes but where it is,
+ * which its span gives. */
+const CuratedAnnotation = z
+  .looseObject({})
+  .superRefine((annotation, context) => {
+    const unknown = Object.keys(annotation).filter((key) => !ANNOTATION_FIELDS.includes(key));
+    if (unknown.length > 0)
+      context.addIssue({ code: "custom", message: `${unknown.join(", ")}: an annotation has only ${ANNOTATION_FIELDS.join(", ")}` });
+  })
+  .pipe(z.intersection(schemas.AnnotationCredit, schemas.AnnotationContent));
+
+/** The text without its [span]{label} markup (curated-spans.ts), and its spans. */
+const MarkedText = z.string().transform((text, context) => {
+  try {
+    return parseSpans(text);
+  } catch (error) {
+    context.addIssue({ code: "custom", message: error instanceof Error ? error.message : String(error) });
+    return z.NEVER;
+  }
 });
+
+/** The text is in the file. annotations: by the label of the span they're on, one or a list. */
+const Inline = z
+  .strictObject({
+    kind: z.literal("inline"),
+    title: z.string().min(1),
+    licence: z.enum(LICENCES),
+    author: z.string().min(1).optional(),
+    source: z.string().optional(),
+    tags: schemas.Tags.default({}),
+    text: MarkedText,
+    annotations: z
+      .record(
+        z.string(),
+        z.preprocess((value) => (Array.isArray(value) ? value : [value]), z.array(CuratedAnnotation).min(1)),
+      )
+      .default({}),
+  })
+  .superRefine(({ text, annotations }, context) => {
+    for (const { label } of text.spans) {
+      if (!Object.hasOwn(annotations, label))
+        context.addIssue({ code: "custom", path: ["text"], message: `{${label}} has no annotations` });
+    }
+    const used = new Set(text.spans.map((s) => s.label));
+    for (const label of Object.keys(annotations)) {
+      const message = LABEL.test(label) ? "no span in the text has this label" : "a label is lowercase letters, digits and hyphens";
+      if (!used.has(label)) context.addIssue({ code: "custom", path: ["annotations", label], message });
+    }
+  });
 
 /** A whole work from Wolne Lektury, by the slug in its catalogue URL
  * (wolnelektury.pl/katalog/lektura/<slug>/). title replaces Wolne Lektury's. */
@@ -32,7 +75,7 @@ const WolneLektury = z.strictObject({
   kind: z.literal("wolnelektury"),
   slug: z.string().regex(/^[a-z0-9-]+$/u, "slug must be lowercase letters, digits and hyphens"),
   title: z.string().min(1).optional(),
-  tags: TagsSchema.default({}),
+  tags: schemas.Tags.default({}),
 });
 
 export const CuratedSpec = z.discriminatedUnion("kind", [Inline, WolneLektury]);
@@ -40,11 +83,16 @@ export type CuratedSpec = z.output<typeof CuratedSpec>;
 
 export type Fetch = (url: string) => Promise<Response>;
 
+/** The text, its credits and its annotations, each where its span is in the text. */
 export async function resolve(spec: CuratedSpec, lang: Lang, fetch: Fetch): Promise<Resolved> {
   switch (spec.kind) {
     case "inline": {
-      const { kind: _, ...resolved } = spec;
-      return resolved;
+      const { kind: _, text, annotations, ...credits } = spec;
+      return {
+        ...credits,
+        text: text.text,
+        annotations: text.spans.flatMap(({ label, start, end }) => (annotations[label] ?? []).map((a) => ({ ...a, start, end }))),
+      };
     }
     case "wolnelektury":
       return wolneLektury(spec, lang, fetch);
@@ -84,6 +132,7 @@ async function wolneLektury(spec: z.output<typeof WolneLektury>, lang: Lang, fet
     source: book.url,
     tags: spec.tags,
     text: wolneLekturyText(raw),
+    annotations: [],
   };
 }
 
