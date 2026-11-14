@@ -1,5 +1,8 @@
 import * as z from "zod";
+import { isAnnotationKind, parseAnnotation } from "./annotations.ts";
 import {
+  ANNOTATION_KIND,
+  ANNOTATION_PAGE,
   CARD_GROUPS,
   CARD_KINDS,
   CLOZE_PAGE,
@@ -21,6 +24,7 @@ import {
   RATINGS,
   READING_PAGE,
   READING_STATUSES,
+  SHAREABLE_LICENCES,
   TAG_KIND,
   TAG_VALUE,
   UPOS,
@@ -220,6 +224,59 @@ export const DocumentUpdate = z.object({
   source: Source.nullable().optional(),
   visibility: Visibility.optional(),
   tags: Tags.optional(),
+});
+
+/** sha256 hex of what an annotation says (annotationId in annotations.ts). */
+export const AnnotationId = z
+  .string()
+  .regex(/^[0-9a-f]{64}$/u)
+  .brand<"AnnotationId">();
+
+export const AnnotationKind = z.string().regex(ANNOTATION_KIND, "an annotation's kind is lowercase letters, digits and hyphens");
+
+const AnnotationData = z.record(z.string(), z.unknown());
+
+export const Annotation = z.object({
+  id: AnnotationId,
+  start: Index,
+  end: Index,
+  kind: AnnotationKind,
+  data: AnnotationData,
+  licence: z.enum(SHAREABLE_LICENCES),
+  author: z.string().nullable(),
+  source: z.string().nullable(),
+  added: Timestamp,
+});
+
+/** An annotation to add: its data must be its kind's, and it must end after it starts. That
+ * it ends within the text is checked against the text. */
+export const NewAnnotation = z
+  .object({
+    start: Index,
+    end: Index,
+    kind: AnnotationKind,
+    data: AnnotationData,
+    licence: z.enum(SHAREABLE_LICENCES, "an annotation needs a licence that allows sharing it"),
+    author: z.string().trim().max(MAX_AUTHOR_LENGTH).optional(),
+    source: Source.optional(),
+  })
+  .refine((a) => a.start < a.end, { message: "an annotation must end after it starts", path: ["end"] })
+  .transform((a, context) => {
+    const known = parseAnnotation(a);
+    if (known !== null) return { ...known, author: known.author || null, source: known.source ?? null };
+    context.addIssue({ code: "custom", path: ["data"], message: isAnnotationKind(a.kind) ? `data doesn't fit annotation kind ${a.kind}` : `no annotation kind ${a.kind}` });
+    return z.NEVER;
+  });
+
+export const AnnotationKey = z.tuple([Index, AnnotationId]).readonly();
+export const AnnotationsQuery = pageQuery(AnnotationKey, ANNOTATION_PAGE);
+
+/** An annotation as D1 has it, its data a JSON string. */
+export const AnnotationRow = Annotation.extend({
+  data: z
+    .string()
+    .transform((json) => JSON.parse(json) as unknown)
+    .pipe(AnnotationData),
 });
 
 export const State = z.enum(["queued", "analysing", "ready", "failed"]);

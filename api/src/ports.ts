@@ -2,6 +2,9 @@
 // Object per user (src/worker/adapters.ts), Better Auth (src/auth.ts), and fakes in the
 // tests.
 import type {
+  Annotation,
+  AnnotationId,
+  AnnotationKey,
   AvailableTag,
   CardCounts,
   CardGroup,
@@ -93,7 +96,18 @@ export interface DocumentStore {
   update(id: DocumentId, user: UserId, fields: EntryFields): Promise<void>;
   /** Delete the user's entry. The text stays, for anyone who imports it again. */
   remove(id: DocumentId, user: UserId): Promise<void>;
+  /** A page of the user's entry's annotations, by where they start. */
+  annotations(id: DocumentId, user: UserId, page: PageRequest<AnnotationKey>): Promise<Paginated<Annotation, AnnotationKey>>;
+  /** Add the annotation to the user's entry, which must exist, unless it has one with its
+   * id already or has MAX_ANNOTATIONS. */
+  annotate(id: DocumentId, user: UserId, annotation: Annotation): Promise<Annotated>;
+  /** False if the user's entry has no annotation with the id. */
+  unannotate(id: DocumentId, user: UserId, annotationId: AnnotationId): Promise<boolean>;
 }
+
+/** added: the annotation is new. exists: the entry had it, as it's given here. full: the
+ * entry has MAX_ANNOTATIONS. */
+export type Annotated = { readonly kind: "added" | "exists"; readonly annotation: Annotation } | { readonly kind: "full" };
 
 export interface StoredBlob {
   body: Uint8Array<ArrayBuffer>;
